@@ -1,24 +1,27 @@
 # DRIP X SHOP
 
-Tienda digital de productos y planes para MTA:SA, servida como sitio estático en Vercel y conectada a Supabase.
+Tienda digital de recursos y planes para MTA:SA. Interfaz premium oscura, USD, autenticación exclusiva con Discord mediante Supabase.
 
 ## Estructura
-- `index.html`: shell de la aplicación.
-- `app.js`: catálogo, autenticación Discord, carrito, pedidos, cuenta, licencias, descargas y panel administrativo.
-- `styles.css`: interfaz oscura premium con acento cian `#00C7FF`.
-- `config.js`: URL, clave pública de Supabase y Discord ID propietario.
-- `assets/logo.svg`: marca e icono.
-- `vercel.json`: encabezados de seguridad.
-- `supabase/migrations`: migraciones SQL.
+- `index.html`: shell del sitio.
+- `app.js`: aplicación cliente (reconstruida durante el build desde los fragmentos Brotli).
+- `styles.css`: estilos (reconstruidos durante el build desde gzip).
+- `config.js`: configuración pública de Supabase y Discord ID del propietario.
+- `assets/logo.svg`: marca.
+- `build.mjs`: build estático de Vercel.
+- `supabase/migrations`: cambios de base de datos.
 
-La autenticación es Discord mediante Supabase. La identidad del propietario se valida con `auth.identities`; no se confía en metadatos editables. `dripx_is_admin()` permanece restringida a usuarios autenticados y service role. Los visitantes anónimos solo pueden leer el catálogo publicado, sin ejecutar la función de administración.
+## Seguridad
+La tienda solo usa la clave publicable de Supabase en el navegador. La clave service-role nunca se distribuye al cliente. `dripx_is_admin()` se mantiene restringida a usuarios autenticados y service role; las políticas del catálogo público no invocan esa función para `anon`. Comprobantes y descargas se mantienen en buckets privados y se sirven con URLs firmadas.
 
-El frontend utiliza exclusivamente la clave pública de Supabase. Ninguna clave service-role, token de bot o webhook se incluye en los archivos del navegador. Las descargas y comprobantes permanecen privados y se sirven con control de acceso y enlaces firmados.
+La cuenta del propietario se vincula mediante el Discord ID configurado y la identidad Discord de Supabase; no se usa una clave maestra incrustada en la web.
 
-Funciones incluidas: catálogo USD de recursos y planes MTA:SA; filtros; carrito; pedidos; envío de comprobantes PDF/imagen; aprobación manual sin comprobante por administración; facturas y descargas personalizadas con clave DRIPX; licencias y servidor IP/puerto; tickets y mensajes; reseñas verificadas; Top 3 anónimo por defecto; administración de productos, planes, categorías, reseñas, roles, usuarios, transferencias y tickets; destinos privados configurables de logs Discord.
+## Funciones
+Catálogo de productos/planes MTA:SA en USD, búsqueda y filtros, carrito, pedidos, comprobantes PDF/imagen, facturas, licencias DRIPX, IP/puerto, descargas, tickets y mensajes, reseñas verificadas, ranking de compradores, administración de productos/categorías/usuarios/roles, asignación/transferencia de accesos y administración de tickets.
 
-La configuración de webhooks se guarda en el esquema privado de Supabase. Su ejecución requiere el consumidor/servicio de logs correspondiente; las URL no se exponen al frontend del cliente.
+Los destinos de cinco tipos de logs de Discord se guardan en el esquema privado de Supabase y sólo pueden ser editados por administración. El envío efectivo de eventos requiere un worker/servicio seguro que consuma esa configuración; no se exponen webhooks al navegador.
 
-La protección ZIP analiza meta.xml, deja intactos shaders y scripts client/shared y protege únicamente Lua server-side seleccionados. Ningún bytecode distribuido puede garantizarse como imposible de descompilar o modificar: el control de licencia y la validación remota son la protección principal.
+Stripe permanece deliberadamente fuera del flujo de compra actual.
 
-Comprobaciones: `node --check app.js` y `node --check config.js`. Antes de considerar el sistema plenamente validado hay que hacer E2E con login Discord real, comprobante, aprobación, descarga personalizada y servidor MTA:SA de prueba.
+## Build y validación
+`node build.mjs` genera `dist/`. Comprobaciones locales previas: `node --check app.js`, `node --check config.js` y parseo HTML. Falta una prueba E2E con OAuth Discord real, comprobante, aprobación, descarga y servidor MTA:SA de pruebas antes de certificar toda la operación.
