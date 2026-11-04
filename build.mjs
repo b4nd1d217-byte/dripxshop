@@ -5,12 +5,13 @@ const readParts = async (prefix, count) => {
   const parts = await Promise.all(Array.from({ length: count }, (_, i) =>
     readFile(`build-src/${prefix}-${String(i + 1).padStart(2, '0')}.txt`, 'utf8')
   ));
-  if (prefix === 'app' && parts[0].length === 4001) parts[0] = parts[0].slice(0, 4000); // Correct the single stray character at the first base64 chunk boundary.
-  return parts.join('').trim();
+  const encoded = parts.join('').replace(/\s+/g, '');
+  if (!encoded || encoded.length % 4 !== 0) throw new Error(`Invalid base64 payload: ${prefix}`);
+  return encoded;
 };
 
 await mkdir('dist/assets', { recursive: true });
-const appB64 = await readParts('app', 7);
+const appB64 = await readParts('app', 8);
 const cssB64 = await readParts('styles', 2);
 const app = brotliDecompressSync(Buffer.from(appB64, 'base64'));
 const css = gunzipSync(Buffer.from(cssB64, 'base64'));
