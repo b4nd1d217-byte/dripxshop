@@ -5,7 +5,8 @@ const readParts = async (prefix, count) => {
   const parts = await Promise.all(Array.from({ length: count }, (_, i) =>
     readFile(`build-src/${prefix}-${String(i + 1).padStart(2, '0')}.txt`, 'utf8')
   ));
-  if (prefix === 'app' && parts[0].length === 4001) parts[0] = parts[0].slice(0, 4000); // Correct the single stray character at the first base64 chunk boundary.\n  return parts.join('').trim();
+  if (prefix === 'app' && parts[0].length === 4001) parts[0] = parts[0].slice(0, 4000); // Correct the single stray character at the first base64 chunk boundary.
+  return parts.join('').trim();
 };
 
 await mkdir('dist/assets', { recursive: true });
