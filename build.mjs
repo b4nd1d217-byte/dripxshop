@@ -19,5 +19,6 @@ await writeFile('dist/app.js', app);
 await writeFile('dist/styles.css', css);
 await copyFile('index.html', 'dist/index.html');
 await copyFile('config.js', 'dist/config.js');
+await copyFile('auth-bootstrap.js', 'dist/auth-bootstrap.js');
 await cp('assets', 'dist/assets', { recursive: true });
-console.log(`DRIP X SHOP build OK · app.js ${app.length} bytes · styles.css ${css.length} bytes`);
+console.log(`DRIP X SHOP build OK · app.js ${app.length} bytes · styles.css ${css.length} bytes · Discord PKCE bootstrap enabled`);
