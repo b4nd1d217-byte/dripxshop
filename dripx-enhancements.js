@@ -796,7 +796,11 @@
     })();
     try{await adminOverviewPromise;}catch(error){
       panel=document.querySelector('#dx-admin-overview');
-      if(panel)panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>No se pudo sincronizar el panel</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Reintentar</button></div><p class="dx-admin-error">'+escapeHtml(error.message||'Error al consultar los datos administrativos.')+'</p>';
+      if(panel){
+        panel.dataset.loaded='true';
+        adminOverviewAt=Date.now();
+        panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>No se pudo sincronizar el panel</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Reintentar</button></div><p class="dx-admin-error">'+escapeHtml(error.message||'Error al consultar los datos administrativos.')+'</p>';
+      }
       console.warn('[DRIPX] Admin overview:',error);
     }finally{adminOverviewPromise=null;}
   }
