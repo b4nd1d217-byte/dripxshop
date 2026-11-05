@@ -118,10 +118,18 @@
   }
   function applyBrandLogo(){
     const src='/assets/logo.svg';
+    const favicon=src+'?v=20261105-22';
     document.querySelectorAll('img[src="/assets/logo.svg"],img[src^="/assets/logo.svg"],img.hero-logo').forEach(img=>{
       img.decoding='async';img.loading='eager';img.alt='DRIP X SHOP';
     });
-    document.querySelectorAll('link[rel="icon"]').forEach(link=>{link.href=src;});
+    let links=Array.from(document.querySelectorAll('link[rel~="icon"]'));
+    if(!links.length){
+      const link=document.createElement('link');
+      link.rel='icon';
+      document.head.append(link);
+      links=[link];
+    }
+    links.forEach(link=>{link.type='image/svg+xml';link.href=favicon;});
   }
 
   function installImageFallback(){
@@ -531,17 +539,56 @@
   },true);
   function hideTopCategoryStrip(root=document){
     const scope=root.querySelector?.('#app')||root;
-    // Hide only decorative/top-level category strips. Never hide the actual
-    // category filter, its dropdown, or the category controls in admin forms.
+    const hash=String(location.hash||'#inicio').toLowerCase();
+    const isHome=hash===''||hash==='#inicio';
     const selectors=['.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.top-categories','[data-categories-strip]'];
     scope.querySelectorAll?.(selectors.join(',')).forEach(el=>{
       if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category],.admin-category-list'))return;
       if(el.matches('.category-filter,.category-filters,[data-category-filter]'))return;
+      if(isHome){
+        if(el.dataset.dripxHiddenCategoryStrip==='true'){
+          el.style.removeProperty('display');
+          el.removeAttribute('aria-hidden');
+          delete el.dataset.dripxHiddenCategoryStrip;
+        }
+        return;
+      }
       el.setAttribute('data-dripx-hidden-category-strip','true');
       el.style.setProperty('display','none','important');
       el.setAttribute('aria-hidden','true');
     });
   }
+  function syncRouteBackButton(){
+    const app=document.querySelector('#app');
+    if(!app)return;
+    const hash=String(location.hash||'#inicio').toLowerCase();
+    let target='',label='';
+    if(/^#(?:productos|ayuda|categoria(?:[-/=?]|$)|categorias(?:[-/=?]|$)|category(?:[-/=?]|$))/.test(hash)){
+      target='#inicio';label='Volver a categorías';
+    }else if(/^#producto\//.test(hash)){
+      target='#productos';label='Volver a productos';
+    }
+    let button=document.querySelector('#dripx-route-back');
+    if(!target){button?.remove();return;}
+    if(!button){
+      button=document.createElement('button');
+      button.id='dripx-route-back';
+      button.type='button';
+      button.className='dx-route-back';
+      button.setAttribute('data-dripx-route-back','');
+      app.prepend(button);
+    }
+    if(button.dataset.target!==target||button.textContent.trim()!==label){
+      button.dataset.target=target;
+      button.innerHTML=iconMarkup('back')+'<span>'+label+'</span>';
+    }
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('[data-dripx-route-back]');
+    if(!button)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    location.hash=button.dataset.target||'#inicio';
+  },true);
   function applyPlanCardSkin(root=document){
     const scope=root.querySelector?.('#app')||root;
     scope.querySelectorAll?.('[data-product-type="plan"],.plan-card,.product-card[data-type="plan"]').forEach(card=>{if(!card.closest('#product-form,.admin-products'))card.setAttribute('data-dripx-plan-art','true');});
@@ -804,7 +851,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();});
+  window.addEventListener('hashchange',()=>{hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
@@ -827,7 +874,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
@@ -963,7 +1010,7 @@
   },true);
 
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
