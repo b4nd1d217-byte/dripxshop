@@ -5,7 +5,13 @@ export async function patchApp(source) {
   const D = '$' + '{';
   const once = (oldText, newText, label, all = false) => {
     const count = app.split(oldText).length - 1;
-    if (!count) throw new Error('DRIPX source patch failed: ' + label + ' (not found)');
+    if (!count) {
+      if (!newText || app.includes(newText) || (label === 'publish verified admin state to UI layer' && app.includes('window.DRIPX_IS_ADMIN=!!state.isAdmin;'))) {
+        console.log('DRIPX patch: ' + label + ' (already applied)');
+        return;
+      }
+      throw new Error('DRIPX source patch failed: ' + label + ' (not found)');
+    }
     if (!all && count !== 1) throw new Error('DRIPX source patch failed: ' + label + ' (found ' + count + ')');
     app = all ? app.split(oldText).join(newText) : app.replace(oldText, newText);
     console.log('DRIPX patch: ' + label + ' (' + count + ')');
@@ -79,14 +85,17 @@ export async function patchApp(source) {
   once("proteccion:'🛡️ Protección',", "", 'remove Protection tab label');
 
   const protectionPanelStart = app.indexOf("    if(tab==='proteccion'){");
-  const categoriesPanelStart = protectionPanelStart >= 0 ? app.indexOf("    if(tab==='categorias'){", protectionPanelStart) : -1;
-  if (protectionPanelStart < 0 || categoriesPanelStart < 0) throw new Error('DRIPX patch failed: Protection panel boundaries');
-  app = app.slice(0, protectionPanelStart) + app.slice(categoriesPanelStart);
-
+  if (protectionPanelStart >= 0) {
+    const categoriesPanelStart = app.indexOf("    if(tab==='categorias'){", protectionPanelStart);
+    if (categoriesPanelStart < 0) throw new Error('DRIPX patch failed: Protection panel end');
+    app = app.slice(0, protectionPanelStart) + app.slice(categoriesPanelStart);
+  }
   const protectionBindingStart = app.indexOf("if(tab==='proteccion'){$('#resource-zip')");
-  const protectionBindingEnd = protectionBindingStart >= 0 ? app.indexOf("\n  }\n  async function validateProtectedResourceZip(file){", protectionBindingStart) : -1;
-  if (protectionBindingStart < 0 || protectionBindingEnd < 0) throw new Error('DRIPX patch failed: Protection tab bindings');
-  app = app.slice(0, protectionBindingStart) + app.slice(protectionBindingEnd);
+  if (protectionBindingStart >= 0) {
+    const protectionBindingEnd = app.indexOf("\n  }\n  async function validateProtectedResourceZip(file){", protectionBindingStart);
+    if (protectionBindingEnd < 0) throw new Error('DRIPX patch failed: Protection tab binding end');
+    app = app.slice(0, protectionBindingStart) + app.slice(protectionBindingEnd);
+  }
 
   const oldUploadNotice = '<div class="notice">Para entregar un resource con licencia DRIPX, primero usa <b>Protección ZIP</b>, compila los Lua seleccionados y sube aquí el ZIP final con los archivos .luac y su meta.xml actualizado. La tienda insertará la clave personal al descargar.</div>';
   const newUploadNotice = '<div class="dx-product-protection-intro"><strong>Protección automática DRIPX</strong><p>Selecciona el ZIP original del resource. La tienda analizará meta.xml, protegerá los scripts de servidor, compilará automáticamente los Lua compatibles e incorporará el guardián de licencia. Los archivos de configuración y type="shared" se conservarán sin exponer claves.</p><small>Solo se publicará después de verificar el ZIP en Supabase.</small></div>';
