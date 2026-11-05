@@ -154,7 +154,8 @@ async function validateProduct(req: Request) {
     "dripx_products?id=eq." + encodeURIComponent(productId)
     + "&select=id,title,product_type,status,protection_enabled,file_path&limit=1");
   const product = products[0];
-  if (!product || product.product_type !== "resource" || product.status !== "draft"
+  if (!product || product.product_type !== "resource"
+      || !["draft", "archived"].includes(String(product.status))
       || product.protection_enabled !== true) {
     return json(409, { error: "product_not_ready_for_validation", message: "El producto debe ser un resource protegido en borrador." });
   }
