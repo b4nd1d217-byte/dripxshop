@@ -11,7 +11,7 @@
     if(expanded>200*1024*1024)throw new Error('El contenido descomprimido supera el límite de seguridad de 200 MB.');
     const metaCandidates=entries.filter(x=>x.name.toLowerCase()==='meta.xml'||x.name.toLowerCase().endsWith('/meta.xml'));
     if(metaCandidates.length>1)throw new Error('El ZIP debe contener un único meta.xml. Se encontraron varios archivos de entrada.');
-    let meta=metaCandidates[0]||null;
+    let meta=metaCandidates.find(x=>x.name.toLowerCase()==='meta.xml')||null;
     let rootPrefix='';
     if(!meta){
       const nested=entries.filter(x=>x.name.toLowerCase().endsWith('/meta.xml'));
