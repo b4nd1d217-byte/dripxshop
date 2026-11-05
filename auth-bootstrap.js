@@ -4,6 +4,10 @@
   const cleanCallback = () => history.replaceState(null, '', location.pathname + (location.hash || '#inicio'));
   const clearLock = () => { try { localStorage.removeItem(LOCK); } catch (_) {} };
   const originalCreate = window.supabase?.createClient;
+  // Both the app and the visual enhancements create a Supabase client. Share one
+  // OAuth code-exchange promise so the PKCE verifier is consumed only once.
+  let callbackExchange = null;
+  let callbackCode = null;
   if (typeof originalCreate !== 'function') return;
   window.supabase.createClient = (url, key, options = {}) => {
     const client = originalCreate.call(window.supabase, url, key, {
@@ -20,7 +24,6 @@
     const auth = client.auth;
     const originalGetSession = auth.getSession.bind(auth);
     const originalSignIn = auth.signInWithOAuth.bind(auth);
-    let exchange = null;
     auth.getSession = async (...args) => {
       const params = new URLSearchParams(location.search);
       const code = params.get('code');
@@ -30,8 +33,9 @@
         cleanCallback();
         console.warn('Discord OAuth callback:', oauthError);
       } else if (code) {
-        if (!exchange) {
-          exchange = auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (!callbackExchange || callbackCode !== code) {
+          callbackCode = code;
+          callbackExchange = auth.exchangeCodeForSession(code).then(({ data, error }) => {
             if (error) throw error;
             if (!data?.session?.user) throw new Error('Supabase no devolvió una sesión válida.');
             clearLock();
@@ -44,7 +48,7 @@
             return null;
           });
         }
-        await exchange;
+        await callbackExchange;
       }
       return originalGetSession(...args);
     };
