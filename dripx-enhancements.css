@@ -10,7 +10,7 @@
 .dx-admin-overview-head strong{font-size:19px;letter-spacing:-.02em;color:#eef8ff}
 .dx-admin-overview-head small,.dx-admin-sync{font-size:11px;color:var(--muted,#90a0b0)}
 .dx-admin-overview-tools{display:flex;align-items:center;gap:10px}
-.dx-admin-refresh{display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid rgba(0,199,255,.28);border-radius:10px;background:rgba(0,199,255,.09);color:#b9efff;font:600 11px inherit;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
+.dx-admin-refresh{display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid rgba(0,199,255,.28);border-radius:10px;background:rgba(0,199,255,.09);color:#b9efff;font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
 .dx-admin-refresh:hover{background:rgba(0,199,255,.16);border-color:rgba(0,199,255,.55);transform:translateY(-1px)}
 .dx-admin-refresh .dx-svg-icon{width:13px;height:13px;margin:0}
 .dx-admin-overview-grid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
