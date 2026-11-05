@@ -72,5 +72,25 @@ export async function patchApp(source) {
   if (zipStart < 0 || zipEnd < 0) throw new Error('DRIPX source patch failed: ZIP reader boundaries');
   app = app.slice(0, zipStart) + zipReader + app.slice(zipEnd);
   console.log('DRIPX patch: full ZIP inventory reader with root-folder normalization');
+
+  once("const tabs=['pedidos','tickets','resenas','productos','proteccion','categorias','usuarios','ajustes'];",
+       "const tabs=['pedidos','tickets','resenas','productos','categorias','usuarios','ajustes'];",
+       'remove standalone Protection tab');
+  once("proteccion:'🛡️ Protección',", "", 'remove Protection tab label');
+
+  const protectionPanelStart = app.indexOf("    if(tab==='proteccion'){");
+  const categoriesPanelStart = protectionPanelStart >= 0 ? app.indexOf("    if(tab==='categorias'){", protectionPanelStart) : -1;
+  if (protectionPanelStart < 0 || categoriesPanelStart < 0) throw new Error('DRIPX patch failed: Protection panel boundaries');
+  app = app.slice(0, protectionPanelStart) + app.slice(categoriesPanelStart);
+
+  const protectionBindingStart = app.indexOf("if(tab==='proteccion'){$('#resource-zip')");
+  const protectionBindingEnd = protectionBindingStart >= 0 ? app.indexOf("\n  }\n  async function validateProtectedResourceZip(file){", protectionBindingStart) : -1;
+  if (protectionBindingStart < 0 || protectionBindingEnd < 0) throw new Error('DRIPX patch failed: Protection tab bindings');
+  app = app.slice(0, protectionBindingStart) + app.slice(protectionBindingEnd);
+
+  const oldUploadNotice = '<div class="notice">Para entregar un resource con licencia DRIPX, primero usa <b>Protección ZIP</b>, compila los Lua seleccionados y sube aquí el ZIP final con los archivos .luac y su meta.xml actualizado. La tienda insertará la clave personal al descargar.</div>';
+  const newUploadNotice = '<div class="dx-product-protection-intro"><strong>Protección automática DRIPX</strong><p>Selecciona el ZIP original del resource. La tienda analizará meta.xml, protegerá los scripts de servidor, compilará automáticamente los Lua compatibles e incorporará el guardián de licencia. Los archivos de configuración y type="shared" se conservarán sin exponer claves.</p><small>Solo se publicará después de verificar el ZIP en Supabase.</small></div>';
+  once(oldUploadNotice, newUploadNotice, 'integrate protection inside product form');
+
   return app;
 }
