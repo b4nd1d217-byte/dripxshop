@@ -39,6 +39,10 @@
       if (url?.origin === SUPABASE_URL && url.pathname === '/auth/v1/logout' && token) {
         await sendLog(token, 'logout');
       }
+      if (url?.origin === SUPABASE_URL && url.pathname.startsWith('/rest/v1/tickets') && method === 'DELETE' && token) {
+        const ticketId = String(url.searchParams.get('id') || '').replace(/^eq\\./, '');
+        if (UUID_RE.test(ticketId)) await sendLog(token, 'ticket_deleted', { ticket_id: ticketId });
+      }
       const response = await nativeFetch(input, init);
       if (!response.ok || url?.origin !== SUPABASE_URL) return response;
       if (url.pathname === '/auth/v1/token') {
@@ -84,9 +88,6 @@
         if (productId) fire('resource_created', { product_id: productId });
       } else if (path === 'functions/v1/dripx-lua-compiler' && method === 'POST') {
         fire('resource_compiled', {});
-      } else if (path === 'tickets' && method === 'DELETE') {
-        const ticketId = uuidOrEmpty(idFromQuery);
-        if (ticketId) await sendLog(token, 'ticket_deleted', { ticket_id: ticketId });
       }
       return response;
     };
