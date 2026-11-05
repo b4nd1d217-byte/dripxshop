@@ -592,6 +592,91 @@
     finally{categorySyncPromise=null;}
   }
 
+  function isAdminProductsRoute(){
+    return /^#admin\/productos(?:$|[/?])/i.test(String(location.hash||''));
+  }
+  let planResourceTimer=0,planResourceLoading=false;
+  function schedulePlanResourceManager(){
+    clearTimeout(planResourceTimer);
+    planResourceTimer=setTimeout(()=>{void renderPlanResourceManager();},150);
+  }
+  async function renderPlanResourceManager(){
+    let panel=document.querySelector('#dx-plan-resource-manager');
+    if(!isAdminProductsRoute()||!client){panel?.remove();return;}
+    if(planResourceLoading||panel?.dataset.loaded==='1')return;
+    planResourceLoading=true;
+    try{
+      await getAdminSession();
+      const [productsResult,mappingsResult]=await Promise.all([
+        client.from('dripx_products').select('id,title,product_type,status,plan_code,billing_period,protection_enabled,file_path').order('created_at',{ascending:false}),
+        client.from('dripx_plan_resources').select('plan_product_id,resource_product_id')
+      ]);
+      if(productsResult.error)throw productsResult.error;
+      if(mappingsResult.error)throw mappingsResult.error;
+      const products=productsResult.data||[];
+      const plans=products.filter(p=>p.product_type==='plan');
+      const resources=products.filter(p=>p.product_type==='resource'&&p.status==='published'&&p.protection_enabled===true&&!!p.file_path);
+      const mapped=new Set((mappingsResult.data||[]).map(row=>String(row.plan_product_id)+'::'+String(row.resource_product_id)));
+      const app=document.querySelector('#app');if(!app)return;
+      panel=document.querySelector('#dx-plan-resource-manager');
+      if(!panel){panel=document.createElement('section');panel.id='dx-plan-resource-manager';panel.className='dx-plan-resource-manager';}
+      const planMarkup=plans.map(plan=>
+        '<article class="dx-plan-resource-card" data-dx-plan-card="'+escapeHtml(plan.id)+'">'+
+          '<header><div><strong>'+escapeHtml(plan.title||plan.plan_code||'Plan')+'</strong><small>'+escapeHtml(plan.plan_code||'')+' · '+escapeHtml(plan.billing_period||'periodo no especificado')+'</small></div>'+
+          '<button type="button" class="btn primary" data-dx-plan-save="'+escapeHtml(plan.id)+'">Guardar</button></header>'+
+          (resources.length
+            ? '<div class="dx-plan-resource-options">'+resources.map(resource=>
+                '<label><input type="checkbox" data-dx-plan-resource="'+escapeHtml(resource.id)+'" '+(mapped.has(String(plan.id)+'::'+String(resource.id))?'checked':'')+'><span>'+escapeHtml(resource.title)+'</span></label>'
+              ).join('')+'</div>'
+            : '<p class="muted">No hay resources publicados con ZIP protegido. Primero crea un producto de tipo Resource y publica su ZIP desde esta misma sección.</p>')+
+          '<p class="dx-plan-resource-status" data-dx-plan-status role="status"></p></article>'
+      ).join('');
+      panel.innerHTML='<header class="dx-plan-resource-manager-head"><div><span class="dx-admin-kicker">ACCESOS TEMPORALES</span><h2>Recursos incluidos en cada plan</h2><p>Marca los resources protegidos que incluye cada plan. El sistema comprobará la compra y su vencimiento en cada descarga y validación MTA.</p></div></header>'+
+        (planMarkup||'<p class="muted">Todavía no hay productos de tipo Plan para configurar.</p>');
+      panel.dataset.loaded='1';
+      if(!panel.isConnected)app.append(panel);
+    }catch(error){
+      panel=document.querySelector('#dx-plan-resource-manager');
+      if(!panel){const app=document.querySelector('#app');if(!app)return;panel=document.createElement('section');panel.id='dx-plan-resource-manager';panel.className='dx-plan-resource-manager';app.append(panel);}
+      panel.dataset.loaded='1';
+      panel.innerHTML='<p class="dx-admin-error">'+escapeHtml(error.message||'No se pudieron cargar los recursos de los planes.')+'</p>';
+    }finally{planResourceLoading=false;}
+  }
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-dx-plan-save]');
+    if(!button)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const card=button.closest('[data-dx-plan-card]');
+    const status=card?.querySelector('[data-dx-plan-status]');
+    const ids=[...(card?.querySelectorAll('[data-dx-plan-resource]:checked')||[])].map(input=>input.dataset.dxPlanResource).filter(Boolean);
+    button.disabled=true;if(status)status.textContent='Guardando recursos del plan…';
+    try{
+      await getAdminSession();
+      const {error}=await client.rpc('dripx_admin_save_plan_resources',{
+        p_plan_product_id:button.dataset.dxPlanSave,
+        p_resource_product_ids:ids
+      });
+      if(error)throw error;
+      if(status)status.textContent='Guardado. Los accesos se desactivan cuando vence el plan.';
+      toast('Recursos del plan guardados.');
+    }catch(error){
+      if(status)status.textContent='No se guardó: '+(error.message||'error desconocido');
+      toast(error.message||'No se pudieron guardar los recursos.');
+    }finally{button.disabled=false;}
+  },true);
+  function installPlanResourceManagerObserver(){
+    const app=document.querySelector('#app');if(!app||app.dataset.dxPlanResourceObserver==='1')return;
+    app.dataset.dxPlanResourceObserver='1';
+    const observer=new MutationObserver(()=>{
+      if(isAdminProductsRoute()){
+        const panel=document.querySelector('#dx-plan-resource-manager');
+        if(!panel||panel.dataset.loaded!=='1')schedulePlanResourceManager();
+      }else document.querySelector('#dx-plan-resource-manager')?.remove();
+    });
+    observer.observe(app,{childList:true,subtree:true});
+    schedulePlanResourceManager();
+  }
+
   let adminOverviewPromise=null;
   let adminOverviewAt=0;
   function isAdminRoute(){return /^#admin(?:$|[/?])/i.test(location.hash||'')||String(location.hash||'').toLowerCase().startsWith('#admin');}
@@ -713,7 +798,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();});
+  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
@@ -874,7 +959,7 @@
   function boot(){
     replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();
+    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
