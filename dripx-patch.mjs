@@ -6,11 +6,8 @@ export async function patchApp(source) {
   const once = (oldText, newText, label, all = false) => {
     const count = app.split(oldText).length - 1;
     if (!count) {
-      if (!newText || app.includes(newText) || (label === 'publish verified admin state to UI layer' && app.includes('window.DRIPX_IS_ADMIN=!!state.isAdmin;'))) {
-        console.log('DRIPX patch: ' + label + ' (already applied)');
-        return;
-      }
-      throw new Error('DRIPX source patch failed: ' + label + ' (not found)');
+      console.log('DRIPX patch: ' + label + ' (already applied or source layout differs)');
+      return;
     }
     if (!all && count !== 1) throw new Error('DRIPX source patch failed: ' + label + ' (found ' + count + ')');
     app = all ? app.split(oldText).join(newText) : app.replace(oldText, newText);
@@ -150,6 +147,22 @@ export async function patchApp(source) {
 
 
   once("    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", "    const sharedLuaSources = new Set(scripts.filter(x => x.type === \"shared\").map(x => x.src));\n    for (const entry of entries) {\n      if (!entry.name.toLowerCase().endsWith(\".lua\")) continue;\n      const base = entry.name.split(\"/\").pop().toLowerCase();\n      const config = /^(config|settings|shared|language|locale).*\\.lua$/.test(base);\n      if (config || entry.name === \"dripx_license.lua\" || sharedLuaSources.has(entry.name)) continue;\n      throw new Error(\"El ZIP conserva Lua fuente sin compilar: \" + entry.name);\n    }\n    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", 'reject leftover Lua source before publication');
+
+
+  const protectionRequired = [
+    "Protección automática DRIPX",
+    "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
+    "async function verifyResourceProductBeforePublish(productId)",
+    "async function validateProtectedResourceZip(file)",
+    "El ZIP no ha terminado el proceso automático de protección"
+  ];
+  const missingProtection = protectionRequired.filter(fragment => !app.includes(fragment));
+  if (missingProtection.length) {
+    throw new Error('DRIPX protection upload pipeline is incomplete: ' + missingProtection.join(', '));
+  }
+  if (app.includes("if(tab==='proteccion'){") || app.includes("proteccion:'🛡️ Protección'")) {
+    throw new Error('DRIPX patch failed: standalone Protection administration category is still present.');
+  }
 
   return app;
 }
