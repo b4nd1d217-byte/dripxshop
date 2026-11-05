@@ -174,7 +174,7 @@
         const upload=new window.tus.Upload(file,{
           endpoint:'https://'+projectRef+'.storage.supabase.co/storage/v1/upload/resumable',
           retryDelays:[0,3000,5000,10000,20000],
-          headers:{authorization:'Bearer '+session.access_token,apikey:C.supabaseKey,'x-upsert':'false'},
+          headers:{authorization:'Bearer '+session.access_token,apikey:C.supabaseKey||C.publishableKey,'x-upsert':'false'},
           metadata:{bucketName:bucket,objectName:path,contentType:'application/zip',cacheControl:'3600'},
           chunkSize:6*1024*1024,uploadDataDuringCreation:true,removeFingerprintOnSuccess:true,
           fingerprint:async(f)=>[bucket,path,f.name,f.size,f.lastModified].join('-'),
