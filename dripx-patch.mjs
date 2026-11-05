@@ -136,9 +136,5 @@ export async function patchApp(source) {
   ].join("\n");
   app = app.slice(0, compileBlockStart) + safeMetaRewrite + app.slice(compileBlockEndLine + 1);
 
-  once("if((script.type==='server'||script.type==='client')&&lower.endsWith('.lua')&&!config)throw new Error('Queda Lua fuente sin compilar: '+src);",
-       "if((script.type==='server'||script.type==='client')&&lower.endsWith('.lua')&&!config&&src!=='dripx_license.lua')throw new Error('Queda Lua fuente sin compilar: '+src);",
-       'allow only the license template to remain Lua source');
-
   return app;
 }
