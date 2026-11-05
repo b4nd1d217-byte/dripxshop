@@ -11,6 +11,8 @@ export async function patchApp(source) {
     console.log('DRIPX patch: ' + label + ' (' + count + ')');
   };
 
+  once("function updateUserUI(){const logged=!!state.user;", "function updateUserUI(){window.DRIPX_IS_ADMIN=!!state.isAdmin;const logged=!!state.user;", 'publish verified admin state to UI layer');
+
   once("Number(p.price_usd)>0?money(p.price_usd):'Consultar'", "Number(p.price_usd)>0?money(p.price_usd):'Gratis'", 'catalogue free price');
   once("Number(p.price_usd)>0?money(p.price_usd):'Consultar precio'", "Number(p.price_usd)>0?money(p.price_usd):'Gratis'", 'detail free price');
 
