@@ -58,3 +58,23 @@
 #product-form[aria-busy="true"] button[type="submit"],#product-form[aria-busy="true"] input[type="submit"]{opacity:.55;cursor:wait;filter:saturate(.6)}
 #product-form .dx-product-engine{margin-top:14px}
 @media(max-width:600px){.dx-auto-progress{gap:5px}.dx-auto-step{font-size:9px;padding:6px 7px}.dx-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Admin Discord test panel */
+.dx-admin-log-test{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:16px 17px;border:1px solid rgba(0,199,255,.18);border-radius:14px;background:linear-gradient(120deg,rgba(0,199,255,.055),rgba(4,12,20,.65) 55%,rgba(8,17,29,.76))}
+.dx-admin-log-copy{display:grid;gap:5px;min-width:210px;flex:1}
+.dx-admin-log-copy strong{font-size:13px;color:#e5f7ff}
+.dx-admin-log-copy small{font-size:11px;line-height:1.5;color:#829bad}
+.dx-admin-log-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.dx-admin-log-picker{position:relative;min-width:128px}
+.dx-admin-log-select,.dx-admin-log-send{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:39px;padding:0 12px;border:1px solid rgba(151,190,218,.2);border-radius:10px;background:rgba(3,10,18,.88);color:#d8edf7;font:600 11px inherit;cursor:pointer}
+.dx-admin-log-select svg,.dx-admin-log-send svg{width:14px;height:14px;flex:none}
+.dx-admin-log-select:hover{border-color:rgba(0,199,255,.55)}
+.dx-admin-log-send{border-color:rgba(0,199,255,.45);background:linear-gradient(135deg,rgba(0,199,255,.2),rgba(0,105,150,.24));color:#dff9ff}
+.dx-admin-log-send:hover{border-color:#00c7ff;background:rgba(0,199,255,.2)}
+.dx-admin-log-send:disabled{opacity:.55;cursor:wait}
+.dx-admin-log-menu{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 6px);display:grid;gap:3px;padding:5px;border:1px solid rgba(0,199,255,.2);border-radius:11px;background:#07111d;box-shadow:0 14px 36px rgba(0,0,0,.4)}
+.dx-admin-log-menu[hidden]{display:none}
+.dx-admin-log-menu button{width:100%;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:#b8cbd7;text-align:left;font:600 11px inherit;cursor:pointer}
+.dx-admin-log-menu button:hover{background:rgba(0,199,255,.1);color:#e8faff}
+.dx-admin-log-status{width:100%;margin:0;padding-top:9px;border-top:1px solid rgba(151,190,218,.1);font-size:10px;line-height:1.5;color:#8199aa}
+@media(max-width:620px){.dx-admin-log-test{align-items:stretch}.dx-admin-log-actions{width:100%}.dx-admin-log-picker{flex:1}.dx-admin-log-send{flex:1}}
