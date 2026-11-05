@@ -138,18 +138,14 @@
   function formatBytes(value){const n=Number(value)||0;return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';}
   function toast(message){const node=document.querySelector('#toast');if(node){node.textContent=message;node.classList.add('show');setTimeout(()=>node.classList.remove('show'),3600);}}
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function ensureStagePanel(){
-    const analysis=document.querySelector('#zip-analysis');
-    if(!analysis||document.querySelector('#dripx-staging-panel'))return;
-    const panel=document.createElement('section');panel.id='dripx-staging-panel';panel.className='dx-staging-panel';
-    panel.innerHTML='<div class="dx-staging-head"><div><strong>ZIPs guardados de forma privada</strong><small>Los archivos permanecen en Supabase y puedes recuperarlos después de recargar.</small></div><span class="dx-storage-pill">100 MB máx.</span></div><div id="dripx-staging-progress" class="dx-upload-progress" hidden><div class="dx-progress-track"><span id="dripx-staging-bar"></span></div><div id="dripx-staging-status">Preparando ZIP…</div></div><div id="dripx-staging-inventory" class="dx-staging-inventory"></div><div id="dripx-recent-zips" class="dx-recent-zips">Consultando ZIPs guardados…</div>';
-    analysis.insertAdjacentElement('afterend',panel);
-    loadRecentZips().catch(e=>{const out=document.querySelector('#dripx-recent-zips');if(out)out.textContent='No se pudo consultar el historial: '+(e.message||'Error');});
-  }
-  function setProgress(panelId,pct,message){
-    const panel=document.getElementById(panelId);if(!panel)return;panel.hidden=false;
-    const bar=panel.querySelector('.dx-progress-track span');if(bar)bar.style.width=Math.max(0,Math.min(100,pct))+'%';
-    const status=panel.querySelector('[id$="status"]');if(status)status.textContent=message||('Subiendo '+Math.round(pct)+'%');
+  function clearLegacyZipStaging(){
+    document.querySelector('#dripx-staging-panel')?.remove();
+    document.querySelector('#dripx-recent-zips')?.remove();
+    const legacy=document.querySelector('#resource-zip');
+    if(legacy&&!legacy.closest('#product-form')){
+      const wrap=legacy.closest('label')||legacy.parentElement;
+      if(wrap){wrap.hidden=true;wrap.setAttribute('aria-hidden','true');wrap.dataset.dripxLegacyZipHidden='true';}
+    }
   }
   async function getAdminSession(){
     if(!client)throw new Error('No se pudo iniciar el cliente de Supabase.');
@@ -195,152 +191,224 @@
   async function scanZip(file){
     if(!window.JSZip)throw new Error('No se pudo cargar JSZip. Recarga la página.');
     if(!file||!file.size)throw new Error('Selecciona un archivo ZIP.');
+    if(!/\\.zip$/i.test(file.name||''))throw new Error('El archivo del producto debe ser un ZIP.');
     if(file.size>100*1024*1024)throw new Error('El ZIP supera el límite de 100 MB.');
     const zip=await JSZip.loadAsync(file,{checkCRC32:true});
     const entries=Object.values(zip.files).filter(x=>!x.dir&&!x.name.startsWith('__MACOSX/')&&!x.name.endsWith('/.DS_Store'));
     if(!entries.length)throw new Error('El ZIP está vacío.');
     if(entries.length>3000)throw new Error('El ZIP supera el límite de 3.000 archivos.');
-    if(entries.some(x=>x.name.startsWith('/')||x.name.includes('\\')||x.name.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('El ZIP contiene rutas inseguras.');
+    if(entries.some(x=>x.name.startsWith('/')||x.name.includes('\\\\')||x.name.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('El ZIP contiene rutas inseguras.');
     const expanded=entries.reduce((sum,x)=>sum+Number(x._data?.uncompressedSize||0),0);
     if(expanded>200*1024*1024)throw new Error('El ZIP descomprimido supera el límite de 200 MB.');
-    let meta=entries.find(x=>x.name.toLowerCase()==='meta.xml');let rootPrefix='';
+    let meta=entries.find(x=>x.name.toLowerCase()==='meta.xml'),rootPrefix='';
     if(!meta){
       const nested=entries.filter(x=>x.name.toLowerCase().endsWith('/meta.xml'));
-      if(nested.length===1){rootPrefix=nested[0].name.slice(0,nested[0].name.lastIndexOf('/')+1);if(!entries.every(x=>x.name.startsWith(rootPrefix)))rootPrefix='';else meta=nested[0];}
+      if(nested.length===1){
+        rootPrefix=nested[0].name.slice(0,nested[0].name.lastIndexOf('/')+1);
+        if(!entries.every(x=>x.name.startsWith(rootPrefix)))throw new Error('El ZIP mezcla archivos de varios resources. Sube un único resource MTA:SA.');
+      }
     }
     const scriptMap=new Map();
-    if(meta){
-      const xml=new DOMParser().parseFromString(await meta.async('string'),'application/xml');
-      if(!xml.querySelector('parsererror'))for(const node of xml.querySelectorAll('script')){
-        const src=String(node.getAttribute('src')||'').split(String.fromCharCode(92)).join('/').replace(/^\.\//,'');
-        if(src)scriptMap.set(src,(node.getAttribute('type')||'server').toLowerCase());
+    if(meta||rootPrefix){
+      const metaEntry=meta||entries.find(x=>x.name.toLowerCase()===rootPrefix.toLowerCase()+'meta.xml');
+      if(metaEntry){
+        const xml=new DOMParser().parseFromString(await metaEntry.async('string'),'application/xml');
+        if(xml.querySelector('parsererror'))throw new Error('meta.xml no contiene XML válido.');
+        for(const node of xml.querySelectorAll('script')){
+          const path=String(node.getAttribute('src')||'').split(String.fromCharCode(92)).join('/').replace(/^\\.\\//,'');
+          if(path)scriptMap.set(path,(node.getAttribute('type')||'server').toLowerCase());
+        }
       }
     }
     const files=entries.map(entry=>{
-      const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),script=scriptMap.get(rootPrefix?path.slice(rootPrefix.length):path);
-      const isLua=lower.endsWith('.lua'),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
-      const isServer=isLua&&script==='server'&&!isConfig,isClient=isLua&&script==='client'&&!isConfig,isShared=isLua&&script==='shared';
-      const isShader=['fx','hlsl','glsl'].includes(ext);
-      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isClient?'client_lua':(isShared?'shared_lua':(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))))),script_type:script||null};
+      const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),relative=rootPrefix&&path.startsWith(rootPrefix)?path.slice(rootPrefix.length):path,script=scriptMap.get(relative);
+      const lua=lower.endsWith('.lua'),config=/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
+      const server=lua&&script==='server'&&!config,clientSide=lua&&script==='client'&&!config,shared=lua&&script==='shared';
+      const shader=['fx','hlsl','glsl'].includes(ext);
+      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:server?'server_lua':(clientSide?'client_lua':(shared?'shared_lua':(config?'config':(lua?'lua_other':(shader?'shader':'file')))))};
     });
-    const server=files.filter(x=>x.kind==='server_lua').map(x=>rootPrefix?x.path.slice(rootPrefix.length):x.path);
-    const client=files.filter(x=>x.kind==='client_lua').map(x=>rootPrefix?x.path.slice(rootPrefix.length):x.path);
-    return {zip,entries,files,expanded,metaPath:meta?.name||null,rootPrefix,server,client,compileCount:server.length+client.length,luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
+    return {zip,entries,files,expanded,metaPath:meta?.name||(rootPrefix+'meta.xml'),rootPrefix,
+      server:files.filter(x=>x.kind==='server_lua'),client:files.filter(x=>x.kind==='client_lua'),
+      luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
   }
-  async function loadRecentZips(){
-    const host=document.querySelector('#dripx-recent-zips');if(!host||!client)return;
-    try{
-      const session=await getAdminSession();
-      const {data,error}=await client.from('dripx_resource_staging').select('id,source_path,source_filename,source_bytes,expanded_bytes,file_count,lua_count,server_lua_count,status,created_at').eq('user_id',session.user.id).order('created_at',{ascending:false}).limit(10);
-      if(error)throw error;
-      host.innerHTML='<div class="dx-recent-title">Últimos ZIPs procesados</div>'+(data?.length?data.map(row=>'<div class="dx-recent-row"><div class="dx-recent-main"><strong>'+escapeHtml(row.source_filename)+'</strong><small>'+formatBytes(row.source_bytes)+' · '+Number(row.file_count)+' archivos · '+Number(row.lua_count)+' Lua · '+Number(row.server_lua_count)+' de servidor · '+new Date(row.created_at).toLocaleString('es-DO')+'</small></div><span class="dx-status">'+escapeHtml(row.status)+'</span><div class="dx-recent-actions"><button type="button" class="btn subtle" data-restore-stage="'+row.id+'">Abrir ZIP</button><button type="button" class="btn subtle" data-delete-stage="'+row.id+'" aria-label="Eliminar ZIP">Eliminar</button></div></div>').join(''):'<div class="dx-empty">Todavía no hay ZIPs guardados.</div>');
-    }catch(error){host.textContent='No se pudo cargar el historial de ZIPs: '+(error.message||'Error');}
+
+  function setProductZipStatus(text,state='info'){
+    const status=document.querySelector('#product-zip-upload-state');
+    if(status){status.textContent=text;status.dataset.state=state;}
+    const preview=document.querySelector('#product-zip-preview');
+    if(preview)preview.dataset.state=state;
   }
-  async function persistStagingZip(file){
-    const panel=document.querySelector('#dripx-staging-panel');if(!panel)return;
-    const progress=panel.querySelector('#dripx-staging-progress'),inventory=panel.querySelector('#dripx-staging-inventory');
-    try{
-      const session=await getAdminSession();const scan=await scanZip(file);
-      inventory.innerHTML='<div class="dx-inventory-stats"><span>'+scan.files.length+' archivos</span><span>'+scan.luaCount+' Lua</span><span>'+scan.server.length+' Lua de servidor</span><span>'+formatBytes(scan.expanded)+' descomprimidos</span></div><div class="dx-inventory-note">Inventario completo leído y preparado para restauración.</div>';
-      setProgress('dripx-staging-progress',1,'Subiendo archivo ZIP a almacenamiento privado…');
-      const path=session.user.id+'/'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomUUID()+'.zip';
-      await tusUpload('dripx-resource-staging',path,file,pct=>setProgress('dripx-staging-progress',pct,'Guardando ZIP… '+Math.round(pct)+'%'));
-      const payload={user_id:session.user.id,source_path:path,source_filename:file.name,source_bytes:file.size,expanded_bytes:scan.expanded,file_count:scan.files.length,lua_count:scan.luaCount,server_lua_count:scan.server.length,meta_path:scan.metaPath,root_prefix:scan.rootPrefix,files:scan.files,selected_lua:scan.server,status:'uploaded',updated_at:new Date().toISOString()};
-      const {data,error}=await client.from('dripx_resource_staging').insert(payload).select('id').single();
-      if(error){await client.storage.from('dripx-resource-staging').remove([path]);throw error;}
-      progress.hidden=false;setProgress('dripx-staging-progress',100,'ZIP guardado correctamente. Referencia: '+data.id);
-      toast('ZIP guardado de forma privada y su inventario quedó registrado.');await loadRecentZips();
-    }catch(error){
-      if(progress){progress.hidden=false;setProgress('dripx-staging-progress',0,'No se pudo guardar el ZIP: '+(error.message||'Error'));}
-      toast(error.message||'No se pudo guardar el ZIP.');console.error('[DRIPX] Staging ZIP:',error);
-    }
+  function lockProductSubmit(form,locked){
+    if(!form)return;
+    form.dataset.dripxZipProcessing=locked?'true':'false';
+    form.setAttribute('aria-busy',locked?'true':'false');
+    form.querySelectorAll('button[type="submit"],input[type="submit"]').forEach(button=>{
+      if(locked){
+        if(!button.hasAttribute('data-dripx-prev-disabled'))button.dataset.dripxPrevDisabled=button.disabled?'1':'0';
+        button.disabled=true;
+      }else{
+        if(button.dataset.dripxPrevDisabled==='0')button.disabled=false;
+        delete button.dataset.dripxPrevDisabled;
+      }
+    });
   }
+  function waitForZipState(test,description,timeoutMs=480000){
+    return new Promise((resolve,reject)=>{
+      const root=document.querySelector('.dx-product-engine')||document.querySelector('#product-form')||document.body;
+      let finished=false;
+      const cleanup=()=>{observer.disconnect();clearInterval(timer);clearTimeout(timeout);};
+      const finish=(error)=>{if(finished)return;finished=true;cleanup();error?reject(error):resolve();};
+      const check=()=>{
+        if(finished)return;
+        try{if(test()){finish();return;}}catch(error){finish(error);return;}
+        const status=document.querySelector('#zip-status')?.textContent?.trim()||'';
+        if(/(error de compilaci[oó]n|no se pudo compilar|compilaci[oó]n fallida|protecci[oó]n fallida|error:)/i.test(status)){
+          finish(new Error(status));
+        }
+      };
+      const observer=new MutationObserver(check);
+      observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled','class']});
+      const timer=setInterval(check,250);
+      const timeout=setTimeout(()=>finish(new Error('Tiempo agotado durante '+description+'. Revisa el estado del ZIP y vuelve a intentarlo.')),timeoutMs);
+      check();
+    });
+  }
+  function mountProductZipPipeline(node,input,file){
+    return (async()=>{
+      let engine=node.querySelector('.dx-product-engine');
+      if(!engine){engine=document.createElement('section');engine.className='dx-product-engine';engine.innerHTML='<div class="dx-engine-heading"><strong>Protección integrada del producto</strong><small>DRIP X SHOP analizará y protegerá el resource antes de guardarlo. El ZIP original no se publicará.</small></div>';node.append(engine);}
+      const ids=['zip-analysis','zip-file-list','zip-protect','zip-compile','zip-download','zip-status'];
+      for(const id of ids){const item=document.getElementById(id);if(item&&!engine.contains(item))engine.append(item);}
+      const ready=ids.every(id=>!!engine.querySelector('#'+id));
+      if(!ready)throw new Error('El motor de protección no está disponible en el formulario de producto. No se permitirá publicar el ZIP original.');
+      if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor de protección no está cargado. Recarga la página.');
+      await window.DRIPX_LOAD_ZIP(file);
+      return engine;
+    })();
+  }
+
   function armCompiledZipCapture(input){
-    if(!input)return;const native=URL.createObjectURL.bind(URL);let captured=false;
+    if(!input)return;
+    const native=URL.createObjectURL.bind(URL);
+    let captured=false;
+    const nativeAnchorClick=HTMLAnchorElement.prototype.click;
     URL.createObjectURL=function(object){
       const url=native(object);
       if(!captured&&object instanceof Blob&&object.size>0){
         captured=true;
         try{
-          const source=input.files?.[0],name=(source?.name||'resource.zip').replace(/\.zip$/i,'')+'-DRIPX-protegido.zip';
+          const source=input.files?.[0],name=(source?.name||'resource.zip').replace(/\\.zip$/i,'')+'-DRIPX-protegido.zip';
           const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
           const transfer=new DataTransfer();transfer.items.add(processed);input.files=transfer.files;
-          const status=document.querySelector('#product-zip-upload-state');if(status)status.textContent='ZIP compilado/protegido listo para publicar.';
-          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,at:Date.now()};URL.createObjectURL=native;
-        }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP procesado:',error);}
-      }return url;
+          setProductZipStatus('ZIP protegido listo. Al guardar el producto se subirá este archivo final a product-files.','success');
+          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,at:Date.now()};
+          URL.createObjectURL=native;
+        }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP protegido al producto:',error);}
+      }
+      return url;
     };
-    window.setTimeout(()=>{if(URL.createObjectURL!==native)URL.createObjectURL=native;},45000);
+    HTMLAnchorElement.prototype.click=function(){
+      if(this.download&&String(this.href||'').startsWith('blob:')){
+        HTMLAnchorElement.prototype.click=nativeAnchorClick;
+        return;
+      }
+      return nativeAnchorClick.call(this);
+    };
+    window.setTimeout(()=>{
+      if(URL.createObjectURL!==native)URL.createObjectURL=native;
+      if(HTMLAnchorElement.prototype.click!==nativeAnchorClick)HTMLAnchorElement.prototype.click=nativeAnchorClick;
+    },480000);
   }
-  async function mountProductZipPipeline(node,input,file){
-    let engine=node.querySelector('.dx-product-engine');
-    if(!engine){engine=document.createElement('section');engine.className='dx-product-engine';engine.innerHTML='<div class="dx-engine-heading"><strong>Compilación y protección del resource</strong><small>Selecciona Lua server y client desde este mismo panel.</small></div>';node.append(engine);}
-    const ids=['zip-analysis','zip-file-list','zip-protect','zip-compile','zip-download','zip-status'];
-    for(const id of ids){const item=document.getElementById(id);if(item&&!engine.contains(item))engine.append(item);}
-    const ready=ids.every(id=>!!engine.querySelector('#'+id));
-    if(!ready){let note=engine.querySelector('.dx-engine-note');if(!note){note=document.createElement('div');note.className='dx-engine-note';engine.append(note);}note.textContent='Los controles de compilación no están disponibles en este formulario. No publiques este ZIP sin terminar el proceso DRIPX.';return false;}
-    const download=engine.querySelector('#zip-download');
-    if(download&&!download.dataset.dripxCaptureBound){download.dataset.dripxCaptureBound='true';download.addEventListener('click',()=>armCompiledZipCapture(input),true);}
-    if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El lector de protección no está disponible. Recarga la página e inténtalo de nuevo.');
-    await window.DRIPX_LOAD_ZIP(file);
-    return true;
-  }
-  async function previewProductZip(file){
-    window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
-    let node=document.querySelector('#product-zip-preview');const input=document.querySelector('#product-form input[name="file"]');if(!input)return;
-    if(!node){node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';const anchor=input.closest('label')||input.parentElement||input;anchor.insertAdjacentElement('afterend',node);const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.textContent='ZIP listo para analizar y compilar.';node.insertAdjacentElement('afterend',status);}
-    let previewBody=node.querySelector('.dx-preview-body');
-    if(!previewBody){previewBody=document.createElement('div');previewBody.className='dx-preview-body';node.prepend(previewBody);}
-    const uploadStatus=document.querySelector('#product-zip-upload-state');if(uploadStatus)uploadStatus.textContent='Analizando el resource…';previewBody.innerHTML='<div class="dx-preview-loading">Leyendo ZIP y meta.xml…</div>';
-    try{
-      const result=await scanZip(file),protectedZip=!!result.zip.file('DRIPX_MANIFEST.json');
-      const rows=result.files.slice(0,300).map(x=>{
-        const compile=x.kind==='server_lua'||x.kind==='client_lua';
-        const label=x.kind==='server_lua'?'Server · compilable':x.kind==='client_lua'?'Client · compilable':x.kind==='shared_lua'?'Shared · se conserva':x.kind==='config'?'Configuración':'Archivo';
-        const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
-        return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(x.path)+'</span><small>'+label+' · '+formatBytes(x.bytes)+'</small></div>';
-      }).join('');
-      previewBody.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Resource pendiente de protección')+'</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' shared/config</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div>';
-      const mounted=await mountProductZipPipeline(node,input,file);
-      if(!mounted)throw new Error('No están disponibles los controles de compilación/protección. No publiques este ZIP todavía.');
-      ensureStagePanel();
-      await persistStagingZip(file);
-      if(uploadStatus)uploadStatus.textContent='ZIP analizado y guardado en el historial privado. Finaliza compilación/protección aquí antes de publicar.';
-    }catch(error){node.textContent='No se pudo leer el ZIP: '+(error.message||'archivo inválido');if(uploadStatus)uploadStatus.textContent='Corrige el ZIP antes de publicarlo.';}
-  }
-  document.addEventListener('change',event=>{
-    if(event.target?.id==='resource-zip'&&event.target.files?.[0]){ensureStagePanel();persistStagingZip(event.target.files[0]);}
-    if(event.target?.matches('#product-form input[name="file"]')&&event.target.files?.[0])previewProductZip(event.target.files[0]);
-  });
-  document.addEventListener('click',async event=>{
-    const restore=event.target.closest('[data-restore-stage]'),remove=event.target.closest('[data-delete-stage]');
-    if(restore){
-      event.preventDefault();event.stopImmediatePropagation();
-      try{
-        const session=await getAdminSession();
-        const {data:row,error}=await client.from('dripx_resource_staging').select('source_path,source_filename').eq('id',restore.dataset.restoreStage).eq('user_id',session.user.id).single();if(error)throw error;
-        const {data:blob,error:downloadError}=await client.storage.from('dripx-resource-staging').download(row.source_path);if(downloadError)throw downloadError;
-        const file=new File([blob],row.source_filename,{type:'application/zip'});
-        if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El lector ZIP aún no está listo. Cambia a la pestaña Protección y reintenta.');
-        await window.DRIPX_LOAD_ZIP(file);toast('ZIP restaurado desde el almacenamiento privado.');
-        document.querySelector('#zip-analysis')?.scrollIntoView({behavior:'smooth',block:'center'});
-      }catch(error){toast(error.message||'No se pudo restaurar el ZIP.');}
-      return;
-    }
-    if(remove){
-      event.preventDefault();event.stopImmediatePropagation();
-      if(!confirm('¿Eliminar este ZIP temporal del almacenamiento privado?'))return;
-      try{
-        const session=await getAdminSession();
-        const {data:row,error}=await client.from('dripx_resource_staging').select('id,source_path').eq('id',remove.dataset.deleteStage).eq('user_id',session.user.id).single();if(error)throw error;
-        const {error:storageError}=await client.storage.from('dripx-resource-staging').remove([row.source_path]);if(storageError)throw storageError;
-        const {error:deleteError}=await client.from('dripx_resource_staging').delete().eq('id',row.id);if(deleteError)throw deleteError;
-        await loadRecentZips();toast('ZIP temporal eliminado.');
-      }catch(error){toast(error.message||'No se pudo eliminar el ZIP.');}
-      return;
-    }
-  },true);
 
+  async function previewProductZip(file){
+    const input=document.querySelector('#product-form input[name="file"]');
+    const form=input?.closest('#product-form');
+    if(!input||!form)return;
+    const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
+    input.dataset.dripxZipRun=runId;
+    input.dataset.dripxZipReady='false';
+    window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
+    lockProductSubmit(form,true);
+    let node=document.querySelector('#product-zip-preview');
+    if(!node){
+      node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';
+      const anchor=input.closest('label')||input.parentElement||input;
+      anchor.insertAdjacentElement('afterend',node);
+      const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';
+      node.insertAdjacentElement('afterend',status);
+    }
+    node.dataset.state='processing';
+    node.innerHTML='<div class="dx-preview-loading">1/4 · Validando ZIP y leyendo meta.xml…</div>';
+    setProductZipStatus('Preparando el resource para protección automática…','processing');
+    try{
+      await getAdminSession();
+      const result=await scanZip(file);
+      if(input.dataset.dripxZipRun!==runId)return;
+      const rows=result.files.slice(0,180).map(item=>{
+        const compile=item.kind==='server_lua'||item.kind==='client_lua';
+        const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='shared_lua'||item.kind==='config'?'Configuración / shared':'Archivo conservado';
+        const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
+        return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(item.path)+'</span><small>'+label+' · '+formatBytes(item.bytes)+'</small></div>';
+      }).join('');
+      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="warn">ZIP original — protección pendiente</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' config/shared</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div><div class="dx-upload-state dx-auto-progress"><span class="dx-auto-step is-active">01 · Validar</span><span class="dx-auto-step">02 · Proteger</span><span class="dx-auto-step">03 · Compilar</span><span class="dx-auto-step">04 · Preparar subida</span></div>';
+      const engine=await mountProductZipPipeline(node,input,file);
+      if(input.dataset.dripxZipRun!==runId)return;
+      const protect=engine.querySelector('#zip-protect'),compile=engine.querySelector('#zip-compile'),download=engine.querySelector('#zip-download');
+      if(!protect||!compile||!download)throw new Error('Faltan controles del motor de protección.');
+      if(result.server.length===0)throw new Error('El ZIP no contiene scripts Lua de servidor declarados en meta.xml. No se puede aplicar la licencia DRIPX.');
+      setProductZipStatus('02/4 · Protegiendo el resource y preparando la validación DRIPX…','processing');
+      node.querySelectorAll('.dx-auto-step')[1]?.classList.add('is-active');
+      if(protect.disabled)throw new Error('El motor no habilitó la protección. Revisa meta.xml y los scripts Lua.');
+      protect.click();
+      await waitForZipState(()=>!compile.disabled,'protección del resource');
+      if(input.dataset.dripxZipRun!==runId)return;
+      setProductZipStatus('03/4 · Compilando automáticamente los Lua seleccionados…','processing');
+      node.querySelectorAll('.dx-auto-step')[1]?.classList.add('is-done');
+      node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-active');
+      if(compile.disabled)throw new Error('La protección no terminó; el ZIP no se puede compilar.');
+      compile.click();
+      await waitForZipState(()=>!download.disabled,'compilación de los scripts Lua');
+      if(input.dataset.dripxZipRun!==runId)return;
+      setProductZipStatus('04/4 · Generando el ZIP protegido final para el producto…','processing');
+      node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
+      node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
+      armCompiledZipCapture(input);
+      download.click();
+      await waitForZipState(()=>!!window.__DRIPX_PROCESSED_PRODUCT_ZIP&&input.files?.[0]?.name===window.__DRIPX_PROCESSED_PRODUCT_ZIP.name,'generación del ZIP protegido');
+      if(input.dataset.dripxZipRun!==runId)return;
+      const protectedFile=input.files?.[0];
+      if(!protectedFile||protectedFile.size===0||!/-DRIPX-protegido\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no se adjuntó al formulario. Selecciona el ZIP y repite la protección.');
+      input.dataset.dripxZipReady='true';
+      node.dataset.state='success';
+      node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-done');
+      const summary=node.querySelector('.dx-preview-summary b');
+      if(summary){summary.className='ok';summary.textContent='Protección DRIPX completada';}
+      const fileName=node.querySelector('.dx-preview-summary strong');
+      if(fileName)fileName.textContent=protectedFile.name;
+      setProductZipStatus('Protección completada. Al pulsar Guardar/Publicar se subirá este ZIP protegido junto con el producto.','success');
+      lockProductSubmit(form,false);
+      toast('ZIP protegido y adjuntado al producto. Ya puedes guardarlo o publicarlo.');
+      input.dispatchEvent(new Event('change',{bubbles:true}));
+    }catch(error){
+      if(input.dataset.dripxZipRun!==runId)return;
+      input.dataset.dripxZipReady='false';
+      node.dataset.state='error';
+      setProductZipStatus('No se pudo completar la protección. El ZIP original no se publicará: '+(error.message||'Error desconocido'),'error');
+      const steps=node.querySelectorAll('.dx-auto-step');steps.forEach(step=>step.classList.remove('is-active'));
+      console.error('[DRIPX] Automatic product ZIP protection:',error);
+      toast(error.message||'Falló la protección del ZIP.');
+      lockProductSubmit(form,false);
+    }
+  }
+
+  document.addEventListener('change',event=>{
+    if(event.target?.matches('#product-form input[name="file"]')){
+      const input=event.target,file=input.files?.[0];
+      if(!file)return;
+      if(input.dataset.dripxZipReady==='true'&&/-DRIPX-protegido\\.zip$/i.test(file.name))return;
+      previewProductZip(file);
+    }
+  });
   function ensureOwnedProductsTab(){
     const tabs=document.querySelector('.profile-tabs');
     if(!tabs||tabs.querySelector('[data-dripx-owned-products],[data-profile-tab="productos"]'))return;
@@ -532,12 +600,11 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);
-    if(document.querySelector('#resource-zip'))ensureStagePanel();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
