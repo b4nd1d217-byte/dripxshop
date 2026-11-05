@@ -20,7 +20,7 @@ async function syncCatalogRatings(force=false){
   const map={};
   for(const row of data||[]){const id=String(row.product_id);(map[id]??=[]).push(Number(row.rating)||0);}
   ratingMap=map;ratingLoadedAt=Date.now();
-  $('#app [data-add],#app [data-claim-free]').forEach(button=>{
+  $$('#app [data-add],#app [data-claim-free]').forEach(button=>{
    const id=String(button.dataset.add||button.dataset.claimFree||'');
    if(!id)return;
    const card=button.closest('.product-card,[data-product-id],article,.product')||button.parentElement?.parentElement;
