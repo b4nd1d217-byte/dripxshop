@@ -37,7 +37,7 @@ export async function patchApp(source) {
        'name="price_usd" type="number" min="0" step="0.01"', 'zero price inputs', true);
 
   const oldFreeDetail = "p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en Mi cuenta > Licencia.'";
-  const newFreeDetail = "Number(p.price_usd)===0?'Este producto es gratuito. Al obtenerlo, aparecerá en Mi cuenta > Licencia.':(p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en Mi cuenta > Licencia.')";
+  const newFreeDetail = "Number(p.price_usd)===0?'Este producto es gratuito. Al obtenerlo, aparecerá en Mi cuenta > Productos.':(p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita los recursos en Mi cuenta > Productos.')";
   if (app.includes(oldFreeDetail)) once(oldFreeDetail, newFreeDetail, 'free product detail text');
   else console.warn('DRIPX patch: free product detail text source differs; keeping the source copy.');
 
