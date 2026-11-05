@@ -558,15 +558,22 @@
       el.setAttribute('aria-hidden','true');
     });
   }
+  function removeDuplicateBackAndAdminLabels(root=document){
+    const scope=root.querySelector?.('#app')||root;
+    scope.querySelectorAll?.('button,a,[role="button"],h1,h2,h3,h4,.eyebrow,.page-title,.admin-title').forEach(el=>{
+      if(el.id==='dripx-route-back')return;
+      const label=(el.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
+      if(el.matches('button,a,[role="button"]')&&/^volver a (la )?categor[ií]as?$/.test(label)){el.remove();return;}
+      if(el.matches('h1,h2,h3,h4,.eyebrow,.page-title,.admin-title')&&/^(panel admin|panel de administraci[oó]n|panel administrativo)$/.test(label))el.remove();
+    });
+  }
   function syncRouteBackButton(){
     const app=document.querySelector('#app');
     if(!app)return;
     const hash=String(location.hash||'#inicio').toLowerCase();
     let target='',label='';
-    if(/^#(?:productos|ayuda|categoria(?:[-/=?]|$)|categorias(?:[-/=?]|$)|category(?:[-/=?]|$))/.test(hash)){
-      target='#inicio';label='Volver a categorías';
-    }else if(/^#producto\//.test(hash)){
-      target='#productos';label='Volver a productos';
+    if(/^#producto\//.test(hash)){
+      target='#productos';label='Volver';
     }
     let button=document.querySelector('#dripx-route-back');
     if(!target){button?.remove();return;}
@@ -874,7 +881,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
@@ -1010,7 +1017,7 @@
   },true);
 
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
