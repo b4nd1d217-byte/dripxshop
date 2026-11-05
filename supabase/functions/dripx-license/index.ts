@@ -243,12 +243,13 @@ async function downloadOwnedProduct(req: Request) {
     ) {
       return json(422, { error: "product_zip_unsafe_path" });
     }
-    const unixMode = Number(info.unixPermissions || 0);
+    const rawMode = info.unixPermissions;
+    const unixMode = typeof rawMode === "string" && /^[0-7]{5,6}$/.test(rawMode) ? parseInt(rawMode, 8) : Number(rawMode || 0);
     if ((unixMode & 0o170000) === 0o120000) {
       return json(422, { error: "product_zip_symlink_not_allowed" });
     }
     if (!entry.dir) {
-      const normalizedPath = entry.name.toLowerCase();
+      const normalizedPath = entry.name.normalize("NFC").toLowerCase();
       if (seenArchivePaths.has(normalizedPath)) {
         return json(422, { error: "product_zip_duplicate_path" });
       }
