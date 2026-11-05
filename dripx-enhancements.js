@@ -237,34 +237,6 @@
       luaCount:files.filter(entry=>entry.path.toLowerCase().endsWith('.lua')).length};
   }
 
-  function normalizeResourceName(value){
-    const clean=String(value||'').trim().replace(/\.zip$/i,'');
-    const leaf=clean.split('/').filter(Boolean).pop()||'';
-    const normalized=leaf.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9_-]+/g,'_').replace(/_+/g,'_').replace(/^[_-]+|[_-]+$/g,'').slice(0,64);
-    return normalized.length>=2?normalized:'dripx_resource';
-  }
-  function ensureResourceNameField(form){
-    if(!form)return null;
-    const existing=form.querySelector('[data-dripx-resource-name]');
-    if(existing)return existing;
-    const wrap=document.createElement('label');
-    wrap.className='dx-resource-name-field';
-    wrap.innerHTML='<span>Nombre del resource MTA:SA</span><input type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="mi_resource" data-dripx-resource-name><small>Debe coincidir con el nombre de la carpeta del resource en el servidor MTA.</small>';
-    const file=form.querySelector('input[name="file"]');
-    const anchor=file?.closest('label')||file?.parentElement||form.querySelector('button[type="submit"]')?.parentElement||form;
-    anchor.insertAdjacentElement('afterend',wrap);
-    return wrap.querySelector('input');
-  }
-  function inferResourceName(form,result,file){
-    const field=ensureResourceNameField(form);
-    const existing=String(field?.value||'').trim();
-    const fromZip=String(result?.rootPrefix||'').replace(/\/$/,'');
-    const title=form?.querySelector('[name="title"],[name="name"],input[placeholder*="nombre" i]')?.value||'';
-    const normalized=normalizeResourceName(existing||fromZip||title||String(file?.name||'').replace(/\.zip$/i,''));
-    if(field&&!existing)field.value=normalized;
-    return normalized;
-  }
-
   function setProductZipStatus(text,state='info'){
     const status=document.querySelector('#product-zip-upload-state');
     if(status){status.textContent=text;status.dataset.state=state;}
@@ -445,10 +417,9 @@
       compile.click();
       await waitForZipState(()=>!download.disabled,'compilación de los scripts Lua');
       if(input.dataset.dripxZipRun!==runId)return;
-      const resourceName=inferResourceName(form,result,file);
       if(typeof window.DRIPX_INJECT_LICENSE_GUARD!=='function')throw new Error('El módulo de licencia MTA no está integrado en el motor de protección. Recarga la página e inténtalo de nuevo.');
-      await window.DRIPX_INJECT_LICENSE_GUARD(resourceName);
-      setProductZipStatus('04/4 · Vinculando '+resourceName+' con su licencia DRIPX y generando el ZIP final…','processing');
+      await window.DRIPX_INJECT_LICENSE_GUARD();
+      setProductZipStatus('04/4 · Inyectando la licencia y el guardián compartido…','processing');
       node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
       armCompiledZipCapture(input);
@@ -458,8 +429,8 @@
       const protectedFile=input.files?.[0];
       if(!protectedFile||protectedFile.size===0||!/-DRIPX-protegido\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no se adjuntó al formulario. Selecciona el ZIP y repite la protección.');
       input.dataset.dripxZipReady='true';
-      input.dataset.dripxResourceName=resourceName;
-      window.__DRIPX_RESOURCE_NAME=resourceName;
+      delete input.dataset.dripxResourceName;
+      window.__DRIPX_RESOURCE_NAME='';
       node.dataset.state='success';
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-done');
       const summary=node.querySelector('.dx-preview-summary b');
@@ -492,50 +463,65 @@
     }
   });
   function ensureOwnedProductsTab(){
-    // All acquired resources now live inside the permanent Licencia workspace.
-    document.querySelectorAll('.profile-tabs [data-dripx-owned-products],.profile-tabs [data-profile-tab="productos"]').forEach(button=>button.remove());
-    document.querySelectorAll('.profile-tabs .tab').forEach(button=>{if(/^\s*productos\s*$/i.test(button.textContent||''))button.remove();});
+    const tabs=document.querySelector('.profile-tabs');if(!tabs)return;
+    let button=tabs.querySelector('[data-dripx-owned-products]');
+    if(!button){button=document.createElement('button');button.type='button';button.className='tab';button.dataset.profileTab='productos';button.dataset.dripxOwnedProducts='';button.innerHTML=iconMarkup('package')+' Productos';tabs.append(button);}
+    button.setAttribute('aria-label','Ver productos y recursos autorizados');
   }
   async function renderOwnedProducts(){
-    const host=document.querySelector('.profile-content');
-    if(!host||!client)throw new Error('No se encontró el panel de usuario.');
-    const {data:{session},error:sessionError}=await client.auth.getSession();
-    if(sessionError)throw sessionError;
+    const host=document.querySelector('.profile-content');if(!host||!client)throw new Error('No se encontró el panel de usuario.');
+    const {data:{session},error:sessionError}=await client.auth.getSession();if(sessionError)throw sessionError;
     if(!session?.user?.id)throw new Error('Inicia sesión con Discord para consultar tus productos.');
-    const [entitlements,licenseRows]=await Promise.all([
-      client.from('dripx_entitlements')
-        .select('id,product_id,granted_at,dripx_products(id,title,description,product_type,file_path,price_usd,resource_name)')
-        .eq('user_id',session.user.id).eq('active',true).order('granted_at',{ascending:false}),
-      client.from('dripx_resource_licenses')
-        .select('id,product_id,key_value,status,server_ip,server_port,max_activations')
-        .eq('user_id',session.user.id)
+    const userId=session.user.id,now=Date.now();
+    const [entRes,planRes,ordersRes,itemsRes]=await Promise.all([
+      client.from('dripx_entitlements').select('id,product_id,order_id,granted_at,active').eq('user_id',userId).eq('active',true).order('granted_at',{ascending:false}),
+      client.from('dripx_user_plans').select('id,product_id,plan_code,order_id,starts_at,expires_at,active,dripx_products(id,title,description,features)').eq('user_id',userId).order('starts_at',{ascending:false}),
+      client.from('dripx_orders').select('id,status,total,created_at,approved_at').eq('user_id',userId).order('created_at',{ascending:false}),
+      client.from('dripx_order_items').select('order_id,product_id,product_title,unit_price')
     ]);
-    if(entitlements.error)throw entitlements.error;
-    if(licenseRows.error)throw licenseRows.error;
-    const licenses=new Map((licenseRows.data||[]).map(row=>[String(row.product_id),row]));
-    const optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
-    const cards=(entitlements.data||[]).map(row=>{
-      const p=Array.isArray(row.dripx_products)?row.dripx_products[0]:row.dripx_products;
-      if(!p)return '';
-      const license=licenses.get(String(p.id));
-      const activeLicense=license?.status==='active';
-      const downloadable=p.product_type==='resource'&&!!p.file_path;
-      const identity=p.resource_name?'<small class="dx-owned-resource">Resource MTA: '+escapeHtml(p.resource_name)+'</small>':'';
-      const licenseCard=activeLicense?'<section class="dx-owned-license"><div class="dx-owned-license-top"><span>Licencia DRIPX · '+escapeHtml(license.key_value||'')+'</span><button type="button" class="dx-owned-copy" data-dripx-copy-license="'+escapeHtml(license.key_value||'')+'">'+iconMarkup('copy')+' Copiar</button></div><div class="dx-owned-binding"><label>IP pública<input data-dripx-ip="'+escapeHtml(license.id)+'" value="'+escapeHtml(license.server_ip||'')+'" placeholder="203.0.113.10"></label><label>Puerto<input data-dripx-port="'+escapeHtml(license.id)+'" type="number" min="1" max="65535" value="'+escapeHtml(license.server_port||'')+'" placeholder="22003"></label><button type="button" class="dx-owned-save" data-dripx-save-license="'+escapeHtml(license.id)+'">'+iconMarkup('save')+' Guardar servidor</button></div><small>Activaciones permitidas: '+Number(license.max_activations||1)+'</small></section>':'';
-      return '<article class="order-card dx-owned-product"><header><div><strong>'+escapeHtml(p.title||'Producto')+'</strong><br><small class="muted">'+(Number(p.price_usd)===0?'Acceso gratuito':'Acceso habilitado')+' · '+(row.granted_at?new Date(row.granted_at).toLocaleDateString('es-DO'):'')+'</small></div><span class="status approved">Activo</span></header><p class="muted">'+escapeHtml(p.description||'')+'</p>'+identity+licenseCard+(downloadable?'<div class="order-actions"><button type="button" class="btn primary" data-download="'+escapeHtml(p.id)+'">'+iconMarkup('download')+' Descargar ZIP personalizado</button></div>':'<small class="muted">Plan o acceso activo en tu cuenta.</small>')+'</article>';
-    }).filter(Boolean).join('');
-    host.innerHTML=(cards||'<div class="empty">Todavía no tienes productos habilitados. Los productos gratuitos que obtengas y las compras aprobadas aparecerán aquí.</div>');
-    if(optin)host.append(optin);
+    for(const result of [entRes,planRes,ordersRes,itemsRes])if(result.error)throw result.error;
+    const entitlements=entRes.data||[],allPlans=planRes.data||[];
+    const activePlans=allPlans.filter(p=>p.active===true&&(!p.expires_at||new Date(p.expires_at).getTime()>now));
+    const relevantOrderIds=new Set([...entitlements.map(x=>x.order_id),...allPlans.map(x=>x.order_id)].filter(Boolean).map(String));
+    const orders=(ordersRes.data||[]).filter(x=>relevantOrderIds.has(String(x.id)));
+    const items=(itemsRes.data||[]).filter(x=>relevantOrderIds.has(String(x.order_id)));
+    window.DRIPX_SET_INVOICE_DATA?.(orders,items);
+    const orderMap=new Map(orders.map(x=>[String(x.id),x]));
+    const maps=activePlans.length?await client.from('dripx_plan_resources').select('plan_product_id,resource_product_id').in('plan_product_id',[...new Set(activePlans.map(p=>p.product_id))]):{data:[],error:null};
+    if(maps.error)throw maps.error;
+    const directRows=entitlements.filter(row=>{const p=Array.isArray(row.dripx_products)?row.dripx_products[0]:row.dripx_products;return !p||p.product_type==='resource';});
+    const directIds=new Set(directRows.map(x=>String(x.product_id))),planSources=new Map();
+    for(const m of maps.data||[]){const plan=activePlans.find(p=>String(p.product_id)===String(m.plan_product_id));if(!plan)continue;const id=String(m.resource_product_id);if(!planSources.has(id))planSources.set(id,[]);planSources.get(id).push(plan);}
+    const ids=[...new Set([...directIds,...planSources.keys()])];
+    const productRes=ids.length?await client.from('dripx_products').select('id,title,description,product_type,file_path,price_usd,resource_name,image_url,version,status').in('id',ids).eq('status','published').eq('product_type','resource'):{data:[],error:null};
+    if(productRes.error)throw productRes.error;
+    const directMap=new Map(directRows.map(x=>[String(x.product_id),x]));
+    const resources=(productRes.data||[]).map(p=>{
+      const direct=directMap.get(String(p.id)),sources=planSources.get(String(p.id))||[];
+      const order=direct?.order_id?orderMap.get(String(direct.order_id)):null;
+      const invoice=order?.status==='approved'?'<button type="button" class="btn secondary" data-dx-invoice="'+escapeHtml(order.id)+'">'+iconMarkup('file')+' Factura</button>':'';
+      const until=sources.map(x=>x.expires_at).filter(Boolean).sort().at(-1);
+      const access=direct?'<small class="dx-owned-access">Compra individual · acceso permanente</small>':'<small class="dx-owned-access">Incluido en '+escapeHtml(sources.map(x=>{const p=Array.isArray(x.dripx_products)?x.dripx_products[0]:x.dripx_products;return p?.title||x.plan_code||'plan';}).join(', '))+' · hasta '+escapeHtml(until?new Date(until).toLocaleDateString('es-DO'):'sin vencimiento')+'</small>';
+      return '<article class="order-card dx-owned-product"><header><div><strong>'+escapeHtml(p.title||'Resource')+'</strong><br><small class="muted">RESOURCE MTA:SA</small></div><span class="status approved">Autorizado</span></header><p class="muted">'+escapeHtml(p.description||'')+'</p>'+access+'<div class="order-actions"><button type="button" class="btn primary" '+(p.file_path?'data-download="'+escapeHtml(p.id)+'"':'disabled')+'>'+iconMarkup('download')+(p.file_path?' Descargar ZIP':'ZIP no disponible')+'</button>'+invoice+'</div></article>';
+    }).join('');
+    const planCards=allPlans.map(plan=>{
+      const p=Array.isArray(plan.dripx_products)?plan.dripx_products[0]:plan.dripx_products,order=plan.order_id?orderMap.get(String(plan.order_id)):null;
+      const active=plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now);
+      const count=(maps.data||[]).filter(m=>String(m.plan_product_id)===String(plan.product_id)).length;
+      const inv=order?.status==='approved'?'<button type="button" class="btn secondary" data-dx-invoice="'+escapeHtml(order.id)+'">'+iconMarkup('file')+' Factura</button>':'<button type="button" class="btn secondary" disabled>'+iconMarkup('file')+' Factura pendiente</button>';
+      return '<article class="order-card dx-owned-plan"><header><div><strong>'+escapeHtml(p?.title||plan.plan_code||'Plan')+'</strong><br><small class="muted">Plan adquirido · '+(plan.expires_at?'hasta '+new Date(plan.expires_at).toLocaleDateString('es-DO'):'sin vencimiento')+'</small></div><span class="status '+(active?'approved':'muted')+'">'+(active?'Activo':'Finalizado')+'</span></header><p class="muted">'+escapeHtml(p?.description||'Acceso temporal a recursos seleccionados de la tienda.')+'</p><small class="dx-owned-access">'+count+' recursos incluidos · '+(active?'se revocan al vencer':'acceso no vigente')+'</small><div class="order-actions">'+inv+'</div></article>';
+    }).join('');
+    const app=document.querySelector('#app'),optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
+    host.innerHTML='<section class="dx-owned-products-view"><header class="dx-library-heading"><div><span class="dx-eyebrow">BIBLIOTECA PERSONAL</span><h2>Productos autorizados</h2><p>Compras individuales y recursos incluidos en tus planes vigentes.</p></div><span>'+((productRes.data||[]).length)+' recursos</span></header>'+(planCards?'<section class="dx-owned-plan-list"><h3>Tus planes</h3>'+planCards+'</section>':'')+(resources?'<section class="dx-owned-resource-list"><h3>Recursos disponibles</h3><div class="dx-owned-resource-grid">'+resources+'</div></section>':'<div class="empty">No tienes recursos autorizados ahora mismo. Tus compras y los recursos de planes activos aparecerán aquí.</div>')+'</section>';
+    if(optin)host.append(optin);ensureOwnedProductsTab();
     document.querySelectorAll('.profile-tabs .tab').forEach(x=>x.classList.toggle('active',x.hasAttribute('data-dripx-owned-products')));
     ensureButtonIcons(host);
   }
   document.addEventListener('click',async event=>{
-    const button=event.target.closest('[data-dripx-owned-products]');
-    if(!button)return;
+    const button=event.target.closest('[data-dripx-owned-products],[data-profile-tab="productos"]');if(!button)return;
     event.preventDefault();event.stopImmediatePropagation();
     try{await renderOwnedProducts();}catch(error){console.error('[DRIPX] Products panel:',error);toast(error.message||'No se pudieron cargar tus productos.');}
   },true);
-
   function hideTopCategoryStrip(root=document){
     const scope=root.querySelector?.('#app')||root;
     // Hide only decorative/top-level category strips. Never hide the actual
@@ -655,7 +641,7 @@
       ];
       panel=document.querySelector('#dx-admin-overview');
       if(!panel||!isAdminRoute())return;
-      panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Indicadores consultados directamente desde Supabase</small></div><div class="dx-admin-overview-tools"><span class="dx-admin-sync">Actualizado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})+'</span><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>'+iconMarkup('arrow')+' Actualizar</button></div></div><div class="dx-admin-overview-grid">'+metrics.map(metric=>'<article class="dx-admin-metric"><div class="dx-admin-metric-top"><span class="dx-admin-metric-icon">'+iconMarkup(metric.icon)+'</span><span>'+escapeHtml(metric.label)+'</span></div><strong>'+metric.value+'</strong><small>'+escapeHtml(metric.detail)+'</small></article>').join('')+'</div><section class="dx-admin-log-test"><div class="dx-admin-log-copy"><strong>Diagnóstico de Discord</strong><small>Envía un embed real al canal seleccionado y confirma la respuesta del webhook.</small></div><div class="dx-admin-log-actions"><div class="dx-admin-log-picker"><button type="button" class="dx-admin-log-select" data-dx-log-toggle aria-expanded="false"><span data-dx-log-current>Seguridad</span>'+iconMarkup('chevron')+'</button><input type="hidden" data-dx-log-category value="security"><div class="dx-admin-log-menu" data-dx-log-menu hidden><button type="button" data-dx-log-option="security">Seguridad</button><button type="button" data-dx-log-option="sales">Ventas</button><button type="button" data-dx-log-option="store">Tienda</button><button type="button" data-dx-log-option="support">Soporte</button><button type="button" data-dx-log-option="licenses">Licencias</button></div></div><button type="button" class="dx-admin-log-send" data-dx-test-discord>'+iconMarkup('discord')+' Probar embed</button></div><p class="dx-admin-log-status" data-dx-log-test-status role="status">Sin pruebas recientes.</p></section>';
+      panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Indicadores consultados directamente desde Supabase</small></div><div class="dx-admin-overview-tools"><span class="dx-admin-sync">Actualizado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})+'</span><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>'+iconMarkup('arrow')+' Actualizar</button></div></div><div class="dx-admin-overview-grid">'+metrics.map(metric=>'<article class="dx-admin-metric"><div class="dx-admin-metric-top"><span class="dx-admin-metric-icon">'+iconMarkup(metric.icon)+'</span><span>'+escapeHtml(metric.label)+'</span></div><strong>'+metric.value+'</strong><small>'+escapeHtml(metric.detail)+'</small></article>').join('')+'</div><section class="dx-admin-log-test"><div class="dx-admin-log-copy"><strong>Diagnóstico de Discord</strong><small>Envía un embed real al canal seleccionado y confirma la respuesta del webhook.</small></div><div class="dx-admin-log-actions"><div class="dx-admin-log-picker"><button type="button" class="dx-admin-log-select" data-dx-log-toggle aria-expanded="false"><span data-dx-log-current>Seguridad</span>'+iconMarkup('chevron')+'</button><input type="hidden" data-dx-log-category value="security"><div class="dx-admin-log-menu" data-dx-log-menu hidden><button type="button" data-dx-log-option="security">Seguridad</button><button type="button" data-dx-log-option="sales_public">Ventas públicas</button><button type="button" data-dx-log-option="sales_private">Ventas privadas</button><button type="button" data-dx-log-option="reviews">Reseñas</button><button type="button" data-dx-log-option="coupons">Cupones</button><button type="button" data-dx-log-option="store">Tienda</button><button type="button" data-dx-log-option="support">Soporte</button><button type="button" data-dx-log-option="licenses">Licencias</button></div></div><button type="button" class="dx-admin-log-send" data-dx-test-discord>'+iconMarkup('discord')+' Probar embed</button></div><p class="dx-admin-log-status" data-dx-log-test-status role="status">Sin pruebas recientes.</p></section>';
       panel.dataset.loaded='true';adminOverviewAt=Date.now();
     })();
     try{await adminOverviewPromise;}catch(error){
@@ -885,7 +871,7 @@
   },true);
 
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);ensureResourceNameField(document.querySelector('#product-form'));
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
