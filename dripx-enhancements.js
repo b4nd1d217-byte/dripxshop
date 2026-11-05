@@ -56,10 +56,11 @@
     edit:'<path d="m4 16-.8 4.8L8 20l11.8-11.8a2.1 2.1 0 0 0-3-3L4 18"/><path d="m14.5 6.5 3 3"/>',
     video:'<rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 10 4-3v10l-4-3"/>',
     code:'<path d="m8 8-4 4 4 4m8-8 4 4-4 4m-2-10-4 12"/>',
-    document:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>'
+    document:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>',
+    discord:'<path d="M7.2 7.1a16.5 16.5 0 0 1 9.6 0l1.3 2.1a13.2 13.2 0 0 1 2 7.3 14.8 14.8 0 0 1-5.1 2.6l-1.1-1.8a10 10 0 0 0 2.1-.9M8.1 16.4a10 10 0 0 0 2.1.9l-1.1 1.8A14.8 14.8 0 0 1 4 16.5a13.2 13.2 0 0 1 2-7.3l1.2-2.1Z"/><path d="M9 13h.01M15 13h.01M8.7 13a.3.3 0 1 0 .6 0 .3.3 0 0 0-.6 0ZM14.7 13a.3.3 0 1 0 .6 0 .3.3 0 0 0-.6 0Z"/>'
   };
   const TOKEN_ICON = {
-    '🛒':'cart','🛍':'cart','📦':'package','🏆':'trophy','🥇':'medal','🥈':'medal','🥉':'medal','🔑':'key','💾':'save','🛡':'shield','🧩':'code','🌐':'globe','🔌':'plug','🔐':'lock','⚙':'settings','👥':'users','▤':'document','▣':'package','◉':'user','↩':'back','↗':'arrow','→':'arrow','⌕':'search','☷':'filter','＄':'wallet','↕':'sort','◷':'clock','✕':'close','✓':'check','＋':'plus','−':'minus','⏸':'pause','▶':'play','⬇':'download','⌂':'home','▦':'grid','ⓘ':'info','⌄':'chevron','✦':'sparkles','✧':'sparkles','★':'star','☆':'star','📄':'file','📁':'folder','🔍':'search','💬':'chat','🎫':'ticket','💳':'wallet','🧾':'document','👤':'user','🔒':'lock','📝':'edit','🛠':'settings','🗑':'trash','◇':'sparkles'
+    '🛒':'cart','🛍':'cart','📦':'package','🏆':'trophy','🥇':'medal','🥈':'medal','🥉':'medal','🔑':'key','💾':'save','🛡':'shield','🧩':'code','🌐':'globe','🔌':'plug','🔐':'lock','⚙':'settings','👥':'users','▤':'document','▣':'package','◉':'user','↩':'back','↗':'arrow','↪':'arrow','➜':'arrow','×':'close','→':'arrow','⌕':'search','☷':'filter','＄':'wallet','↕':'sort','◷':'clock','✕':'close','✓':'check','＋':'plus','−':'minus','⏸':'pause','▶':'play','⬇':'download','⌂':'home','▦':'grid','ⓘ':'info','⌄':'chevron','✦':'sparkles','✧':'sparkles','★':'star','☆':'star','📄':'file','📁':'folder','🔍':'search','💬':'chat','🎫':'ticket','💳':'wallet','🧾':'document','👤':'user','🔒':'lock','📝':'edit','🛠':'settings','🗑':'trash','◇':'sparkles'
   };
   const ICON_TOKENS = Object.keys(TOKEN_ICON).sort((a,b)=>b.length-a.length).join('|');
   const ICON_RE = new RegExp('(?:'+ICON_TOKENS+')|\\p{Extended_Pictographic}','gu');
@@ -109,7 +110,8 @@
       else if(/usuario|perfil|cuenta/.test(label))name='user';
       else if(/admin|ajuste|config/.test(label))name='settings';
       else if(/compr|carrito|obtener|gratis|producto|plan|publicar|crear|guardar|añadir|agregar/.test(label))name='package';
-      else if(/discord|login|iniciar sesi[oó]n|acceder/.test(label))name='user';
+      else if(/discord/.test(label))name='discord';
+      else if(/login|iniciar sesi[oó]n|acceder/.test(label))name='user';
       const span=document.createElement('span');span.className='dx-svg-icon';span.setAttribute('aria-hidden','true');span.innerHTML=iconMarkup(name);button.prepend(span);
     });
   }
@@ -121,6 +123,18 @@
     document.querySelectorAll('link[rel="icon"]').forEach(link=>{link.href=src;});
   }
 
+  function installImageFallback(){
+    if(document.documentElement.dataset.dripxImageFallback==='1')return;
+    document.documentElement.dataset.dripxImageFallback='1';
+    document.addEventListener('error',event=>{
+      const img=event.target;
+      if(!(img instanceof HTMLImageElement)||img.id==='user-avatar'||img.dataset.dripxFallback==='1')return;
+      if(!img.closest('#app,.brand,.hero'))return;
+      img.dataset.dripxFallback='1';
+      img.src='/assets/logo.svg';
+      img.alt='DRIP X SHOP';
+    },true);
+  }
   function formatBytes(value){const n=Number(value)||0;return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';}
   function toast(message){const node=document.querySelector('#toast');if(node){node.textContent=message;node.classList.add('show');setTimeout(()=>node.classList.remove('show'),3600);}}
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -167,7 +181,16 @@
       }catch(error){reject(error);}
     });
   }
-  window.DRIPX_UPLOAD_FILE=(bucket,path,file,onProgress)=>tusUpload(bucket,path,file,onProgress);
+  window.DRIPX_UPLOAD_FILE=async(bucket,path,file,onProgress)=>{
+    const result=await tusUpload(bucket,path,file,onProgress);
+    if(bucket==='product-files'){
+      const status=document.querySelector('#product-zip-upload-state');
+      if(status)status.textContent='ZIP protegido subido y guardado correctamente en Supabase.';
+      const preview=document.querySelector('#product-zip-preview');
+      if(preview)preview.dataset.dripxUploadComplete='true';
+    }
+    return result;
+  };
 
   async function scanZip(file){
     if(!window.JSZip)throw new Error('No se pudo cargar JSZip. Recarga la página.');
@@ -249,16 +272,18 @@
     };
     window.setTimeout(()=>{if(URL.createObjectURL!==native)URL.createObjectURL=native;},45000);
   }
-  function mountProductZipPipeline(node,input,file){
+  async function mountProductZipPipeline(node,input,file){
     let engine=node.querySelector('.dx-product-engine');
     if(!engine){engine=document.createElement('section');engine.className='dx-product-engine';engine.innerHTML='<div class="dx-engine-heading"><strong>Compilación y protección del resource</strong><small>Selecciona Lua server y client desde este mismo panel.</small></div>';node.append(engine);}
     const ids=['zip-analysis','zip-file-list','zip-protect','zip-compile','zip-download','zip-status'];
     for(const id of ids){const item=document.getElementById(id);if(item&&!engine.contains(item))engine.append(item);}
     const ready=ids.every(id=>!!engine.querySelector('#'+id));
-    if(!ready){let note=engine.querySelector('.dx-engine-note');if(!note){note=document.createElement('div');note.className='dx-engine-note';engine.append(note);}note.textContent='Los controles de compilación no están disponibles en este formulario. No publiques este ZIP sin terminar el proceso DRIPX.';return;}
+    if(!ready){let note=engine.querySelector('.dx-engine-note');if(!note){note=document.createElement('div');note.className='dx-engine-note';engine.append(note);}note.textContent='Los controles de compilación no están disponibles en este formulario. No publiques este ZIP sin terminar el proceso DRIPX.';return false;}
     const download=engine.querySelector('#zip-download');
     if(download&&!download.dataset.dripxCaptureBound){download.dataset.dripxCaptureBound='true';download.addEventListener('click',()=>armCompiledZipCapture(input),true);}
-    if(typeof window.DRIPX_LOAD_ZIP==='function')window.DRIPX_LOAD_ZIP(file);
+    if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El lector de protección no está disponible. Recarga la página e inténtalo de nuevo.');
+    await window.DRIPX_LOAD_ZIP(file);
+    return true;
   }
   async function previewProductZip(file){
     window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
@@ -274,8 +299,11 @@
         return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(x.path)+'</span><small>'+label+' · '+formatBytes(x.bytes)+'</small></div>';
       }).join('');
       node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Resource pendiente de protección')+'</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' shared/config</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div>';
-      mountProductZipPipeline(node,input,file);
-      if(uploadStatus)uploadStatus.textContent='ZIP analizado. Finaliza compilación/protección aquí antes de publicar.';
+      const mounted=await mountProductZipPipeline(node,input,file);
+      if(!mounted)throw new Error('No están disponibles los controles de compilación/protección. No publiques este ZIP todavía.');
+      ensureStagePanel();
+      await persistStagingZip(file);
+      if(uploadStatus)uploadStatus.textContent='ZIP analizado y guardado en el historial privado. Finaliza compilación/protección aquí antes de publicar.';
     }catch(error){node.textContent='No se pudo leer el ZIP: '+(error.message||'archivo inválido');if(uploadStatus)uploadStatus.textContent='Corrige el ZIP antes de publicarlo.';}
   }
   document.addEventListener('change',event=>{
@@ -350,8 +378,18 @@
 
   function hideTopCategoryStrip(root=document){
     const scope=root.querySelector?.('#app')||root;
-    const selectors=['.category-filter','.category-filters','.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.catalog-categories','.catalog-category-bar','.product-categories','.store-categories','.category-row','.category-list','[data-category-filter]'];
-    scope.querySelectorAll?.(selectors.join(',')).forEach(el=>{if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category]'))return;el.setAttribute('data-dripx-hidden-category-strip','true');el.style.setProperty('display','none','important');el.setAttribute('aria-hidden','true');});
+    const selectors=['.category-filter','.category-filters','.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.catalog-categories','.catalog-category-bar','.product-categories','.store-categories','.category-row','.category-list','.top-categories','.category-nav','.category-toolbar','[data-category-filter]','[data-categories-strip]'];
+    const hide=el=>{
+      if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category],.admin-category-list'))return;
+      el.setAttribute('data-dripx-hidden-category-strip','true');
+      el.style.setProperty('display','none','important');
+      el.setAttribute('aria-hidden','true');
+    };
+    scope.querySelectorAll?.(selectors.join(',')).forEach(hide);
+    scope.querySelectorAll?.('[class]').forEach(el=>{
+      const classes=Array.from(el.classList||[]).join(' ');
+      if(/categor/i.test(classes)&&/(filter|tabs|pills|strip|toolbar|nav|row|scroll)/i.test(classes))hide(el);
+    });
   }
   function applyPlanCardSkin(root=document){
     const scope=root.querySelector?.('#app')||root;
@@ -381,7 +419,7 @@
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
