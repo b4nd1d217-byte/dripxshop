@@ -236,6 +236,34 @@
       luaCount:files.filter(entry=>entry.path.toLowerCase().endsWith('.lua')).length};
   }
 
+  function normalizeResourceName(value){
+    const clean=String(value||'').trim().replace(/\.zip$/i,'');
+    const leaf=clean.split('/').filter(Boolean).pop()||'';
+    const normalized=leaf.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9_-]+/g,'_').replace(/_+/g,'_').replace(/^[_-]+|[_-]+$/g,'').slice(0,64);
+    return normalized.length>=2?normalized:'dripx_resource';
+  }
+  function ensureResourceNameField(form){
+    if(!form)return null;
+    const existing=form.querySelector('[data-dripx-resource-name]');
+    if(existing)return existing;
+    const wrap=document.createElement('label');
+    wrap.className='dx-resource-name-field';
+    wrap.innerHTML='<span>Nombre del resource MTA:SA</span><input type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="mi_resource" data-dripx-resource-name><small>Debe coincidir con el nombre de la carpeta del resource en el servidor MTA.</small>';
+    const file=form.querySelector('input[name="file"]');
+    const anchor=file?.closest('label')||file?.parentElement||form.querySelector('button[type="submit"]')?.parentElement||form;
+    anchor.insertAdjacentElement('afterend',wrap);
+    return wrap.querySelector('input');
+  }
+  function inferResourceName(form,result,file){
+    const field=ensureResourceNameField(form);
+    const existing=String(field?.value||'').trim();
+    const fromZip=String(result?.rootPrefix||'').replace(/\/$/,'');
+    const title=form?.querySelector('[name="title"],[name="name"],input[placeholder*="nombre" i]')?.value||'';
+    const normalized=normalizeResourceName(existing||fromZip||title||String(file?.name||'').replace(/\.zip$/i,''));
+    if(field&&!existing)field.value=normalized;
+    return normalized;
+  }
+
   function setProductZipStatus(text,state='info'){
     const status=document.querySelector('#product-zip-upload-state');
     if(status){status.textContent=text;status.dataset.state=state;}
@@ -280,13 +308,36 @@
   function mountProductZipPipeline(node,input,file){
     return (async()=>{
       let engine=node.querySelector('.dx-product-engine');
-      if(!engine){engine=document.createElement('section');engine.className='dx-product-engine';engine.innerHTML='<div class="dx-engine-heading"><strong>Protección integrada del producto</strong><small>DRIP X SHOP analizará y protegerá el resource antes de guardarlo. El ZIP original no se publicará.</small></div>';node.append(engine);}
-      const ids=['zip-analysis','zip-file-list','zip-protect','zip-compile','zip-download','zip-status'];
-      for(const id of ids){const item=document.getElementById(id);if(item&&!engine.contains(item))engine.append(item);}
-      const ready=ids.every(id=>!!engine.querySelector('#'+id));
-      if(!ready)throw new Error('El motor de protección no está disponible en el formulario de producto. No se permitirá publicar el ZIP original.');
-      if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor de protección no está cargado. Recarga la página.');
+      if(!engine){
+        engine=document.createElement('section');
+        engine.className='dx-product-engine';
+        engine.setAttribute('data-dripx-engine','embedded');
+        engine.innerHTML='<div class="dx-engine-heading"><strong>Motor DRIPX · Protección del resource</strong><small>Se reutiliza el motor de análisis, protección y compilación; no necesitas abrir otra categoría.</small></div>';
+        node.append(engine);
+      }
+      const ensure=(id,tag,cls,label)=>{
+        let el=document.getElementById(id);
+        if(el&&!engine.contains(el))engine.append(el);
+        if(!el){
+          el=document.createElement(tag);el.id=id;
+          if(cls)el.className=cls;
+          if(tag==='button'){el.type='button';el.textContent=label||'';}
+          engine.append(el);
+        }
+        return el;
+      };
+      ensure('zip-analysis','div','zip-analysis');
+      ensure('zip-file-list','div','zip-file-list');
+      ensure('zip-status','p','zip-status');
+      const protect=ensure('zip-protect','button','btn primary dx-engine-action','01 · Proteger Lua');
+      const compile=ensure('zip-compile','button','btn secondary dx-engine-action','02 · Compilar Lua');
+      const download=ensure('zip-download','button','btn primary dx-engine-action','03 · Generar ZIP protegido');
+      protect.setAttribute('aria-label','Proteger scripts Lua con el motor DRIPX');
+      compile.setAttribute('aria-label','Compilar scripts Lua seleccionados');
+      download.setAttribute('aria-label','Generar el ZIP final protegido');
+      if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor DRIPX no está cargado. Recarga la página.');
       await window.DRIPX_LOAD_ZIP(file);
+      if(!engine.querySelector('#zip-analysis')||!engine.querySelector('#zip-file-list'))throw new Error('El lector ZIP del motor no pudo inicializar el inventario del resource.');
       return engine;
     })();
   }
@@ -305,7 +356,7 @@
           const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
           const transfer=new DataTransfer();transfer.items.add(processed);input.files=transfer.files;
           setProductZipStatus('ZIP protegido listo. Al guardar el producto se subirá este archivo final a product-files.','success');
-          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,at:Date.now()};
+          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,resourceName:window.__DRIPX_RESOURCE_NAME||'',at:Date.now()};
           URL.createObjectURL=native;
         }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP protegido al producto:',error);}
       }
@@ -393,7 +444,10 @@
       compile.click();
       await waitForZipState(()=>!download.disabled,'compilación de los scripts Lua');
       if(input.dataset.dripxZipRun!==runId)return;
-      setProductZipStatus('04/4 · Generando el ZIP protegido final para el producto…','processing');
+      const resourceName=inferResourceName(form,result,file);
+      if(typeof window.DRIPX_INJECT_LICENSE_GUARD!=='function')throw new Error('El módulo de licencia MTA no está integrado en el motor de protección. Recarga la página e inténtalo de nuevo.');
+      window.DRIPX_INJECT_LICENSE_GUARD(resourceName);
+      setProductZipStatus('04/4 · Vinculando '+resourceName+' con su licencia DRIPX y generando el ZIP final…','processing');
       node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
       armCompiledZipCapture(input);
@@ -403,6 +457,8 @@
       const protectedFile=input.files?.[0];
       if(!protectedFile||protectedFile.size===0||!/-DRIPX-protegido\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no se adjuntó al formulario. Selecciona el ZIP y repite la protección.');
       input.dataset.dripxZipReady='true';
+      input.dataset.dripxResourceName=resourceName;
+      window.__DRIPX_RESOURCE_NAME=resourceName;
       node.dataset.state='success';
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-done');
       const summary=node.querySelector('.dx-preview-summary b');
@@ -661,7 +717,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);});
+  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
@@ -684,11 +740,106 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);ensureResourceNameField(document.querySelector('#product-form'));clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
+  function removeStandaloneProtectionAdminEntry(root=document){
+    const app=root.querySelector?.('#app')||root;
+    const candidates=app.querySelectorAll?.('a,button,[role="tab"],[data-admin-route],[data-admin-tab]')||[];
+    candidates.forEach(el=>{
+      if(el.closest('#product-form,.dx-product-engine,.product-card,.category-filter,.category-manager,.admin-products'))return;
+      const label=String(el.getAttribute('aria-label')||el.textContent||el.dataset.adminRoute||el.dataset.adminTab||'').replace(/[\s\n]+/g,' ').trim().toLowerCase();
+      if(!/^(proteger|proteger zip|proteccion zip|protección zip|construir zip)$/.test(label))return;
+      const adminShell=el.closest('.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu');
+      if(!adminShell)return;
+      const item=el.closest('li,.admin-nav-item,.admin-menu-item,.admin-tab-item')||el;
+      item.remove();
+    });
+    const route=String(location.hash||'').toLowerCase();
+    if(/^#admin(?:\/|$)/.test(route)&&/(proteger|proteger-zip|construir-zip)/.test(route))location.hash='#admin/productos';
+  }
+  let catalogOwnershipPromise=null,catalogOwnershipAt=0,catalogOwnershipUser='';
+  async function syncCatalogOwnership(force=false){
+    if(!client)return;
+    try{
+      const {data:{session},error:sessionError}=await client.auth.getSession();
+      if(sessionError)throw sessionError;
+      const userId=session?.user?.id||'';
+      if(!userId){
+        document.querySelectorAll('#app [data-dripx-owned="true"]').forEach(button=>{
+          button.disabled=false;button.removeAttribute('data-dripx-owned');
+          if(button.dataset.dripxOriginalLabel)button.textContent=button.dataset.dripxOriginalLabel;
+          delete button.dataset.dripxOriginalLabel;
+        });
+        catalogOwnershipUser='';catalogOwnershipAt=0;return;
+      }
+      if(catalogOwnershipPromise)return catalogOwnershipPromise;
+      if(!force&&catalogOwnershipUser===userId&&Date.now()-catalogOwnershipAt<30000)return;
+      catalogOwnershipPromise=(async()=>{
+        const {data:rows,error}=await client.from('dripx_entitlements').select('product_id').eq('user_id',userId).eq('active',true);
+        if(error)throw error;
+        const owned=new Set((rows||[]).map(row=>String(row.product_id)));
+        document.querySelectorAll('#app [data-add],#app [data-claim-free]').forEach(button=>{
+          const id=String(button.dataset.add||button.dataset.claimFree||'');
+          if(!id)return;
+          if(!button.dataset.dripxOriginalLabel)button.dataset.dripxOriginalLabel=button.textContent||'Obtener';
+          const has=owned.has(id);
+          button.dataset.dripxOwned=has?'true':'false';
+          button.disabled=has;
+          button.textContent=has?'Ya lo tienes':button.dataset.dripxOriginalLabel;
+          button.title=has?'Este producto ya está habilitado en tu cuenta':'';
+          button.setAttribute('aria-label',has?'Ya tienes este producto':'');
+        });
+        catalogOwnershipUser=userId;catalogOwnershipAt=Date.now();
+      })();
+      await catalogOwnershipPromise;
+    }catch(error){console.warn('[DRIPX] Catalog ownership sync:',error?.message||error);}
+    finally{catalogOwnershipPromise=null;}
+  }
+  async function downloadOwnedProduct(productId,button){
+    if(!client||!productId)throw new Error('Producto no válido.');
+    const {data:{session},error}=await client.auth.getSession();if(error)throw error;
+    if(!session?.access_token)throw new Error('Inicia sesión con Discord para descargar.');
+    if(button){button.disabled=true;button.dataset.dripxLoading='true';}
+    try{
+      const response=await fetch(String(C.supabaseUrl)+'/functions/v1/dripx-license/download',{
+        method:'POST',
+        headers:{apikey:C.supabaseKey||C.publishableKey,authorization:'Bearer '+session.access_token,'content-type':'application/json'},
+        body:JSON.stringify({product_id:productId}),
+        signal:AbortSignal.timeout(60000)
+      });
+      if(!response.ok){
+        let detail={};try{detail=await response.clone().json();}catch(_){}
+        throw new Error(detail.message||detail.reason||detail.error||'No se pudo preparar la descarga protegida.');
+      }
+      const blob=await response.blob();
+      if(!blob.size)throw new Error('El ZIP recibido está vacío.');
+      const disposition=response.headers.get('content-disposition')||'';
+      const match=disposition.match(/filename="?([^";]+)"?/i);
+      const filename=match?.[1]||('DRIPX-'+productId.slice(0,8)+'.zip');
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;anchor.style.display='none';
+      document.body.append(anchor);anchor.click();anchor.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),30000);
+      toast('Descarga personalizada y licencia MTA incluidas.');
+    }finally{
+      if(button){button.disabled=false;delete button.dataset.dripxLoading;}
+    }
+  }
+  document.addEventListener('click',async event=>{
+    const download=event.target.closest('.profile-content [data-download]');
+    if(download){
+      event.preventDefault();event.stopImmediatePropagation();
+      const productId=String(download.dataset.download||'');
+      try{await downloadOwnedProduct(productId,download);}catch(error){toast(error.message||'No se pudo descargar el producto.');}
+      return;
+    }
+    const owned=event.target.closest('#app [data-dripx-owned="true"]');
+    if(owned){event.preventDefault();event.stopImmediatePropagation();toast('Este producto ya está habilitado en Mi cuenta > Productos.');}
+  },true);
+
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);ensureResourceNameField(document.querySelector('#product-form'));
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
