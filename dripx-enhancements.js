@@ -504,16 +504,27 @@
     const {data:{session},error:sessionError}=await client.auth.getSession();
     if(sessionError)throw sessionError;
     if(!session?.user?.id)throw new Error('Inicia sesión con Discord para consultar tus productos.');
-    const {data,error}=await client.from('dripx_entitlements')
-      .select('id,product_id,granted_at,dripx_products(id,title,description,product_type,file_path,price_usd)')
-      .eq('user_id',session.user.id).eq('active',true).order('granted_at',{ascending:false});
-    if(error)throw error;
+    const [entitlements,licenseRows]=await Promise.all([
+      client.from('dripx_entitlements')
+        .select('id,product_id,granted_at,dripx_products(id,title,description,product_type,file_path,price_usd,resource_name)')
+        .eq('user_id',session.user.id).eq('active',true).order('granted_at',{ascending:false}),
+      client.from('dripx_resource_licenses')
+        .select('id,product_id,key_value,status,server_ip,server_port,max_activations')
+        .eq('user_id',session.user.id)
+    ]);
+    if(entitlements.error)throw entitlements.error;
+    if(licenseRows.error)throw licenseRows.error;
+    const licenses=new Map((licenseRows.data||[]).map(row=>[String(row.product_id),row]));
     const optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
-    const cards=(data||[]).map(row=>{
+    const cards=(entitlements.data||[]).map(row=>{
       const p=Array.isArray(row.dripx_products)?row.dripx_products[0]:row.dripx_products;
       if(!p)return '';
+      const license=licenses.get(String(p.id));
+      const activeLicense=license?.status==='active';
       const downloadable=p.product_type==='resource'&&!!p.file_path;
-      return '<article class="order-card"><header><div><strong>'+escapeHtml(p.title||'Producto')+'</strong><br><small class="muted">'+(Number(p.price_usd)===0?'Acceso gratuito':'Acceso habilitado')+' · '+(row.granted_at?new Date(row.granted_at).toLocaleDateString('es-DO'):'')+'</small></div><span class="status approved">Activo</span></header><p class="muted">'+escapeHtml(p.description||'')+'</p>'+(downloadable?'<div class="order-actions"><button type="button" class="btn primary" data-download="'+escapeHtml(p.id)+'">Descargar</button></div>':'<small class="muted">Plan o acceso activo en tu cuenta.</small>')+'</article>';
+      const identity=p.resource_name?'<small class="dx-owned-resource">Resource MTA: '+escapeHtml(p.resource_name)+'</small>':'';
+      const licenseCard=activeLicense?'<section class="dx-owned-license"><div class="dx-owned-license-top"><span>Licencia DRIPX · '+escapeHtml(license.key_value||'')+'</span><button type="button" class="dx-owned-copy" data-dripx-copy-license="'+escapeHtml(license.key_value||'')+'">'+iconMarkup('copy')+' Copiar</button></div><div class="dx-owned-binding"><label>IP pública<input data-dripx-ip="'+escapeHtml(license.id)+'" value="'+escapeHtml(license.server_ip||'')+'" placeholder="203.0.113.10"></label><label>Puerto<input data-dripx-port="'+escapeHtml(license.id)+'" type="number" min="1" max="65535" value="'+escapeHtml(license.server_port||'')+'" placeholder="22003"></label><button type="button" class="dx-owned-save" data-dripx-save-license="'+escapeHtml(license.id)+'">'+iconMarkup('save')+' Guardar servidor</button></div><small>Activaciones permitidas: '+Number(license.max_activations||1)+'</small></section>':'';
+      return '<article class="order-card dx-owned-product"><header><div><strong>'+escapeHtml(p.title||'Producto')+'</strong><br><small class="muted">'+(Number(p.price_usd)===0?'Acceso gratuito':'Acceso habilitado')+' · '+(row.granted_at?new Date(row.granted_at).toLocaleDateString('es-DO'):'')+'</small></div><span class="status approved">Activo</span></header><p class="muted">'+escapeHtml(p.description||'')+'</p>'+identity+licenseCard+(downloadable?'<div class="order-actions"><button type="button" class="btn primary" data-download="'+escapeHtml(p.id)+'">'+iconMarkup('download')+' Descargar ZIP personalizado</button></div>':'<small class="muted">Plan o acceso activo en tu cuenta.</small>')+'</article>';
     }).filter(Boolean).join('');
     host.innerHTML=(cards||'<div class="empty">Todavía no tienes productos habilitados. Los productos gratuitos que obtengas y las compras aprobadas aparecerán aquí.</div>');
     if(optin)host.append(optin);
@@ -827,6 +838,30 @@
     }
   }
   document.addEventListener('click',async event=>{
+    const copy=event.target.closest('[data-dripx-copy-license]');
+    if(copy){
+      event.preventDefault();event.stopImmediatePropagation();
+      try{await navigator.clipboard.writeText(copy.dataset.dripxCopyLicense||'');toast('Licencia copiada.');}
+      catch(_){toast('No se pudo copiar automáticamente; selecciona la clave para copiarla.');}
+      return;
+    }
+    const save=event.target.closest('[data-dripx-save-license]');
+    if(save){
+      event.preventDefault();event.stopImmediatePropagation();
+      const id=save.dataset.dripxSaveLicense;
+      const ip=document.querySelector('[data-dripx-ip="'+id+'"]')?.value?.trim()||'';
+      const port=Number(document.querySelector('[data-dripx-port="'+id+'"]')?.value||0);
+      if(!ip||!Number.isInteger(port)||port<1||port>65535){toast('Introduce una IP pública y un puerto válido.');return;}
+      save.disabled=true;
+      try{
+        const {error}=await client.rpc('dripx_save_license_binding',{p_license_id:id,p_server_ip:ip,p_server_port:port});
+        if(error)throw error;
+        toast('Servidor vinculado a esta licencia.');
+        await renderOwnedProducts();
+      }catch(error){toast(error.message||'No se pudo guardar el servidor.');}
+      finally{save.disabled=false;}
+      return;
+    }
     const download=event.target.closest('.profile-content [data-download]');
     if(download){
       event.preventDefault();event.stopImmediatePropagation();
