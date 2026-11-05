@@ -895,12 +895,12 @@
   function removeStandaloneProtectionAdminEntry(root=document){
     const app=root.querySelector?.('#app')||root;
     const candidates=app.querySelectorAll?.('a,button,[role="tab"],[data-admin-route],[data-admin-tab]')||[];
-    const normalize=value=>String(value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[\\s\\n]+/g,' ').trim().toLowerCase();
+    const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\s\n]+/g,' ').trim().toLowerCase();
     candidates.forEach(el=>{
       if(el.closest('#product-form,.dx-product-engine,.product-card,.category-filter,.category-manager,.admin-products'))return;
       const label=normalize(el.getAttribute('aria-label')||el.textContent||el.dataset.adminRoute||el.dataset.adminTab||'');
       const route=normalize(el.dataset.adminRoute||el.dataset.adminTab||el.getAttribute('href')||'');
-      const protectionEntry=/(^|\\b)(proteger|proteccion|protection|zip protection|construir zip|compilar zip)(\\b|$)/.test(label)||/(^|[#/._-])(proteger|proteccion|protection|construir-zip|proteger-zip)([#/._-]|$)/.test(route);
+      const protectionEntry=/(^|\b)(proteger|proteccion|protection|zip protection|construir zip|compilar zip)(\b|$)/.test(label)||/(^|[#/._-])(proteger|proteccion|protection|construir-zip|proteger-zip)([#/._-]|$)/.test(route);
       if(!protectionEntry)return;
       const adminShell=el.closest('.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu,.admin-dashboard-nav,.admin-sections');
       if(!adminShell)return;
