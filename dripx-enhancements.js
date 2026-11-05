@@ -206,7 +206,9 @@
     const entries=Object.values(zip.files).filter(entry=>!entry.dir&&!entry.name.startsWith('__MACOSX/')&&!entry.name.endsWith('/.DS_Store'));
     if(!entries.length)throw new Error('El ZIP está vacío.');
     if(entries.length>3000)throw new Error('El ZIP supera el límite de 3.000 archivos.');
-    if(entries.some(entry=>entry.name.startsWith('/')||entry.name.includes('\\')||entry.name.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('El ZIP contiene rutas inseguras.');
+    const unsafe=entries.some(entry=>{const original=String(entry.unsafeOriginalName||entry.name);return original!==entry.name||original.startsWith('/')||original.includes(String.fromCharCode(92))||original.length>1024||/[\u0000-\u001f\u007f]/.test(original)||original.split('/').some(part=>!part||part==='.'||part==='..');});
+    if(unsafe)throw new Error('El ZIP contiene rutas originales inseguras.');
+    const pathSet=new Set();for(const entry of entries){const key=entry.name.normalize('NFC').toLowerCase();if(pathSet.has(key))throw new Error('El ZIP contiene nombres duplicados.');pathSet.add(key);}
     const expanded=entries.reduce((sum,entry)=>sum+Number(entry._data?.uncompressedSize||0),0);
     if(expanded>200*1024*1024)throw new Error('El ZIP descomprimido supera el límite de 200 MB.');
     const metaCandidates=entries.filter(entry=>entry.name.toLowerCase()==='meta.xml'||entry.name.toLowerCase().endsWith('/meta.xml'));
