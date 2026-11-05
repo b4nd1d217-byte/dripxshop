@@ -27,9 +27,9 @@ async function syncCatalogRatings(force=false){
    if(!card)return;
    const scores=ratingMap[id]||[],avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
    let node=card.querySelector(':scope > .dx-catalog-rating');
-   if(!node){node=document.createElement('div');node.className='dx-catalog-rating';const anchor=card.querySelector('.product-bottom,.product-actions,.product-footer')||button.parentElement||button;card.insertBefore(node,anchor);}
-   node.innerHTML=stars(avg)+'<span>'+(scores.length?avg.toFixed(1)+' · '+scores.length+' '+(scores.length===1?'reseña':'reseñas'):'Sin reseñas')+'</span>';
-   node.dataset.ratingKey=scores.length+':'+avg.toFixed(2);
+   if(!node){node=document.createElement('div');node.className='dx-catalog-rating';const anchor=card.querySelector('.product-bottom,.product-actions,.product-footer')||button.parentElement||button;anchor.insertAdjacentElement('beforebegin',node);}
+   const key=scores.length+':'+avg.toFixed(2);
+   if(node.dataset.ratingKey!==key){node.innerHTML=stars(avg)+'<span>'+(scores.length?avg.toFixed(1)+' · '+scores.length+' '+(scores.length===1?'reseña':'reseñas'):'Sin reseñas')+'</span>';node.dataset.ratingKey=key;}
   });
  })().finally(()=>{ratingPromise=null;});
  return ratingPromise;
