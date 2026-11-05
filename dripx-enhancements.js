@@ -447,7 +447,7 @@
       if(input.dataset.dripxZipRun!==runId)return;
       const resourceName=inferResourceName(form,result,file);
       if(typeof window.DRIPX_INJECT_LICENSE_GUARD!=='function')throw new Error('El módulo de licencia MTA no está integrado en el motor de protección. Recarga la página e inténtalo de nuevo.');
-      window.DRIPX_INJECT_LICENSE_GUARD(resourceName);
+      await window.DRIPX_INJECT_LICENSE_GUARD(resourceName);
       setProductZipStatus('04/4 · Vinculando '+resourceName+' con su licencia DRIPX y generando el ZIP final…','processing');
       node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
