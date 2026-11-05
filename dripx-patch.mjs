@@ -41,7 +41,7 @@ export async function patchApp(source) {
        'free product detail text');
 
   once("if(b.hasAttribute('data-add')){const id=b.dataset.add;",
-       "if(b.hasAttribute('data-claim-free')){const id=b.dataset.claimFree;if(!state.user){toast('Inicia sesión con Discord para obtener este producto gratis.');await db.auth.signInWithOAuth({provider:'discord',options:{redirectTo:location.origin+'/#producto/'+id}});return;}const result=await call(db.rpc('dripx_claim_free_product',{p_product_id:id}));if(!result?.ok)throw new Error('No se pudo confirmar la entrega del producto.');toast(result?.already_owned?'Este producto ya estaba en tu cuenta.':'Producto gratuito añadido a tu cuenta.');window.__DRIPX_CATALOG_OWNERSHIP_REFRESH=true;location.hash='#productos';return;}if(b.hasAttribute('data-add')){const id=b.dataset.add;",
+       "if(b.hasAttribute('data-claim-free')){const id=b.dataset.claimFree;if(!state.user){toast('Inicia sesión con Discord para obtener este producto gratis.');await db.auth.signInWithOAuth({provider:'discord',options:{redirectTo:location.origin+'/#producto/'+id}});return;}const result=await call(db.rpc('dripx_claim_free_product',{p_product_id:id}));if(!result?.ok)throw new Error('No se pudo confirmar la entrega del producto.');toast(result?.already_owned?'Este producto ya estaba en tu cuenta.':'Producto gratuito añadido a tu cuenta.');window.__DRIPX_CATALOG_OWNERSHIP_REFRESH=true;window.dispatchEvent(new CustomEvent('dripx:ownership-changed'));location.hash='#productos';return;}if(b.hasAttribute('data-add')){const id=b.dataset.add;",
        'free claim RPC');
 
   const profileOld = "}else{const lic=await call(db.rpc('customer_get_or_issue_account_license'));";
