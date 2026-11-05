@@ -121,5 +121,24 @@ export async function patchApp(source) {
        "if((script.type==='server'||script.type==='client')&&lower.endsWith('.lua')&&!config&&src!=='dripx_license.lua')throw new Error('Queda Lua fuente sin compilar: '+src);",
        'allow only the license template to remain Lua source');
 
+
+  const compileBlockStart = app.indexOf("      const refPattern=new RegExp(", app.indexOf("  async function compileZip(){"));
+  const compileBlockEnd = compileBlockStart >= 0 ? app.indexOf("\n      meta=meta.replace(refPattern,", compileBlockStart) : -1;
+  if (compileBlockStart < 0 || compileBlockEnd < 0) throw new Error('DRIPX patch failed: compiler meta reference block');
+  const compileBlockEndLine = app.indexOf("\n", compileBlockEnd + 1);
+  const safeMetaRewrite = [
+    "      const refAt=meta.indexOf(originalSrc);",
+    "      const tagStart=meta.lastIndexOf('<script',refAt);",
+    "      const tagEnd=meta.indexOf('>',refAt);",
+    "      if(refAt<0||tagStart<0||tagEnd<refAt)throw new Error('meta.xml no contiene una etiqueta script para '+originalSrc+'.');",
+    "      const outputSrc=originalSrc.replace(/\\.lua$/i,'.luac');",
+    "      meta=meta.slice(0,refAt)+outputSrc+meta.slice(refAt+originalSrc.length);"
+  ].join("\n");
+  app = app.slice(0, compileBlockStart) + safeMetaRewrite + app.slice(compileBlockEndLine + 1);
+
+  once("if((script.type==='server'||script.type==='client')&&lower.endsWith('.lua')&&!config)throw new Error('Queda Lua fuente sin compilar: '+src);",
+       "if((script.type==='server'||script.type==='client')&&lower.endsWith('.lua')&&!config&&src!=='dripx_license.lua')throw new Error('Queda Lua fuente sin compilar: '+src);",
+       'allow only the license template to remain Lua source');
+
   return app;
 }
