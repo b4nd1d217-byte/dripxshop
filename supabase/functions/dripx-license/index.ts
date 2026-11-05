@@ -124,7 +124,7 @@ async function downloadOwnedProduct(req: Request) {
   const [profiles, products, directEntitlements, activePlans, approvedOrders, planMappings] = await Promise.all([
     readRows("dripx_profiles?user_id=eq." + encodeURIComponent(user.id) + "&select=active&limit=1", service),
     readRows(
-      "dripx_products?id=eq." + encodeURIComponent(productId) + "&status=eq.published&select=id,title,product_type,protection_enabled,file_path&limit=1",
+      "dripx_products?id=eq." + encodeURIComponent(productId) + "&select=id,title,product_type,status,protection_enabled,file_path&limit=1",
       service,
     ),
     readRows(
@@ -146,7 +146,9 @@ async function downloadOwnedProduct(req: Request) {
   ]);
   if (profiles[0]?.active === false) return json(403, { error: "account_suspended" });
   const product = products[0];
-  if (!product) return json(404, { error: "product_not_available" });
+  if (!product || !["published", "archived"].includes(String(product.status))) {
+    return json(404, { error: "product_not_available" });
+  }
   if (product.product_type !== "resource" || product.protection_enabled !== true) {
     return json(409, { error: "product_not_protected", message: "Este resource todavía no tiene la protección DRIPX activada." });
   }
