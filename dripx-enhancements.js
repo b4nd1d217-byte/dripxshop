@@ -540,11 +540,14 @@
   function hideTopCategoryStrip(root=document){
     const scope=root.querySelector?.('#app')||root;
     const hash=String(location.hash||'#inicio').toLowerCase();
-    const isHome=hash===''||hash==='#inicio';
-    const selectors=['.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.top-categories','[data-categories-strip]'];
+    const selectors=['.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.top-categories','.category-navigation','.category-nav','.home-category-nav','.home-categories','.category-menu','.category-links','[data-categories-strip]','[data-category-navigation]','[data-home-categories]','nav[aria-label*="categor" i]'];
     scope.querySelectorAll?.(selectors.join(',')).forEach(el=>{
       if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category],.admin-category-list'))return;
       if(el.matches('.category-filter,.category-filters,[data-category-filter]'))return;
+      const active=el.querySelector('.active,[aria-current="page"],[aria-pressed="true"],[data-active="true"],.selected');
+      const activeLabel=String(active?.textContent||active?.getAttribute('aria-label')||'').trim().toLowerCase();
+      const hasSpecificCategory=!!active&&!/^(todas?|todos|todo|all|inicio|categor[ií]as?)$/.test(activeLabel);
+      const isHome=(hash===''||hash==='#inicio')&&!hasSpecificCategory;
       if(isHome){
         if(el.dataset.dripxHiddenCategoryStrip==='true'){
           el.style.removeProperty('display');
