@@ -380,23 +380,139 @@
 
   function hideTopCategoryStrip(root=document){
     const scope=root.querySelector?.('#app')||root;
-    const selectors=['.category-filter','.category-filters','.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.catalog-categories','.catalog-category-bar','.product-categories','.store-categories','.category-row','.category-list','.top-categories','.category-nav','.category-toolbar','[data-category-filter]','[data-categories-strip]'];
-    const hide=el=>{
+    // Hide only decorative/top-level category strips. Never hide the actual
+    // category filter, its dropdown, or the category controls in admin forms.
+    const selectors=['.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.top-categories','[data-categories-strip]'];
+    scope.querySelectorAll?.(selectors.join(',')).forEach(el=>{
       if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category],.admin-category-list'))return;
+      if(el.matches('.category-filter,.category-filters,[data-category-filter]'))return;
       el.setAttribute('data-dripx-hidden-category-strip','true');
       el.style.setProperty('display','none','important');
       el.setAttribute('aria-hidden','true');
-    };
-    scope.querySelectorAll?.(selectors.join(',')).forEach(hide);
-    scope.querySelectorAll?.('[class]').forEach(el=>{
-      const classes=Array.from(el.classList||[]).join(' ');
-      if(/categor/i.test(classes)&&/(filter|tabs|pills|strip|toolbar|nav|row|scroll)/i.test(classes))hide(el);
     });
   }
   function applyPlanCardSkin(root=document){
     const scope=root.querySelector?.('#app')||root;
     scope.querySelectorAll?.('[data-product-type="plan"],.plan-card,.product-card[data-type="plan"]').forEach(card=>{if(!card.closest('#product-form,.admin-products'))card.setAttribute('data-dripx-plan-art','true');});
   }
+
+  let categorySyncPromise=null;
+  let categorySyncAt=0;
+  async function syncCategoryOptions(force=false){
+    if(!client||categorySyncPromise||(!force&&Date.now()-categorySyncAt<45000))return categorySyncPromise;
+    const selects=Array.from(document.querySelectorAll('#app select')).filter(select=>{
+      const meta=[select.id,select.name,select.className,select.getAttribute('aria-label'),select.getAttribute('data-filter')].join(' ');
+      return /categor/i.test(meta);
+    });
+    if(!selects.length)return;
+    categorySyncPromise=(async()=>{
+      const [{data:rows,error:categoryError},{data:products,error:productError}]=await Promise.all([
+        client.from('dripx_categories').select('name,active,sort_order').order('sort_order',{ascending:true}),
+        client.from('dripx_products').select('category').eq('status','published')
+      ]);
+      if(categoryError)throw categoryError;
+      if(productError)throw productError;
+      const allNames=[...new Set((rows||[]).map(row=>String(row.name||'').trim()).filter(Boolean))];
+      const activeNames=[...new Set([
+        ...(rows||[]).filter(row=>row.active).map(row=>String(row.name||'').trim()),
+        ...(products||[]).map(row=>String(row.category||'').trim())
+      ].filter(Boolean))];
+      for(const select of selects){
+        if(!select.isConnected||select.multiple)continue;
+        const inProductForm=!!select.closest('#product-form');
+        const source=inProductForm?allNames:activeNames;
+        const current=select.value;
+        const first=select.options[0];
+        const firstText=String(first?.textContent||'').trim();
+        const keepFirst=!!first&&(first.value===''||/^(todas?|todos|selecciona|seleccionar|elige|categor[ií]a)$/i.test(firstText));
+        const values=[...(keepFirst?[first.value]:[]),...source];
+        if(inProductForm&&current&&!values.includes(current))values.push(current);
+        const currentValues=Array.from(select.options).map(option=>option.value);
+        if(currentValues.length===values.length&&currentValues.every((value,index)=>value===values[index]))continue;
+        select.replaceChildren();
+        if(keepFirst)select.append(first.cloneNode(true));
+        for(const name of source){
+          const option=document.createElement('option');
+          option.value=name;option.textContent=name;
+          select.append(option);
+        }
+        if(inProductForm&&current&&!source.includes(current)){
+          const option=document.createElement('option');option.value=current;option.textContent=current;select.append(option);
+        }
+        if(current&&Array.from(select.options).some(option=>option.value===current))select.value=current;
+      }
+      categorySyncAt=Date.now();
+    })();
+    try{await categorySyncPromise;}catch(error){console.warn('[DRIPX] No se pudieron sincronizar las categorías:',error);}
+    finally{categorySyncPromise=null;}
+  }
+
+  let adminOverviewPromise=null;
+  let adminOverviewAt=0;
+  function isAdminRoute(){return /^#admin(?:$|[/?])/i.test(location.hash||'')||String(location.hash||'').toLowerCase().startsWith('#admin');}
+  function markAdminView(){
+    const app=document.querySelector('#app');if(!app)return;
+    const active=isAdminRoute();
+    app.classList.toggle('dx-admin-view',active);
+    if(!active)document.querySelector('#dx-admin-overview')?.remove();
+    else refreshAdminOverview(false);
+  }
+  async function refreshAdminOverview(force=false){
+    const app=document.querySelector('#app');
+    if(!app||!isAdminRoute()||!client)return;
+    let panel=document.querySelector('#dx-admin-overview');
+    if(!panel){
+      panel=document.createElement('section');panel.id='dx-admin-overview';panel.className='dx-admin-overview';
+      app.prepend(panel);
+    }
+    if(adminOverviewPromise)return adminOverviewPromise;
+    if(!force&&panel.dataset.loaded==='true'&&Date.now()-adminOverviewAt<60000)return;
+    panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Datos en vivo de tu tienda</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Actualizar</button></div><div class="dx-admin-loading">Sincronizando información de administración…</div>';
+    adminOverviewPromise=(async()=>{
+      const session=await getAdminSession();
+      if(!session?.user?.id)throw new Error('La sesión administrativa no está disponible.');
+      const [products,categories,orders,tickets,users]=await Promise.all([
+        client.from('dripx_products').select('status'),
+        client.from('dripx_categories').select('name,active'),
+        client.from('dripx_orders').select('status'),
+        client.from('tickets').select('status'),
+        client.from('dripx_profiles').select('user_id',{count:'exact',head:true})
+      ]);
+      for(const result of [products,categories,orders,tickets,users])if(result.error)throw result.error;
+      const productRows=products.data||[],categoryRows=categories.data||[],orderRows=orders.data||[],ticketRows=tickets.data||[];
+      const count=(rows,statuses)=>rows.filter(row=>statuses.includes(String(row.status||'').toLowerCase())).length;
+      const published=count(productRows,['published']);
+      const drafts=count(productRows,['draft']);
+      const pendingOrders=count(orderRows,['pending','pending_review','awaiting_payment','awaiting_review','submitted','under_review','waiting_proof']);
+      const openTickets=ticketRows.filter(row=>!['closed','resolved','cancelled','canceled','archived'].includes(String(row.status||'').toLowerCase())).length;
+      const activeCategories=categoryRows.filter(row=>row.active).length;
+      const totalUsers=Number(users.count)||0;
+      const metrics=[
+        {icon:'package',label:'Productos publicados',value:published,detail:drafts+' en borrador'},
+        {icon:'wallet',label:'Pedidos por revisar',value:pendingOrders,detail:orderRows.length+' pedidos registrados'},
+        {icon:'ticket',label:'Tickets abiertos',value:openTickets,detail:ticketRows.length+' tickets registrados'},
+        {icon:'users',label:'Usuarios registrados',value:totalUsers,detail:'Perfiles de la tienda'},
+        {icon:'grid',label:'Categorías activas',value:activeCategories,detail:categoryRows.length+' configuradas'},
+        {icon:'file',label:'Inventario total',value:productRows.length,detail:count(productRows,['archived'])+' archivados'}
+      ];
+      panel=document.querySelector('#dx-admin-overview');
+      if(!panel||!isAdminRoute())return;
+      panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Indicadores consultados directamente desde Supabase</small></div><div class="dx-admin-overview-tools"><span class="dx-admin-sync">Actualizado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})+'</span><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>'+iconMarkup('arrow')+' Actualizar</button></div></div><div class="dx-admin-overview-grid">'+metrics.map(metric=>'<article class="dx-admin-metric"><div class="dx-admin-metric-top"><span class="dx-admin-metric-icon">'+iconMarkup(metric.icon)+'</span><span>'+escapeHtml(metric.label)+'</span></div><strong>'+metric.value+'</strong><small>'+escapeHtml(metric.detail)+'</small></article>').join('')+'</div>';
+      panel.dataset.loaded='true';adminOverviewAt=Date.now();
+    })();
+    try{await adminOverviewPromise;}catch(error){
+      panel=document.querySelector('#dx-admin-overview');
+      if(panel)panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>No se pudo sincronizar el panel</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Reintentar</button></div><p class="dx-admin-error">'+escapeHtml(error.message||'Error al consultar los datos administrativos.')+'</p>';
+      console.warn('[DRIPX] Admin overview:',error);
+    }finally{adminOverviewPromise=null;}
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('[data-dx-admin-refresh]');
+    if(!button)return;
+    event.preventDefault();event.stopPropagation();refreshAdminOverview(true);
+  },true);
+  window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);});
+
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
     document.documentElement.dataset.dripxZipGuard='1';
@@ -416,13 +532,14 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);
     if(document.querySelector('#resource-zip'))ensureStagePanel();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
     replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
+    syncCategoryOptions(true);markAdminView();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
