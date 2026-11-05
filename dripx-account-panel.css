@@ -16,7 +16,7 @@
 .dx-account-key div{min-width:0}
 .dx-account-key small{display:block;color:#7895aa;font-size:9px;font-weight:800;letter-spacing:.14em;margin-bottom:7px}
 .dx-account-key strong{display:block;color:#b8efff;font:600 14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
-.dx-account-key button,.dx-secondary-action,.dx-primary-action{border-radius:10px;padding:10px 13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:750 11px/1.2 inherit;cursor:pointer;transition:transform .18s,border-color .18s,background .18s,box-shadow .18s}
+.dx-account-key button,.dx-secondary-action,.dx-primary-action{border-radius:10px;padding:10px 13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;font-size:11px;font-weight:750;line-height:1.2;cursor:pointer;transition:transform .18s,border-color .18s,background .18s,box-shadow .18s}
 .dx-account-key button,.dx-secondary-action{background:#12283a;border:1px solid #2b4e66;color:#cee6f4}
 .dx-account-key button:hover,.dx-secondary-action:hover{border-color:#00bfe9;background:#16364c;transform:translateY(-1px)}
 .dx-account-key button svg,.dx-secondary-action svg,.dx-primary-action svg{width:15px;height:15px;flex:0 0 auto}
@@ -93,7 +93,7 @@
 .dx-star-picker button.is-selected svg{fill:currentColor}
 .dx-star-picker button:hover{transform:scale(1.12);color:#ffe29a}
 .dx-review-comment{display:flex;flex-direction:column;gap:7px;color:#9bb3c6;font-size:10px;font-weight:800}
-.dx-review-comment textarea{width:100%;resize:vertical;border:1px solid #294b62;border-radius:9px;background:#071521;color:#edf8ff;padding:11px;font:12px/1.5 inherit;outline:none}
+.dx-review-comment textarea{width:100%;resize:vertical;border:1px solid #294b62;border-radius:9px;background:#071521;color:#edf8ff;padding:11px;font-family:inherit;font-size:12px;line-height:1.5;outline:none}
 .dx-review-comment textarea:focus{border-color:#00bce8;box-shadow:0 0 0 3px #00c7ff16}
 .dx-review-name{display:flex;align-items:center;gap:8px;color:#9cb3c5;font-size:10px}
 .dx-review-submit{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 14px;border:1px solid #19caff;border-radius:9px;background:linear-gradient(110deg,#00a7d6,#007fb7);color:#fff;font-size:11px;font-weight:900;cursor:pointer}
