@@ -19,13 +19,13 @@ export async function patchApp(source) {
   const oldCardLabel = D + "p.product_type==='plan'?'✦ Elegir plan':'🛒 Agregar'}";
   const oldCard = '<button class="btn primary" data-add="' + pId + '" ' + disabled + '>' + oldCardLabel + '</button>';
   const tick = String.fromCharCode(96);
-  const freeCard = '<button class="btn primary" data-claim-free="' + pId + '">✧ Obtener gratis</button>';
+  const freeCard = '<button class="btn primary" data-claim-free="' + pId + '">Obtener gratis</button>';
   const paidCard = '<button class="btn primary" data-add="' + pId + '">' + D + "p.product_type==='plan'?'Elegir plan':'Agregar'" + '}</button>';
   once(oldCard, D + 'Number(p.price_usd)===0?' + tick + freeCard + tick + ':' + tick + paidCard + tick + '}', 'catalogue free action');
 
   const oldDetailLabel = D + "p.product_type==='plan'?'✦ Elegir plan':'🛒 Agregar al carrito'}";
   const oldDetail = '<button class="btn primary full" data-add="' + pId + '" ' + disabled + '>' + oldDetailLabel + '</button>';
-  const freeDetail = '<button class="btn primary full" data-claim-free="' + pId + '">✧ Obtener gratis</button>';
+  const freeDetail = '<button class="btn primary full" data-claim-free="' + pId + '">Obtener gratis</button>';
   const paidDetail = '<button class="btn primary full" data-add="' + pId + '">' + D + "p.product_type==='plan'?'Elegir plan':'Agregar al carrito'" + '}</button>';
   once(oldDetail, D + 'Number(p.price_usd)===0?' + tick + freeDetail + tick + ':' + tick + paidDetail + tick + '}', 'detail free action');
 

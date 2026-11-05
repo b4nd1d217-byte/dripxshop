@@ -64,7 +64,7 @@
   const ICON_TOKENS = Object.keys(TOKEN_ICON).sort((a,b)=>b.length-a.length).join('|');
   const ICON_RE = new RegExp('(?:'+ICON_TOKENS+')|\\p{Extended_Pictographic}','gu');
   function iconMarkup(name) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">'+(ICON_PATHS[name]||ICON_PATHS.sparkles)+'</svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">'+(ICON_PATHS[name]||ICON_PATHS.sparkles)+'</svg>';
   }
   function replaceIcons(root=document) {
     const nodes=[];
@@ -196,12 +196,13 @@
     const files=entries.map(entry=>{
       const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),script=scriptMap.get(rootPrefix?path.slice(rootPrefix.length):path);
       const isLua=lower.endsWith('.lua'),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
-      const isServer=isLua&&script!=='client'&&script!=='shared'&&script!==undefined&&!isConfig;
+      const isServer=isLua&&script==='server'&&!isConfig,isClient=isLua&&script==='client'&&!isConfig,isShared=isLua&&script==='shared';
       const isShader=['fx','hlsl','glsl'].includes(ext);
-      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))),script_type:script||null};
+      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isClient?'client_lua':(isShared?'shared_lua':(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))))),script_type:script||null};
     });
     const server=files.filter(x=>x.kind==='server_lua').map(x=>rootPrefix?x.path.slice(rootPrefix.length):x.path);
-    return {zip,entries,files,expanded,metaPath:meta?.name||null,rootPrefix,server,luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
+    const client=files.filter(x=>x.kind==='client_lua').map(x=>rootPrefix?x.path.slice(rootPrefix.length):x.path);
+    return {zip,entries,files,expanded,metaPath:meta?.name||null,rootPrefix,server,client,compileCount:server.length+client.length,luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
   }
   async function loadRecentZips(){
     const host=document.querySelector('#dripx-recent-zips');if(!host||!client)return;
@@ -231,15 +232,51 @@
       toast(error.message||'No se pudo guardar el ZIP.');console.error('[DRIPX] Staging ZIP:',error);
     }
   }
+  function armCompiledZipCapture(input){
+    if(!input)return;const native=URL.createObjectURL.bind(URL);let captured=false;
+    URL.createObjectURL=function(object){
+      const url=native(object);
+      if(!captured&&object instanceof Blob&&object.size>0){
+        captured=true;
+        try{
+          const source=input.files?.[0],name=(source?.name||'resource.zip').replace(/\.zip$/i,'')+'-DRIPX-protegido.zip';
+          const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
+          const transfer=new DataTransfer();transfer.items.add(processed);input.files=transfer.files;
+          const status=document.querySelector('#product-zip-upload-state');if(status)status.textContent='ZIP compilado/protegido listo para publicar.';
+          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,at:Date.now()};URL.createObjectURL=native;
+        }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP procesado:',error);}
+      }return url;
+    };
+    window.setTimeout(()=>{if(URL.createObjectURL!==native)URL.createObjectURL=native;},45000);
+  }
+  function mountProductZipPipeline(node,input,file){
+    let engine=node.querySelector('.dx-product-engine');
+    if(!engine){engine=document.createElement('section');engine.className='dx-product-engine';engine.innerHTML='<div class="dx-engine-heading"><strong>Compilación y protección del resource</strong><small>Selecciona Lua server y client desde este mismo panel.</small></div>';node.append(engine);}
+    const ids=['zip-analysis','zip-file-list','zip-protect','zip-compile','zip-download','zip-status'];
+    for(const id of ids){const item=document.getElementById(id);if(item&&!engine.contains(item))engine.append(item);}
+    const ready=ids.every(id=>!!engine.querySelector('#'+id));
+    if(!ready){let note=engine.querySelector('.dx-engine-note');if(!note){note=document.createElement('div');note.className='dx-engine-note';engine.append(note);}note.textContent='Los controles de compilación no están disponibles en este formulario. No publiques este ZIP sin terminar el proceso DRIPX.';return;}
+    const download=engine.querySelector('#zip-download');
+    if(download&&!download.dataset.dripxCaptureBound){download.dataset.dripxCaptureBound='true';download.addEventListener('click',()=>armCompiledZipCapture(input),true);}
+    if(typeof window.DRIPX_LOAD_ZIP==='function')window.DRIPX_LOAD_ZIP(file);
+  }
   async function previewProductZip(file){
+    window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
     let node=document.querySelector('#product-zip-preview');const input=document.querySelector('#product-form input[name="file"]');if(!input)return;
-    if(!node){node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';input.closest('label')?.insertAdjacentElement('afterend',node);const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.textContent='ZIP listo para validación y subida privada.';node.insertAdjacentElement('afterend',status);}
-    const uploadStatus=document.querySelector('#product-zip-upload-state');if(uploadStatus)uploadStatus.textContent='ZIP leído. Se mostrará el progreso al guardar el producto.';
-    node.textContent='Leyendo todos los archivos del ZIP…';
+    if(!node){node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';const anchor=input.closest('label')||input.parentElement||input;anchor.insertAdjacentElement('afterend',node);const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.textContent='ZIP listo para analizar y compilar.';node.insertAdjacentElement('afterend',status);}
+    const uploadStatus=document.querySelector('#product-zip-upload-state');if(uploadStatus)uploadStatus.textContent='Analizando el resource…';node.innerHTML='<div class="dx-preview-loading">Leyendo ZIP y meta.xml…</div>';
     try{
       const result=await scanZip(file),protectedZip=!!result.zip.file('DRIPX_MANIFEST.json');
-      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.luaCount+' Lua</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Falta el manifiesto DRIPX de protección')+'</b></div><div class="dx-preview-files">'+result.files.slice(0,250).map(x=>'<div><span>'+escapeHtml(x.path)+'</span><small>'+escapeHtml(x.kind.replace('_',' '))+' · '+formatBytes(x.bytes)+'</small></div>').join('')+'</div>'+(result.files.length>250?'<small>Se muestran 250 de '+result.files.length+' archivos; todos quedaron leídos.</small>':'');
-    }catch(error){node.textContent='No se pudo leer el ZIP: '+(error.message||'archivo inválido');}
+      const rows=result.files.slice(0,300).map(x=>{
+        const compile=x.kind==='server_lua'||x.kind==='client_lua';
+        const label=x.kind==='server_lua'?'Server · compilable':x.kind==='client_lua'?'Client · compilable':x.kind==='shared_lua'?'Shared · se conserva':x.kind==='config'?'Configuración':'Archivo';
+        const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
+        return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(x.path)+'</span><small>'+label+' · '+formatBytes(x.bytes)+'</small></div>';
+      }).join('');
+      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Resource pendiente de protección')+'</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' shared/config</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div>';
+      mountProductZipPipeline(node,input,file);
+      if(uploadStatus)uploadStatus.textContent='ZIP analizado. Finaliza compilación/protección aquí antes de publicar.';
+    }catch(error){node.textContent='No se pudo leer el ZIP: '+(error.message||'archivo inválido');if(uploadStatus)uploadStatus.textContent='Corrige el ZIP antes de publicarlo.';}
   }
   document.addEventListener('change',event=>{
     if(event.target?.id==='resource-zip'&&event.target.files?.[0]){ensureStagePanel();persistStagingZip(event.target.files[0]);}
@@ -311,13 +348,22 @@
     try{await renderOwnedProducts();}catch(error){console.error('[DRIPX] Products panel:',error);toast(error.message||'No se pudieron cargar tus productos.');}
   },true);
 
+  function hideTopCategoryStrip(root=document){
+    const scope=root.querySelector?.('#app')||root;
+    const selectors=['.category-filter','.category-filters','.category-tabs','.category-pills','.category-strip','.categories-strip','.categories-bar','.catalog-categories','.catalog-category-bar','.product-categories','.store-categories','.category-row','.category-list','[data-category-filter]'];
+    scope.querySelectorAll?.(selectors.join(',')).forEach(el=>{if(el.closest('#product-form,.admin-products,.category-manager,[data-admin-category]'))return;el.setAttribute('data-dripx-hidden-category-strip','true');el.style.setProperty('display','none','important');el.setAttribute('aria-hidden','true');});
+  }
+  function applyPlanCardSkin(root=document){
+    const scope=root.querySelector?.('#app')||root;
+    scope.querySelectorAll?.('[data-product-type="plan"],.plan-card,.product-card[data-type="plan"]').forEach(card=>{if(!card.closest('#product-form,.admin-products'))card.setAttribute('data-dripx-plan-art','true');});
+  }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();
     if(document.querySelector('#resource-zip'))ensureStagePanel();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }

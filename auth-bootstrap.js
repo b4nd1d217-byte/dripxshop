@@ -13,6 +13,32 @@
     if (typeof value !== 'string') return {};
     try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {}; } catch (_) { return {}; }
   };
+
+  async function couponBannerBase64(coupon) {
+    const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('canvas_unavailable');
+    const bg=ctx.createLinearGradient(0,0,1200,630);bg.addColorStop(0,'#050b13');bg.addColorStop(.55,'#0b1725');bg.addColorStop(1,'#07111d');ctx.fillStyle=bg;ctx.fillRect(0,0,1200,630);
+    const glow=ctx.createRadialGradient(920,130,20,920,130,540);glow.addColorStop(0,'rgba(0,199,255,.22)');glow.addColorStop(1,'rgba(0,199,255,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,1200,630);
+    ctx.save();ctx.strokeStyle='rgba(0,199,255,.16)';ctx.lineWidth=1;
+    for(let x=30;x<1200;x+=42){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,630);ctx.stroke();}
+    for(let y=30;y<630;y+=42){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1200,y);ctx.stroke();}
+    ctx.restore();ctx.save();ctx.lineWidth=3;ctx.strokeStyle='rgba(0,199,255,.65)';ctx.setLineDash([14,9]);ctx.roundRect(38,38,1124,554,30);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(0,199,255,.08)';ctx.beginPath();ctx.roundRect(62,62,1076,506,24);ctx.fill();ctx.restore();
+    const logo=new Image();logo.crossOrigin='anonymous';const loaded=new Promise(resolve=>{logo.onload=()=>resolve(true);logo.onerror=()=>resolve(false);});logo.src=location.origin+'/assets/dripx-logo.webp';if(!logo.complete)await loaded;
+    if(logo.naturalWidth){const ratio=Math.min(116/logo.naturalWidth,78/logo.naturalHeight);ctx.drawImage(logo,86,82,logo.naturalWidth*ratio,logo.naturalHeight*ratio);}
+    ctx.fillStyle='#eaf8ff';ctx.textAlign='left';ctx.font='800 36px Arial,sans-serif';ctx.fillText('DRIP X SHOP',218,132);
+    ctx.fillStyle='#00c7ff';ctx.font='700 18px Arial,sans-serif';ctx.letterSpacing='5px';ctx.fillText('CUPÓN EXCLUSIVO',220,164);ctx.letterSpacing='0px';
+    ctx.textAlign='center';ctx.fillStyle='rgba(224,245,255,.88)';ctx.font='700 24px Arial,sans-serif';ctx.fillText('BENEFICIO ESPECIAL',600,255);
+    const type=String(coupon?.discount_type||'').toLowerCase(),value=Number(coupon?.discount_value||0),percent=['percent','percentage','percent_off'].includes(type);
+    const amount=(percent?value.toLocaleString('es-DO',{maximumFractionDigits:2})+'%':'$'+value.toLocaleString('en-US',{maximumFractionDigits:2}))+' OFF';
+    ctx.save();ctx.shadowColor='rgba(0,199,255,.65)';ctx.shadowBlur=38;ctx.fillStyle='#f4fbff';ctx.font='900 142px Impact,Arial Black,sans-serif';ctx.textAlign='center';ctx.fillText(amount,600,425,990);ctx.restore();
+    const hasExpiry=!!coupon?.expires_at,date=new Date(coupon?.expires_at||coupon?.created_at||new Date().toISOString());
+    const label=Number.isNaN(date.getTime())?'FECHA NO DISPONIBLE':(hasExpiry?'VÁLIDO HASTA · ':'FECHA DEL CUPÓN · ')+date.toLocaleDateString('es-DO',{day:'2-digit',month:'long',year:'numeric',timeZone:'America/Santo_Domingo'}).toUpperCase();
+    ctx.fillStyle='#9ddcf0';ctx.font='700 26px Arial,sans-serif';ctx.textAlign='center';ctx.fillText(label,600,510,980);
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(v=>v?resolve(v):reject(new Error('coupon_image_failed')),'image/png'));
+    const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
+    return String(data).split(',')[1]||'';
+  }
   const sendLog = async (token, event, details = {}) => {
     if (!token || !SUPABASE_URL || !SUPABASE_KEY) return;
     try {
@@ -20,7 +46,7 @@
         method: 'POST',
         headers: { apikey: SUPABASE_KEY, authorization: 'Bearer ' + token, 'content-type': 'application/json' },
         body: JSON.stringify({ event, details }),
-        signal: AbortSignal.timeout(7000)
+        signal: AbortSignal.timeout(event === 'coupon_created' ? 16000 : 7000)
       });
     } catch (error) { console.warn('[DRIPX] Discord log delivery failed:', error?.message || error); }
   };
@@ -59,10 +85,7 @@
       const idFromQuery = String(url.searchParams.get('id') || '').replace(/^eq\./, '');
       const uuidOrEmpty = value => UUID_RE.test(String(value || '')) ? String(value) : '';
       const fire = (event, details) => { if (event) void sendLog(token, event, details); };
-      if (path === 'rpc/dripx_claim_free_product') {
-        const productId = uuidOrEmpty(first.p_product_id);
-        try { const result = await response.clone().json(); if (productId && result?.ok && !result?.already_owned) fire('free_product_claimed', { product_id: productId }); } catch (_) {}
-      } else if (path === 'rpc/dripx_create_order') {
+      if (path === 'rpc/dripx_create_order') {
         try {
           const orderId = uuidOrEmpty(await response.clone().json());
           if (orderId) fire('order_created', { order_id: orderId });
@@ -84,6 +107,16 @@
       } else if (path === 'dripx_orders' && method === 'PATCH' && first.payment_proof_path) {
         const orderId = uuidOrEmpty(idFromQuery);
         if (orderId) fire('payment_proof', { order_id: orderId });
+      } else if ((path === 'discount_coupons' || path === 'coupon_codes') && method === 'POST') {
+        try {
+          const inserted = await response.clone().json();
+          const coupon = Array.isArray(inserted) ? inserted[0] : inserted;
+          const couponId = uuidOrEmpty(coupon?.id);
+          if (couponId) {
+            const image_png_base64 = await couponBannerBase64(coupon);
+            fire('coupon_created', { coupon_id: couponId, coupon_table: path, image_png_base64 });
+          }
+        } catch (error) { console.warn('[DRIPX] No se pudo generar la imagen del cupón:', error?.message || error); }
       } else if (path === 'dripx_products' && method === 'PATCH' && first.status === 'published') {
         const productId = uuidOrEmpty(idFromQuery);
         if (productId) fire('resource_created', { product_id: productId });

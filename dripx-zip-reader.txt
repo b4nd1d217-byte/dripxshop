@@ -35,25 +35,29 @@
     const scriptByPath=new Map(scripts.map(x=>[x.src,x]));
     const scriptSrcByFile=new Map(scripts.map(x=>[x.src,x.originalSrc]));
     const lua=entries.filter(x=>x.name.toLowerCase().endsWith('.lua'));
-    const server=lua.filter(x=>{const script=scriptByPath.get(x.name),isConfigLua=/(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(x.name);return script&&script.type!=='client'&&script.type!=='shared'&&!isConfigLua;});
-    if(!server.length)throw new Error('No se encontraron Lua de servidor en meta.xml. Los scripts client/shared y shaders se mantienen intactos.');
-    state.zipBuild={zip,metaName:meta.name,metaText,entries,lua,server,scriptSrcByFile,selected:new Set(server.map(x=>x.name)),compiled:false,protected:false,rootPrefix};
+    const isConfigLua=x=>/(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(x.name);
+    const server=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='server'&&!isConfigLua(x);});
+    const client=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='client'&&!isConfigLua(x);});
+    const compileTargets=[...server,...client];
+    if(!server.length)throw new Error('El resource necesita al menos un Lua de servidor para validar la licencia DRIPX.');
+    if(!compileTargets.length)throw new Error('No se encontraron Lua server/client declarados en meta.xml.');
+    state.zipBuild={zip,metaName:meta.name,metaText,entries,lua,server,client,compileTargets,scriptSrcByFile,selected:new Set(compileTargets.map(x=>x.name)),compiled:false,protected:false,rootPrefix};
     const bytes=n=>{n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(2)+' MB';};
     const rows=entries.map(entry=>{
       const name=entry.name,lower=name.toLowerCase(),script=scriptByPath.get(name),ext=lower.split('.').pop();
-      const isServer=server.some(x=>x.name===name),isLua=lower.endsWith('.lua'),isShader=['fx','hlsl','glsl'].includes(ext),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
-      const kind=isServer?'Lua de servidor':(isConfig?'Configuración':(isLua?'Lua client/shared o no declarado':(isShader?'Shader':'Archivo')));
+      const isServer=server.some(x=>x.name===name),isClient=client.some(x=>x.name===name),isLua=lower.endsWith('.lua'),isShader=['fx','hlsl','glsl'].includes(ext),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
+      const kind=isServer?'Lua servidor · compilable':(isClient?'Lua client · compilable':(isConfig?'Configuración':(isLua?'Lua shared/no declarado':(isShader?'Shader':'Archivo'))));
       const size=bytes(entry._data?.uncompressedSize||0);
-      if(isServer)return '<label class="zip-file dx-zip-entry"><input type="checkbox" data-zip-lua="'+esc(name)+'" checked><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+'</small></label>';
+      if(isServer||isClient)return '<label class="zip-file dx-zip-entry"><input type="checkbox" data-zip-lua="'+esc(name)+'" checked><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+'</small></label>';
       return '<div class="zip-file dx-zip-entry dx-zip-static"><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+(script?' · '+esc(script.type):'')+'</small></div>';
     }).join('');
     const configCount=entries.filter(x=>/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(x.name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(x.name.toLowerCase().split('.').pop())).length;
     const shaderCount=entries.filter(x=>['fx','hlsl','glsl'].includes(x.name.toLowerCase().split('.').pop())).length;
-    const clientCount=lua.length-server.length;
+    const clientCount=client.length;
     $('#zip-analysis').innerHTML='<b>ZIP leído correctamente</b><br>'+entries.length+' archivos · '+lua.length+' Lua · '+server.length+' Lua servidor · '+clientCount+' Lua client/shared · '+shaderCount+' shaders · '+configCount+' archivos de configuración'+(rootPrefix?'<br>Carpeta principal normalizada: '+esc(rootPrefix):'');
     $('#zip-file-list').innerHTML='<div class="dx-zip-list-head"><strong>Inventario completo del resource</strong><span>'+entries.length+' archivos</span></div>'+rows;
     $('#zip-protect').disabled=false;$('#zip-protect').textContent='Proteger Lua';$('#zip-compile').disabled=true;$('#zip-download').disabled=true;
-    $('#zip-status').textContent='Selecciona solo Lua de servidor. Los archivos client/shared, shaders, configuraciones, XML, imágenes y demás recursos se conservan sin modificar.';
+    $('#zip-status').textContent='Selecciona los Lua de servidor y client que se compilarán/protegerán. Shared/config, shaders, XML e imágenes se mantienen sin cambiar.';
     window.DRIPX_ZIP_ROOT_PREFIX=rootPrefix;
   }
   window.DRIPX_LOAD_ZIP=loadZipForProtection;
