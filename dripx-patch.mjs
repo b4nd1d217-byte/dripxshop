@@ -136,13 +136,11 @@ export async function patchApp(source) {
     "        const outputSrc=originalSrc.replace(/\\.lua$/i,'.luac');",
     "        meta=meta.slice(0,refAt)+outputSrc+meta.slice(refAt+originalSrc.length);",
     "      }"
-  ].join(\"\\n\");
+  ].join('\n');
   app = app.slice(0, compileBlockStart) + safeMetaRewrite + app.slice(compileBlockEndLine + 1);
 
 
-  once("    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');",
-       "    const sharedLuaSources=new Set(scripts.filter(x=>x.type==='shared').map(x=>x.src));for(const entry of entries){if(!entry.name.toLowerCase().endsWith('.lua'))continue;const config=/((^|\\/)(config|settings|shared|language|locale)[^/]*\\.lua$)/i.test(entry.name);if(config||entry.name==='dripx_license.lua'||sharedLuaSources.has(entry.name))continue;throw new Error('El ZIP conserva Lua fuente sin compilar: '+entry.name);}\\n    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');",
-       'reject leftover Lua source before publication');
+  once("    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", "    const sharedLuaSources = new Set(scripts.filter(x => x.type === \"shared\").map(x => x.src));\n    for (const entry of entries) {\n      if (!entry.name.toLowerCase().endsWith(\".lua\")) continue;\n      const base = entry.name.split(\"/\").pop().toLowerCase();\n      const config = /^(config|settings|shared|language|locale).*\\.lua$/.test(base);\n      if (config || entry.name === \"dripx_license.lua\" || sharedLuaSources.has(entry.name)) continue;\n      throw new Error(\"El ZIP conserva Lua fuente sin compilar: \" + entry.name);\n    }\n    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", 'reject leftover Lua source before publication');
 
   return app;
 }
