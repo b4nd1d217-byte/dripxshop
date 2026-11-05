@@ -6,7 +6,9 @@
     let entries=Object.values(zip.files).filter(x=>!x.dir&&!x.name.startsWith('__MACOSX/')&&!x.name.endsWith('/.DS_Store'));
     if(!entries.length)throw new Error('El ZIP no contiene archivos.');
     if(entries.length>3000)throw new Error('El ZIP contiene demasiados archivos (máximo 3.000).');
-    if(entries.some(x=>x.name.startsWith('/')||x.name.includes('\\')||x.name.split('/').some(part=>part==='..'||part==='.'||!part)))throw new Error('El ZIP contiene rutas inseguras o inválidas.');
+    const unsafeEntry=entries.some(x=>{const original=String(x.unsafeOriginalName||x.name);return original!==x.name||original.startsWith('/')||original.includes(String.fromCharCode(92))||original.length>1024||/[\u0000-\u001f\u007f]/.test(original)||original.split('/').some(part=>!part||part==='.'||part==='..');});
+    if(unsafeEntry)throw new Error('El ZIP contiene rutas originales inseguras o inválidas.');
+    const pathSet=new Set();for(const entry of entries){const key=entry.name.normalize('NFC').toLowerCase();if(pathSet.has(key))throw new Error('El ZIP contiene nombres duplicados.');pathSet.add(key);}
     const normalizedSizeByName=new Map();
     const expanded=entries.reduce((n,x)=>n+Number(normalizedSizeByName.get(x.name)??x._data?.uncompressedSize??x._data?.length??0),0);
     if(expanded>200*1024*1024)throw new Error('El contenido descomprimido supera el límite de seguridad de 200 MB.');
@@ -42,7 +44,7 @@
     const isSharedLua=x=>scriptByPath.get(x.name)?.type==='shared';
     const server=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='server'&&!isConfigLua(x);});
     const client=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='client'&&!isConfigLua(x);});
-    const compileTargets=lua.filter(x=>!isConfigLua(x)&&!isSharedLua(x));
+    const compileTargets=lua.filter(x=>scriptByPath.has(x.name)&&!isConfigLua(x)&&!isSharedLua(x));
     if(!lua.length)throw new Error('El resource no contiene archivos Lua para proteger.');
     if(entries.some(x=>['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac'].includes(x.name.split('/').pop().toLowerCase())))throw new Error('El ZIP usa un nombre reservado por el sistema de licencias DRIPX. Renombra ese archivo y vuelve a subirlo.');
     state.zipBuild={zip,metaName:meta.name,metaText,entries,lua,server,client,compileTargets,scriptSrcByFile,selected:new Set(compileTargets.map(x=>x.name)),compiled:false,protected:false,rootPrefix};
@@ -52,7 +54,7 @@
       const isServer=server.some(x=>x.name===name),isClient=client.some(x=>x.name===name),isLua=lower.endsWith('.lua'),isShader=['fx','hlsl','glsl'].includes(ext),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext),isShared=script?.type==='shared',isProtectedLua=isLua&&!isConfig&&!isShared;
       const kind=isConfig?'Configuración':(isShared?'Lua type shared · sin modificar':(isServer?'Lua servidor · protegido':(isClient?'Lua cliente · protegido':(isProtectedLua?'Lua adicional · protegido':(isShader?'Shader':'Archivo')))));
       const size=bytes(normalizedSizeByName.get(name)??entry._data?.uncompressedSize??entry._data?.length??0);
-      if(isProtectedLua)return '<label class="zip-file dx-zip-entry"><input type="checkbox" data-zip-lua="'+esc(name)+'" checked><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+'</small></label>';
+      if(isProtectedLua)return '<div class="zip-file dx-zip-entry dx-zip-static"><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+'</small></div>';
       return '<div class="zip-file dx-zip-entry dx-zip-static"><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+(script?' · '+esc(script.type):'')+'</small></div>';
     }).join('');
     const configCount=entries.filter(x=>/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(x.name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(x.name.toLowerCase().split('.').pop())).length;
