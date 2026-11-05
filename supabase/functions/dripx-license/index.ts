@@ -299,6 +299,8 @@ async function downloadOwnedProduct(req: Request) {
       || !template.includes("DRIPX_PRODUCT_ID_PLACEHOLDER")
       || !template.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
       || !template.includes("DRIPX_ACL_ACCOUNT_PLACEHOLDER")
+      || !template.includes('addEvent("dripx:license:ready", false)')
+      || !template.includes('triggerEvent("dripx:license:ready", resourceRoot)')
       || !metaHasShared || !metaHasLicense
       || metaText.indexOf("dripx_guard_shared.lua") > metaText.indexOf("dripx_license.lua")) {
     return json(409, { error: "license_guard_template_invalid", message: "No se pudo verificar la relación entre el guardián shared y el módulo de licencia." });
