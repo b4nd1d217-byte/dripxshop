@@ -61,3 +61,27 @@
     window.DRIPX_ZIP_ROOT_PREFIX=rootPrefix;
   }
   window.DRIPX_LOAD_ZIP=loadZipForProtection;
+
+  const DRIPX_LICENSE_LUA = "local DRIPX_API = \"https://tlhbxhfszoxgfewuofof.supabase.co/functions/v1/dripx-license\"\nlocal DRIPX_LICENSE_KEY = \"DRIPX_LICENSE_KEY_PLACEHOLDER\"\nlocal DRIPX_RESOURCE = getResourceName(getThisResource())\nlocal DRIPX_TIMER = nil\n\nlocal function installationId()\n    local path = \"dripx-installation.id\"\n    if fileExists(path) then\n        local file = fileOpen(path)\n        if file then\n            local value = fileRead(file, 128) or \"\"\n            fileClose(file)\n            value = value:gsub(\"%s+\", \"\")\n            if value:match(\"^[a-f0-9]+$\") and #value == 40 then return value end\n        end\n    end\n    local value = \"\"\n    for i = 1, 40 do value = value .. string.format(\"%x\", math.random(0, 15)) end\n    local file = fileCreate(path)\n    if file then fileWrite(file, value); fileClose(file) end\n    return value\nend\n\nlocal DRIPX_INSTALLATION_ID = installationId()\n\nlocal function validate(action)\n    if DRIPX_LICENSE_KEY == \"DRIPX_LICENSE_KEY_PLACEHOLDER\" then\n        outputDebugString(\"[DRIPX] Descarga este producto desde Mi cuenta para recibir tu licencia personal.\", 1)\n        return\n    end\n    local payload = {\n        license_key = DRIPX_LICENSE_KEY,\n        installation_id = DRIPX_INSTALLATION_ID,\n        resource_name = DRIPX_RESOURCE,\n        server_port = getServerPort(),\n        server_name = getServerName()\n    }\n    fetchRemote(DRIPX_API .. \"/\" .. action, {\n        method = \"POST\",\n        headers = { [\"Content-Type\"] = \"application/json\" },\n        postData = toJSON(payload)\n    }, function(data, errno, headers, statusCode)\n        local result = type(data) == \"string\" and fromJSON(data) or nil\n        if errno == 0 and statusCode == 200 and type(result) == \"table\" and result.valid == true then\n            if not DRIPX_TIMER then\n                DRIPX_TIMER = setTimer(function() validate(\"validate\") end, 300000, 0)\n            end\n            outputDebugString(\"[DRIPX] Producto verificado en este servidor: \" .. DRIPX_RESOURCE, 3)\n            return\n        end\n        local reason = type(result) == \"table\" and tostring(result.reason or \"license_invalid\") or (\"http_\" .. tostring(statusCode or errno))\n        outputDebugString(\"[DRIPX] Licencia rechazada para \" .. DRIPX_RESOURCE .. \": \" .. reason, 1)\n        if statusCode and statusCode >= 400 and statusCode < 500 then\n            setTimer(function() if isElement(getThisResource()) then stopResource(getThisResource()) end end, 1500, 1)\n        end\n    end)\nend\n\naddEventHandler(\"onResourceStart\", resourceRoot, function() validate(\"activate\") end)\naddEventHandler(\"onResourceStop\", resourceRoot, function()\n    if isTimer(DRIPX_TIMER) then killTimer(DRIPX_TIMER) end\nend)\n";
+  window.DRIPX_INJECT_LICENSE_GUARD = function(resourceName){
+    const build=state.zipBuild;
+    const normalized=String(resourceName||'').trim();
+    if(!build||!build.zip)throw new Error('El motor de protección no tiene un ZIP activo.');
+    if(!/^[A-Za-z0-9_-]{2,64}$/.test(normalized))throw new Error('El nombre del resource MTA debe tener entre 2 y 64 caracteres y usar letras, números, guion o guion bajo.');
+    const doc=new DOMParser().parseFromString(build.metaText,'application/xml');
+    if(doc.querySelector('parsererror')||doc.documentElement?.tagName.toLowerCase()!=='meta')throw new Error('No se puede actualizar meta.xml para agregar la licencia DRIPX.');
+    let licenseNode=[...doc.querySelectorAll('script')].find(node=>String(node.getAttribute('src')||'').toLowerCase()==='dripx_license.lua');
+    if(!licenseNode){
+      licenseNode=doc.createElement('script');
+      licenseNode.setAttribute('src','dripx_license.lua');
+      licenseNode.setAttribute('type','server');
+      doc.documentElement.appendChild(doc.createComment(' DRIP X SHOP · licencia vinculada al resource '+normalized+' '));
+      doc.documentElement.appendChild(licenseNode);
+    }else{licenseNode.setAttribute('type','server');}
+    build.metaText=new XMLSerializer().serializeToString(doc);
+    build.zip.file(build.metaName,build.metaText);
+    build.zip.file('dripx_license.lua',DRIPX_LICENSE_LUA);
+    build.resourceName=normalized;
+    window.DRIPX_ZIP_RESOURCE_NAME=normalized;
+    return {resource_name:normalized,license_script:'dripx_license.lua'};
+  };
