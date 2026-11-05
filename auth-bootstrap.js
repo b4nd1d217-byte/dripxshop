@@ -13,6 +13,21 @@
     if (typeof value !== 'string') return {};
     try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {}; } catch (_) { return {}; }
   };
+  async function persistDripxResourceIdentity(productId, token) {
+    const resourceName=String(window.__DRIPX_RESOURCE_NAME||'').trim();
+    if(!UUID_RE.test(String(productId||''))||!/^([A-Za-z0-9_-]){2,64}$/.test(resourceName))return false;
+    const response=await nativeFetch(SUPABASE_URL+'/rest/v1/dripx_products?id=eq.'+encodeURIComponent(productId),{
+      method:'PATCH',
+      headers:{apikey:SUPABASE_KEY,authorization:'Bearer '+token,'content-type':'application/json',prefer:'return=minimal'},
+      body:JSON.stringify({product_type:'resource',protection_enabled:true,resource_name:resourceName,resource_manifest:{resource_name:resourceName,license_protocol:'dripx-v1'}})
+    });
+    if(!response.ok){
+      const detail=await response.text().catch(()=> '');
+      console.error('[DRIPX] No se pudo vincular el resource MTA al producto:',response.status,detail.slice(0,240));
+      throw new Error('No se pudo guardar la identidad del resource MTA. Revisa que el nombre no esté usado por otro producto.');
+    }
+    return true;
+  }
 
   async function couponBannerBase64(coupon) {
     const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;
@@ -152,10 +167,18 @@
           const inserted = await response.clone().json();
           const product = Array.isArray(inserted) ? inserted[0] : inserted;
           const productId = uuidOrEmpty(product?.id);
+          if(productId&&window.__DRIPX_RESOURCE_NAME){
+            await persistDripxResourceIdentity(productId,token);
+            window.__DRIPX_RESOURCE_NAME='';
+          }
           if (productId && product?.status === 'published') fire('resource_created', { product_id: productId });
         } catch (_) {}
       } else if (path === 'dripx_products' && method === 'PATCH' && first.status === 'published') {
         const productId = uuidOrEmpty(idFromQuery);
+        if(productId&&window.__DRIPX_RESOURCE_NAME){
+          await persistDripxResourceIdentity(productId,token);
+          window.__DRIPX_RESOURCE_NAME='';
+        }
         if (productId) fire('resource_created', { product_id: productId });
       } else if (path === 'functions/v1/dripx-lua-compiler' && method === 'POST') {
         fire('resource_compiled', { filename: first.filename || 'script.lua' });
