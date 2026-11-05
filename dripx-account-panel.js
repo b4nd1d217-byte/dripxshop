@@ -11,7 +11,13 @@ const money=v=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).
 const date=v=>v?new Date(v).toLocaleDateString('es-DO',{year:'numeric',month:'short',day:'2-digit'}):'—';
 let invoiceCache={orders:{},items:[]};
 const toast=message=>{let n=$('#dx-account-toast');if(!n){n=document.createElement('div');n.id='dx-account-toast';n.className='dx-account-toast';document.body.append(n);}n.textContent=message;n.classList.add('is-visible');clearTimeout(n._timer);n._timer=setTimeout(()=>n.classList.remove('is-visible'),3500);};
-function clearProductsTab(){ $$('.profile-tabs [data-dripx-owned-products],.profile-tabs [data-profile-tab="productos"]').forEach(n=>n.remove());$$('.profile-tabs .tab').forEach(n=>{if(/^\s*productos\s*$/i.test(n.textContent||''))n.remove();});}
+function clearProductsTab(){
+ const tabs=$('.profile-tabs');if(!tabs)return;
+ let button=$('[data-dripx-owned-products]',tabs);
+ if(!button){button=document.createElement('button');button.type='button';button.className='tab';button.dataset.profileTab='productos';button.dataset.dripxOwnedProducts='';button.innerHTML=icon('package')+' Productos';tabs.append(button);}
+ button.setAttribute('aria-label','Ver productos y recursos autorizados');
+}
+window.DRIPX_SET_INVOICE_DATA=(orders,items)=>{invoiceCache={orders:Object.fromEntries((orders||[]).map(order=>[String(order.id),order])),items:items||[]};};
 async function renderLicense(){
  const host=$('.profile-content');if(!host||!db)return;clearProductsTab();
  const {data:{session},error:sErr}=await db.auth.getSession();if(sErr)throw sErr;if(!session?.user?.id)throw new Error('Inicia sesión con Discord para consultar tu licencia.');
