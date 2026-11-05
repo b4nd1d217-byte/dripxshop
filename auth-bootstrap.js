@@ -5,7 +5,7 @@
   const clearLock = () => { try { localStorage.removeItem(LOCK); } catch (_) {} };
   const originalCreate = window.supabase?.createClient;
   const CONFIG = window.DRIPX_CONFIG || {};
-  const SUPABASE_URL = String(CONFIG.supabaseUrl || '').replace(/\\/$/, '');
+  const SUPABASE_URL = String(CONFIG.supabaseUrl || '');
   const SUPABASE_KEY = String(CONFIG.supabaseKey || CONFIG.publishableKey || '');
   const nativeFetch = window.fetch.bind(window);
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -32,12 +32,12 @@
         requestUrl = typeof input === 'string' ? input : input.url;
         if (!method) method = String(input.method || 'GET').toUpperCase();
         const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-        token = String(headers.get('authorization') || '').replace(/^Bearer\\s+/i, '');
+        token = String(headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
       } catch (_) {}
       let url;
       try { url = new URL(requestUrl, location.href); } catch (_) {}
       if (url?.origin === SUPABASE_URL && url.pathname === '/auth/v1/logout' && token) {
-        void sendLog(token, 'logout');
+        await sendLog(token, 'logout');
       }
       const response = await nativeFetch(input, init);
       if (!response.ok || url?.origin !== SUPABASE_URL) return response;
@@ -46,7 +46,7 @@
         return response;
       }
       if (!token || !url.pathname.startsWith('/rest/v1/') && !url.pathname.startsWith('/functions/v1/')) return response;
-      const path = url.pathname.replace('/rest/v1/', '');
+      const path = url.pathname.startsWith('/rest/v1/') ? url.pathname.slice('/rest/v1/'.length) : url.pathname.slice(1);
       const body = parseBody(init.body);
       const first = Array.isArray(body) ? (body[0] || {}) : body;
       const idFromQuery = String(url.searchParams.get('id') || '').replace(/^eq\./, '');
@@ -54,7 +54,7 @@
       const fire = (event, details) => { if (event) void sendLog(token, event, details); };
       if (path === 'rpc/dripx_claim_free_product') {
         const productId = uuidOrEmpty(first.p_product_id);
-        if (productId) fire('free_product_claimed', { product_id: productId });
+        try { const result = await response.clone().json(); if (productId && result?.ok && !result?.already_owned) fire('free_product_claimed', { product_id: productId }); } catch (_) {}
       } else if (path === 'rpc/dripx_create_order') {
         try {
           const orderId = uuidOrEmpty(await response.clone().json());
