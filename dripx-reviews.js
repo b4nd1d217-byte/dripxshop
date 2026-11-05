@@ -9,6 +9,32 @@ const stars=value=>{const n=Math.max(0,Math.min(5,Number(value)||0));return '<sp
 const date=v=>v?new Date(v).toLocaleDateString('es-DO',{year:'numeric',month:'short',day:'2-digit'}):'—';
 const notify=message=>{let n=$('#dx-review-toast');if(!n){n=document.createElement('div');n.id='dx-review-toast';n.className='dx-review-toast';document.body.append(n);}n.textContent=message;n.classList.add('is-visible');clearTimeout(n._timer);n._timer=setTimeout(()=>n.classList.remove('is-visible'),3600);};
 let productBusy=false,adminBusy=false;
+let ratingMap={},ratingLoadedAt=0,ratingPromise=null;
+async function syncCatalogRatings(force=false){
+ if(!db)return;
+ if(ratingPromise)return ratingPromise;
+ if(!force&&Date.now()-ratingLoadedAt<30000)return;
+ ratingPromise=(async()=>{
+  const {data,error}=await db.from('dripx_reviews').select('product_id,rating').eq('published',true);
+  if(error)throw error;
+  const map={};
+  for(const row of data||[]){const id=String(row.product_id);(map[id]??=[]).push(Number(row.rating)||0);}
+  ratingMap=map;ratingLoadedAt=Date.now();
+  $('#app [data-add],#app [data-claim-free]').forEach(button=>{
+   const id=String(button.dataset.add||button.dataset.claimFree||'');
+   if(!id)return;
+   const card=button.closest('.product-card,[data-product-id],article,.product')||button.parentElement?.parentElement;
+   if(!card)return;
+   const scores=ratingMap[id]||[],avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
+   let node=card.querySelector(':scope > .dx-catalog-rating');
+   if(!node){node=document.createElement('div');node.className='dx-catalog-rating';const anchor=card.querySelector('.product-bottom,.product-actions,.product-footer')||button.parentElement||button;card.insertBefore(node,anchor);}
+   node.innerHTML=stars(avg)+'<span>'+(scores.length?avg.toFixed(1)+' · '+scores.length+' '+(scores.length===1?'reseña':'reseñas'):'Sin reseñas')+'</span>';
+   node.dataset.ratingKey=scores.length+':'+avg.toFixed(2);
+  });
+ })().finally(()=>{ratingPromise=null;});
+ return ratingPromise;
+}
+
 function productRoute(){return location.hash.match(/^#producto\/([0-9a-f-]{36})(?:[/?#]|$)/i)?.[1]||'';}
 async function renderProductReviews(){
  if(!db)return;const id=productRoute(),app=$('#app');if(!id||!app){$('#dx-product-reviews')?.remove();return;}
@@ -70,7 +96,7 @@ document.addEventListener('submit',async e=>{
  if(result.error){notify(result.error.message||'No se pudo guardar la valoración.');return;}notify(id?'Valoración actualizada.':'Valoración publicada.');const p=$('#dx-product-reviews');if(p)p.dataset.ready='false';await renderProductReviews();
 });
 let timer=0;
-function schedule(){clearTimeout(timer);timer=setTimeout(()=>{renderProductReviews();renderAdminReviews();},180);}
+function schedule(){clearTimeout(timer);timer=setTimeout(()=>{renderProductReviews();renderAdminReviews();syncCatalogRatings(false).catch(err=>console.warn('[DRIPX] catalog ratings',err));},180);}
 window.addEventListener('hashchange',schedule);
 function boot(){const app=$('#app');if(app){const observer=new MutationObserver(()=>{if(/^#producto\/[0-9a-f-]{36}/i.test(location.hash)||/^#admin(?:\/|$)/i.test(location.hash))schedule();});observer.observe(app,{childList:true,subtree:true});}schedule();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
