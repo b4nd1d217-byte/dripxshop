@@ -7,13 +7,13 @@
     if(!entries.length)throw new Error('El ZIP no contiene archivos.');
     if(entries.length>3000)throw new Error('El ZIP contiene demasiados archivos (máximo 3.000).');
     if(entries.some(x=>x.name.startsWith('/')||x.name.includes('\\')||x.name.split('/').some(part=>part==='..'||part==='.'||!part)))throw new Error('El ZIP contiene rutas inseguras o inválidas.');
+    const normalizedSizeByName=new Map();
     const expanded=entries.reduce((n,x)=>n+Number(normalizedSizeByName.get(x.name)??x._data?.uncompressedSize??x._data?.length??0),0);
     if(expanded>200*1024*1024)throw new Error('El contenido descomprimido supera el límite de seguridad de 200 MB.');
     const metaCandidates=entries.filter(x=>x.name.toLowerCase()==='meta.xml'||x.name.toLowerCase().endsWith('/meta.xml'));
     if(metaCandidates.length>1)throw new Error('El ZIP debe contener un único meta.xml. Se encontraron varios archivos de entrada.');
     let meta=metaCandidates.find(x=>x.name.toLowerCase()==='meta.xml')||null;
     let rootPrefix='';
-    const normalizedSizeByName=new Map();
     if(!meta){
       const nested=entries.filter(x=>x.name.toLowerCase().endsWith('/meta.xml'));
       if(nested.length===1){
