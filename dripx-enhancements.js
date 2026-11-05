@@ -289,7 +289,9 @@
     window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
     let node=document.querySelector('#product-zip-preview');const input=document.querySelector('#product-form input[name="file"]');if(!input)return;
     if(!node){node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';const anchor=input.closest('label')||input.parentElement||input;anchor.insertAdjacentElement('afterend',node);const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.textContent='ZIP listo para analizar y compilar.';node.insertAdjacentElement('afterend',status);}
-    const uploadStatus=document.querySelector('#product-zip-upload-state');if(uploadStatus)uploadStatus.textContent='Analizando el resource…';node.innerHTML='<div class="dx-preview-loading">Leyendo ZIP y meta.xml…</div>';
+    let previewBody=node.querySelector('.dx-preview-body');
+    if(!previewBody){previewBody=document.createElement('div');previewBody.className='dx-preview-body';node.prepend(previewBody);}
+    const uploadStatus=document.querySelector('#product-zip-upload-state');if(uploadStatus)uploadStatus.textContent='Analizando el resource…';previewBody.innerHTML='<div class="dx-preview-loading">Leyendo ZIP y meta.xml…</div>';
     try{
       const result=await scanZip(file),protectedZip=!!result.zip.file('DRIPX_MANIFEST.json');
       const rows=result.files.slice(0,300).map(x=>{
@@ -298,7 +300,7 @@
         const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
         return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(x.path)+'</span><small>'+label+' · '+formatBytes(x.bytes)+'</small></div>';
       }).join('');
-      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Resource pendiente de protección')+'</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' shared/config</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div>';
+      previewBody.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="'+(protectedZip?'ok':'warn')+'">'+(protectedZip?'Manifiesto DRIPX detectado':'Resource pendiente de protección')+'</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' shared/config</span><span>'+formatBytes(result.expanded)+' extraídos</span></div><div class="dx-preview-files">'+rows+'</div>';
       const mounted=await mountProductZipPipeline(node,input,file);
       if(!mounted)throw new Error('No están disponibles los controles de compilación/protección. No publiques este ZIP todavía.');
       ensureStagePanel();
