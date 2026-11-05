@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile, cp, copyFile } from 'node:fs/promises';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
+import { Script } from 'node:vm';
 
 const readParts = async (prefix, count) => {
   const parts = await Promise.all(Array.from({ length: count }, (_, i) =>
@@ -17,6 +18,9 @@ const app = brotliDecompressSync(Buffer.from(appB64, 'base64'));
 const { patchApp } = await import('./dripx-patch.mjs');
 const appText = await patchApp(app.toString('utf8'));
 const css = gunzipSync(Buffer.from(cssB64, 'base64'));
+new Script(appText, { filename: 'dist/app.js' });
+new Script(await readFile('auth-bootstrap.js', 'utf8'), { filename: 'auth-bootstrap.js' });
+new Script(await readFile('dripx-enhancements.js', 'utf8'), { filename: 'dripx-enhancements.js' });
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
