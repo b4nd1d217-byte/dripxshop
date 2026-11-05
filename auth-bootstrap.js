@@ -80,12 +80,33 @@
       }
       if (!token || !url.pathname.startsWith('/rest/v1/') && !url.pathname.startsWith('/functions/v1/')) return response;
       const path = url.pathname.startsWith('/rest/v1/') ? url.pathname.slice('/rest/v1/'.length) : url.pathname.slice(1);
+      if (path === 'rpc/dripx_claim_free_product' && method === 'POST') {
+        try {
+          const membership = await nativeFetch(SUPABASE_URL + '/functions/v1/dripx-discord-membership', {
+            method: 'POST',
+            headers: { apikey: SUPABASE_KEY, authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+            body: '{}'
+          });
+          if (!membership.ok) {
+            let result = {}; try { result = await membership.json(); } catch (_) {}
+            return new Response(JSON.stringify({ error: result.error || 'discord_membership_required', message: result.message || 'Debes estar dentro del servidor oficial de Discord para reclamar productos gratis.' }), { status: membership.status, headers: { 'content-type': 'application/json' } });
+          }
+        } catch (_) {
+          return new Response(JSON.stringify({ error: 'discord_membership_check_unavailable', message: 'No se pudo verificar tu membresía de Discord. Inténtalo de nuevo.' }), { status: 503, headers: { 'content-type': 'application/json' } });
+        }
+      }
       const body = parseBody(init.body);
       const first = Array.isArray(body) ? (body[0] || {}) : body;
       const idFromQuery = String(url.searchParams.get('id') || '').replace(/^eq\./, '');
       const uuidOrEmpty = value => UUID_RE.test(String(value || '')) ? String(value) : '';
       const fire = (event, details) => { if (event) void sendLog(token, event, details); };
-      if (path === 'rpc/dripx_create_order') {
+      if (path === 'rpc/dripx_claim_free_product') {
+        try {
+          const result = await response.clone().json();
+          const productId = uuidOrEmpty(first.p_product_id);
+          if (response.ok && productId && result?.ok && !result?.already_owned) fire('free_product_claimed', { product_id: productId });
+        } catch (_) {}
+      } else if (path === 'rpc/dripx_create_order') {
         try {
           const orderId = uuidOrEmpty(await response.clone().json());
           if (orderId) fire('order_created', { order_id: orderId });
