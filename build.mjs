@@ -34,6 +34,7 @@ await copyFile('auth-bootstrap.js', 'dist/auth-bootstrap.js');
 await copyFile('dripx-enhancements.js', 'dist/dripx-enhancements.js');
 await copyFile('dripx-account-panel.js', 'dist/dripx-account-panel.js');
 await copyFile('dripx-account-panel.css', 'dist/dripx-account-panel.css');
+await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
 await copyFile('dripx-reviews.js', 'dist/dripx-reviews.js');
 await cp('assets', 'dist/assets', { recursive: true });
 console.log(`DRIP X SHOP build OK · app.js ${appText.length} bytes · CSS ${css.length + extraCss.length} bytes · free products + ZIP reader/staging + SVG icons enabled`);
