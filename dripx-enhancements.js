@@ -118,7 +118,7 @@
   }
   function applyBrandLogo(){
     const src='/assets/logo.svg';
-    const favicon=src+'?v=20261105-22';
+    const favicon=src+'?v=20261105-24';
     document.querySelectorAll('img[src="/assets/logo.svg"],img[src^="/assets/logo.svg"],img.hero-logo').forEach(img=>{
       img.decoding='async';img.loading='eager';img.alt='DRIP X SHOP';
     });
