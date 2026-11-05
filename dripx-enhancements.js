@@ -191,45 +191,49 @@
   async function scanZip(file){
     if(!window.JSZip)throw new Error('No se pudo cargar JSZip. Recarga la página.');
     if(!file||!file.size)throw new Error('Selecciona un archivo ZIP.');
-    if(!String(file.name||'').toLowerCase().endsWith('.zip'))throw new Error('El archivo del producto debe ser un ZIP.');
+    if(!/\.zip$/i.test(file.name||''))throw new Error('El archivo del producto debe ser un ZIP.');
     if(file.size>100*1024*1024)throw new Error('El ZIP supera el límite de 100 MB.');
     const zip=await JSZip.loadAsync(file,{checkCRC32:true});
-    const entries=Object.values(zip.files).filter(x=>!x.dir&&!x.name.startsWith('__MACOSX/')&&!x.name.endsWith('/.DS_Store'));
+    const entries=Object.values(zip.files).filter(entry=>!entry.dir&&!entry.name.startsWith('__MACOSX/')&&!entry.name.endsWith('/.DS_Store'));
     if(!entries.length)throw new Error('El ZIP está vacío.');
     if(entries.length>3000)throw new Error('El ZIP supera el límite de 3.000 archivos.');
-    if(entries.some(x=>x.name.startsWith('/')||x.name.includes(String.fromCharCode(92))||x.name.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('El ZIP contiene rutas inseguras.');
-    const expanded=entries.reduce((sum,x)=>sum+Number(x._data?.uncompressedSize||0),0);
+    if(entries.some(entry=>entry.name.startsWith('/')||entry.name.includes('\\')||entry.name.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('El ZIP contiene rutas inseguras.');
+    const expanded=entries.reduce((sum,entry)=>sum+Number(entry._data?.uncompressedSize||0),0);
     if(expanded>200*1024*1024)throw new Error('El ZIP descomprimido supera el límite de 200 MB.');
-    let meta=entries.find(x=>x.name.toLowerCase()==='meta.xml'),rootPrefix='';
+    let meta=entries.find(entry=>entry.name.toLowerCase()==='meta.xml'),rootPrefix='';
     if(!meta){
-      const nested=entries.filter(x=>x.name.toLowerCase().endsWith('/meta.xml'));
+      const nested=entries.filter(entry=>entry.name.toLowerCase().endsWith('/meta.xml'));
       if(nested.length===1){
         rootPrefix=nested[0].name.slice(0,nested[0].name.lastIndexOf('/')+1);
-        if(!entries.every(x=>x.name.startsWith(rootPrefix)))throw new Error('El ZIP mezcla archivos de varios resources. Sube un único resource MTA:SA.');
+        if(!entries.every(entry=>entry.name.startsWith(rootPrefix)))throw new Error('El ZIP mezcla archivos de varios resources. Sube un único resource MTA:SA.');
+      }else if(nested.length>1){
+        throw new Error('El ZIP contiene varios meta.xml. Sube un único resource MTA:SA.');
       }
     }
     const scriptMap=new Map();
     if(meta||rootPrefix){
-      const metaEntry=meta||entries.find(x=>x.name.toLowerCase()===rootPrefix.toLowerCase()+'meta.xml');
+      const metaEntry=meta||entries.find(entry=>entry.name.toLowerCase()===rootPrefix.toLowerCase()+'meta.xml');
       if(metaEntry){
         const xml=new DOMParser().parseFromString(await metaEntry.async('string'),'application/xml');
-        if(xml.querySelector('parsererror'))throw new Error('meta.xml no contiene XML válido.');
+        if(xml.querySelector('parsererror')||xml.documentElement?.tagName.toLowerCase()!=='meta')throw new Error('meta.xml no contiene un XML válido de MTA:SA.');
         for(const node of xml.querySelectorAll('script')){
-          let path=String(node.getAttribute('src')||'').split(String.fromCharCode(92)).join('/');if(path.startsWith('./'))path=path.slice(2);
+          const path=String(node.getAttribute('src')||'').split(String.fromCharCode(92)).join('/').replace(/^\.\//,'');
           if(path)scriptMap.set(path,(node.getAttribute('type')||'server').toLowerCase());
         }
       }
     }
     const files=entries.map(entry=>{
-      const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),relative=rootPrefix&&path.startsWith(rootPrefix)?path.slice(rootPrefix.length):path,script=scriptMap.get(relative);
-      const lua=lower.endsWith('.lua'),leaf=lower.slice(lower.lastIndexOf('/')+1),base=leaf.includes('.')?leaf.slice(0,leaf.lastIndexOf('.')):leaf,configExt=['xml','json','ini','cfg','conf','yaml','yml'].includes(ext),namedConfig=['config','settings','shared','language','locale'].some(prefix=>base.startsWith(prefix)),config=configExt||(namedConfig&&['lua','xml','json','ini','cfg','conf','yaml','yml'].includes(ext));
+      const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop();
+      const relative=rootPrefix&&path.startsWith(rootPrefix)?path.slice(rootPrefix.length):path;
+      const script=scriptMap.get(relative),lua=lower.endsWith('.lua');
+      const config=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
       const server=lua&&script==='server'&&!config,clientSide=lua&&script==='client'&&!config,shared=lua&&script==='shared';
       const shader=['fx','hlsl','glsl'].includes(ext);
       return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:server?'server_lua':(clientSide?'client_lua':(shared?'shared_lua':(config?'config':(lua?'lua_other':(shader?'shader':'file')))))};
     });
     return {zip,entries,files,expanded,metaPath:meta?.name||(rootPrefix+'meta.xml'),rootPrefix,
-      server:files.filter(x=>x.kind==='server_lua'),client:files.filter(x=>x.kind==='client_lua'),
-      luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
+      server:files.filter(entry=>entry.kind==='server_lua'),client:files.filter(entry=>entry.kind==='client_lua'),
+      luaCount:files.filter(entry=>entry.path.toLowerCase().endsWith('.lua')).length};
   }
 
   function setProductZipStatus(text,state='info'){
