@@ -276,7 +276,7 @@
 
   function ensureOwnedProductsTab(){
     const tabs=document.querySelector('.profile-tabs');
-    if(!tabs||tabs.querySelector('[data-dripx-owned-products]'))return;
+    if(!tabs||tabs.querySelector('[data-dripx-owned-products],[data-profile-tab="productos"]'))return;
     const button=document.createElement('button');
     button.type='button';button.className='tab';button.dataset.dripxOwnedProducts='true';button.textContent='Productos';
     const license=tabs.querySelector('[data-profile-tab="licencia"]');
