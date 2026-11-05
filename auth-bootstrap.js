@@ -4,6 +4,90 @@
   const cleanCallback = () => history.replaceState(null, '', location.pathname + (location.hash || '#inicio'));
   const clearLock = () => { try { localStorage.removeItem(LOCK); } catch (_) {} };
   const originalCreate = window.supabase?.createClient;
+  const CONFIG = window.DRIPX_CONFIG || {};
+  const SUPABASE_URL = String(CONFIG.supabaseUrl || '').replace(/\\/$/, '');
+  const SUPABASE_KEY = String(CONFIG.supabaseKey || CONFIG.publishableKey || '');
+  const nativeFetch = window.fetch.bind(window);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const parseBody = value => {
+    if (typeof value !== 'string') return {};
+    try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {}; } catch (_) { return {}; }
+  };
+  const sendLog = async (token, event, details = {}) => {
+    if (!token || !SUPABASE_URL || !SUPABASE_KEY) return;
+    try {
+      await nativeFetch(SUPABASE_URL + '/functions/v1/dripx-discord-logs', {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ event, details }),
+        signal: AbortSignal.timeout(7000)
+      });
+    } catch (error) { console.warn('[DRIPX] Discord log delivery failed:', error?.message || error); }
+  };
+  if (!window.__dripxLogFetchInstalled && SUPABASE_URL) {
+    window.__dripxLogFetchInstalled = true;
+    window.fetch = async (input, init = {}) => {
+      let requestUrl = '', method = String(init.method || '').toUpperCase(), token = '';
+      try {
+        requestUrl = typeof input === 'string' ? input : input.url;
+        if (!method) method = String(input.method || 'GET').toUpperCase();
+        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+        token = String(headers.get('authorization') || '').replace(/^Bearer\\s+/i, '');
+      } catch (_) {}
+      let url;
+      try { url = new URL(requestUrl, location.href); } catch (_) {}
+      if (url?.origin === SUPABASE_URL && url.pathname === '/auth/v1/logout' && token) {
+        void sendLog(token, 'logout');
+      }
+      const response = await nativeFetch(input, init);
+      if (!response.ok || url?.origin !== SUPABASE_URL) return response;
+      if (url.pathname === '/auth/v1/token') {
+        try { const data = await response.clone().json(); if (data?.access_token) void sendLog(data.access_token, 'login'); } catch (_) {}
+        return response;
+      }
+      if (!token || !url.pathname.startsWith('/rest/v1/') && !url.pathname.startsWith('/functions/v1/')) return response;
+      const path = url.pathname.replace('/rest/v1/', '');
+      const body = parseBody(init.body);
+      const first = Array.isArray(body) ? (body[0] || {}) : body;
+      const idFromQuery = String(url.searchParams.get('id') || '').replace(/^eq\./, '');
+      const uuidOrEmpty = value => UUID_RE.test(String(value || '')) ? String(value) : '';
+      const fire = (event, details) => { if (event) void sendLog(token, event, details); };
+      if (path === 'rpc/dripx_claim_free_product') {
+        const productId = uuidOrEmpty(first.p_product_id);
+        if (productId) fire('free_product_claimed', { product_id: productId });
+      } else if (path === 'rpc/dripx_create_order') {
+        try {
+          const orderId = uuidOrEmpty(await response.clone().json());
+          if (orderId) fire('order_created', { order_id: orderId });
+        } catch (_) {}
+      } else if (path === 'rpc/dripx_admin_approve_order') {
+        const orderId = uuidOrEmpty(first.p_order_id);
+        if (orderId) fire('payment_approved', { order_id: orderId });
+      } else if (path === 'rpc/dripx_admin_reject_order') {
+        const orderId = uuidOrEmpty(first.p_order_id);
+        if (orderId) fire('payment_rejected', { order_id: orderId });
+      } else if (path === 'tickets' && method === 'POST') {
+        try { const row = await response.clone().json(); const ticket = Array.isArray(row) ? row[0] : row; const ticketId = uuidOrEmpty(ticket?.id); if (ticketId) fire('ticket_created', { ticket_id: ticketId }); } catch (_) {}
+      } else if (path === 'ticket_messages' && method === 'POST') {
+        const ticketId = uuidOrEmpty(first.ticket_id);
+        if (ticketId) fire('ticket_message', { ticket_id: ticketId });
+      } else if (path === 'payment_proofs' && method === 'POST') {
+        const orderId = uuidOrEmpty(first.order_id);
+        if (orderId) fire('payment_proof', { order_id: orderId });
+      } else if (path === 'dripx_orders' && method === 'PATCH' && first.payment_proof_path) {
+        const orderId = uuidOrEmpty(idFromQuery);
+        if (orderId) fire('payment_proof', { order_id: orderId });
+      } else if (path === 'dripx_products' && method === 'POST') {
+        try { const row = await response.clone().json(); const product = Array.isArray(row) ? row[0] : row; const productId = uuidOrEmpty(product?.id); if (productId) fire('resource_created', { product_id: productId }); } catch (_) {}
+      } else if (path === 'functions/v1/dripx-lua-compiler' && method === 'POST') {
+        fire('resource_compiled', {});
+      } else if (path === 'tickets' && method === 'DELETE') {
+        const ticketId = uuidOrEmpty(idFromQuery);
+        if (ticketId) await sendLog(token, 'ticket_deleted', { ticket_id: ticketId });
+      }
+      return response;
+    };
+  }
   // Both the app and the visual enhancements create a Supabase client. Share one
   // OAuth code-exchange promise so the PKCE verifier is consumed only once.
   let callbackExchange = null;
