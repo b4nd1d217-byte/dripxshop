@@ -25,7 +25,7 @@
     const metaText=await meta.async('string');
     const parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
-    const normalizePath=v=>String(v||'').replace(/\\/g,'/').replace(/^\.\//,'');
+    const normalizePath=v=>String(v||'').replace(/\/g,'/').replace(/^\.\//,'');
     const scripts=[...parsed.querySelectorAll('script')].map(node=>({src:normalizePath(node.getAttribute('src')),originalSrc:String(node.getAttribute('src')||''),type:(node.getAttribute('type')||'server').toLowerCase()}));
     if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
     if(scripts.some(x=>!x.src||x.src.startsWith('/')||x.src.split('/').some(part=>part==='..'||part==='.'||!part)))throw new Error('meta.xml contiene rutas de scripts no válidas.');
@@ -35,7 +35,7 @@
     const scriptByPath=new Map(scripts.map(x=>[x.src,x]));
     const scriptSrcByFile=new Map(scripts.map(x=>[x.src,x.originalSrc]));
     const lua=entries.filter(x=>x.name.toLowerCase().endsWith('.lua'));
-    const server=lua.filter(x=>{const script=scriptByPath.get(x.name),isConfigLua=/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.lua$/i.test(x.name);return script&&script.type!=='client'&&script.type!=='shared'&&!isConfigLua;});
+    const server=lua.filter(x=>{const script=scriptByPath.get(x.name),isConfigLua=/(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(x.name);return script&&script.type!=='client'&&script.type!=='shared'&&!isConfigLua;});
     if(!server.length)throw new Error('No se encontraron Lua de servidor en meta.xml. Los scripts client/shared y shaders se mantienen intactos.');
     state.zipBuild={zip,metaName:meta.name,metaText,entries,lua,server,scriptSrcByFile,selected:new Set(server.map(x=>x.name)),compiled:false,protected:false,rootPrefix};
     const bytes=n=>{n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(2)+' MB';};
