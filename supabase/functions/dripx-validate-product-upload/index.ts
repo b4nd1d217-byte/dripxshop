@@ -247,6 +247,13 @@ async function validateProduct(req: Request) {
       if (script.type === "server") serverCompiledCount++;
     }
   }
+  const sharedLuaSources = new Set(scripts.filter(script => script.type === "shared").map(script => script.src));
+  for (const entry of archiveFiles) {
+    if (!entry.name.toLowerCase().endsWith(".lua")) continue;
+    const configLua = /(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(entry.name);
+    if (configLua || entry.name === "dripx_license.lua" || sharedLuaSources.has(entry.name)) continue;
+    return json(409, { error: "uncompiled_lua_artifact", path: entry.name });
+  }
   const sharedIndex = scripts.findIndex(script => script.src === "dripx_guard_shared.lua" && script.type === "shared");
   const licenseIndex = scripts.findIndex(script => script.src === "dripx_license.lua" && script.type === "server");
   if (sharedIndex < 0 || licenseIndex < 0 || sharedIndex >= licenseIndex) {
