@@ -98,6 +98,6 @@ document.addEventListener('submit',async e=>{
 let timer=0;
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{renderProductReviews();renderAdminReviews();syncCatalogRatings(false).catch(err=>console.warn('[DRIPX] catalog ratings',err));},180);}
 window.addEventListener('hashchange',schedule);
-function boot(){const app=$('#app');if(app){const observer=new MutationObserver(()=>{if(/^#producto\/[0-9a-f-]{36}/i.test(location.hash)||/^#admin(?:\/|$)/i.test(location.hash))schedule();});observer.observe(app,{childList:true,subtree:true});}schedule();}
+function boot(){const app=$('#app');if(app){const observer=new MutationObserver(()=>{if(/^#(?:inicio|productos)(?:$|[/?])/i.test(location.hash)||/^#producto\/[0-9a-f-]{36}/i.test(location.hash)||/^#admin(?:\/|$)/i.test(location.hash))schedule();});observer.observe(app,{childList:true,subtree:true});}schedule();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
