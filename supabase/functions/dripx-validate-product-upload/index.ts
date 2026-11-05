@@ -235,7 +235,7 @@ async function validateProduct(req: Request) {
     refs.add(refKey);
     const lower = script.src.toLowerCase();
     const configLua = /(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(script.src);
-    if ((script.type === "server" || script.type === "client") && lower.endsWith(".lua") && !configLua) {
+    if ((script.type === "server" || script.type === "client") && lower.endsWith(".lua") && !configLua && script.src !== "dripx_license.lua") {
       return json(409, { error: "uncompiled_lua_present", path: script.src });
     }
     if ((script.type === "server" || script.type === "client") && lower.endsWith(".luac")) {
