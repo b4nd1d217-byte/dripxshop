@@ -25,7 +25,7 @@
     const metaText=await meta.async('string');
     const parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
-    const normalizePath=v=>String(v||'').replace(/\/g,'/').replace(/^\.\//,'');
+    const normalizePath=v=>{let s=String(v||'').split(String.fromCharCode(92)).join('/');while(s.startsWith('./'))s=s.slice(2);return s;};
     const scripts=[...parsed.querySelectorAll('script')].map(node=>({src:normalizePath(node.getAttribute('src')),originalSrc:String(node.getAttribute('src')||''),type:(node.getAttribute('type')||'server').toLowerCase()}));
     if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
     if(scripts.some(x=>!x.src||x.src.startsWith('/')||x.src.split('/').some(part=>part==='..'||part==='.'||!part)))throw new Error('meta.xml contiene rutas de scripts no válidas.');
