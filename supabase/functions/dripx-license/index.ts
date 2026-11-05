@@ -115,7 +115,21 @@ async function downloadOwnedProduct(req: Request) {
   if (!userResponse.ok) return json(401, { error: "invalid_session" });
   const user = await userResponse.json();
   if (!user?.id) return json(401, { error: "invalid_session" });
-  const raw = await req.json().catch(() => null);
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 4096) return json(413, { error: "request_too_large" });
+  const requestText = await req.text();
+  if (new TextEncoder().encode(requestText).byteLength > 4096) {
+    return json(413, { error: "request_too_large" });
+  }
+  let raw: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(requestText);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      raw = parsed as Record<string, unknown>;
+    }
+  } catch {
+    return json(400, { error: "invalid_request" });
+  }
   const productId = String(raw?.product_id || "");
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(productId)) {
     return json(400, { error: "invalid_product_id" });
@@ -128,7 +142,7 @@ async function downloadOwnedProduct(req: Request) {
       service,
     ),
     readRows(
-      "dripx_entitlements?user_id=eq." + encodeURIComponent(user.id) + "&product_id=eq." + encodeURIComponent(productId) + "&active=eq.true&select=id,order_id&limit=10",
+      "dripx_entitlements?user_id=eq." + encodeURIComponent(user.id) + "&product_id=eq." + encodeURIComponent(productId) + "&active=eq.true&select=id,order_id&limit=100",
       service,
     ),
     readRows(
@@ -136,7 +150,7 @@ async function downloadOwnedProduct(req: Request) {
       service,
     ),
     readRows(
-      "dripx_orders?user_id=eq." + encodeURIComponent(user.id) + "&status=eq.approved&select=id&limit=200",
+      "dripx_orders?user_id=eq." + encodeURIComponent(user.id) + "&status=eq.approved&select=id&limit=1000",
       service,
     ),
     readRows(
@@ -144,7 +158,9 @@ async function downloadOwnedProduct(req: Request) {
       service,
     ),
   ]);
-  if (profiles[0]?.active === false) return json(403, { error: "account_suspended" });
+  if (profiles.length !== 1 || profiles[0]?.active !== true) {
+    return json(403, { error: profiles[0]?.active === false ? "account_suspended" : "account_profile_inactive" });
+  }
   const product = products[0];
   if (!product || !["published", "archived"].includes(String(product.status))) {
     return json(404, { error: "product_not_available" });
@@ -164,6 +180,18 @@ async function downloadOwnedProduct(req: Request) {
 
   const filePath = String(product.file_path || "");
   if (!filePath) return json(409, { error: "protected_file_missing" });
+  const pathParts = filePath.split("/");
+  if (
+    filePath.length > 512
+    || filePath.startsWith("/")
+    || filePath.includes("\\")
+    || /[\u0000-\u001f\u007f]/.test(filePath)
+    || pathParts.length < 2
+    || pathParts.some(part => !part || part === "." || part === "..")
+    || pathParts.some(part => part.length > 180)
+  ) {
+    return json(409, { error: "protected_file_path_invalid" });
+  }
   const accountLicense = await callRpc("dripx_internal_get_account_license", { p_user_id: user.id });
   const licenseKey = String(accountLicense?.license_key || "");
   const aclAccount = String(accountLicense?.authorized_account_name || "");
@@ -183,8 +211,58 @@ async function downloadOwnedProduct(req: Request) {
   const sourceZip = new Uint8Array(await storageResponse.arrayBuffer());
   if (!sourceZip.length || sourceZip.length > 100 * 1024 * 1024) return json(413, { error: "product_file_size_invalid" });
   let zip: JSZip;
-  try { zip = await JSZip.loadAsync(sourceZip, { checkCRC32: true }); }
+  try { zip = await JSZip.loadAsync(sourceZip, { checkCRC32: false }); }
   catch { return json(422, { error: "product_zip_invalid" }); }
+
+  const archiveEntries = Object.values(zip.files);
+  const archiveFiles = archiveEntries.filter(entry => !entry.dir);
+  if (!archiveFiles.length || archiveFiles.length > 3000) {
+    return json(422, { error: "product_zip_file_count_invalid" });
+  }
+  let totalUncompressedBytes = 0;
+  const seenArchivePaths = new Set<string>();
+  for (const entry of archiveEntries) {
+    const info = entry as unknown as {
+      unsafeOriginalName?: string;
+      unixPermissions?: number | string;
+      _data?: { uncompressedSize?: number };
+    };
+    const originalPath = String(info.unsafeOriginalName || entry.name);
+    const pathWithoutDirectorySlash = entry.dir && originalPath.endsWith("/")
+      ? originalPath.slice(0, -1)
+      : originalPath;
+    const segments = pathWithoutDirectorySlash.split("/");
+    if (
+      originalPath !== entry.name
+      || !pathWithoutDirectorySlash
+      || pathWithoutDirectorySlash.startsWith("/")
+      || pathWithoutDirectorySlash.includes("\\")
+      || pathWithoutDirectorySlash.length > 1024
+      || /[\u0000-\u001f\u007f]/.test(pathWithoutDirectorySlash)
+      || segments.some(part => !part || part === "." || part === "..")
+    ) {
+      return json(422, { error: "product_zip_unsafe_path" });
+    }
+    const unixMode = Number(info.unixPermissions || 0);
+    if ((unixMode & 0o170000) === 0o120000) {
+      return json(422, { error: "product_zip_symlink_not_allowed" });
+    }
+    if (!entry.dir) {
+      const normalizedPath = entry.name.toLowerCase();
+      if (seenArchivePaths.has(normalizedPath)) {
+        return json(422, { error: "product_zip_duplicate_path" });
+      }
+      seenArchivePaths.add(normalizedPath);
+      const size = Number(info._data?.uncompressedSize);
+      if (!Number.isSafeInteger(size) || size < 0 || size > 200 * 1024 * 1024) {
+        return json(413, { error: "product_zip_entry_size_invalid" });
+      }
+      totalUncompressedBytes += size;
+      if (totalUncompressedBytes > 200 * 1024 * 1024) {
+        return json(413, { error: "product_zip_expanded_size_invalid" });
+      }
+    }
+  }
 
   const findByBasename = (name: string) => Object.values(zip.files).filter(entry =>
     !entry.dir && entry.name.split("/").pop()?.toLowerCase() === name.toLowerCase()
@@ -196,6 +274,17 @@ async function downloadOwnedProduct(req: Request) {
     return json(409, { error: "license_guard_files_incomplete", message: "El ZIP no incluye de forma única el módulo de licencia, la marca shared y meta.xml. Vuelve a proteger el producto." });
   }
   const licenseEntry = licenseEntries[0], sharedEntry = sharedEntries[0], metaEntry = metaEntries[0];
+  const rootOf = (name: string) => name.includes("/") ? name.slice(0, name.lastIndexOf("/") + 1) : "";
+  if (new Set([licenseEntry.name, sharedEntry.name, metaEntry.name].map(rootOf)).size !== 1) {
+    return json(409, { error: "license_guard_files_root_mismatch" });
+  }
+  const entrySize = (entry: typeof licenseEntry) =>
+    Number((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize || 0);
+  if (entrySize(licenseEntry) > 2 * 1024 * 1024
+      || entrySize(sharedEntry) > 512 * 1024
+      || entrySize(metaEntry) > 2 * 1024 * 1024) {
+    return json(413, { error: "license_guard_metadata_too_large" });
+  }
   const template = await licenseEntry.async("string");
   const sharedSource = await sharedEntry.async("string");
   const metaText = await metaEntry.async("string");
@@ -235,6 +324,9 @@ async function downloadOwnedProduct(req: Request) {
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
+  if (output.byteLength > 220 * 1024 * 1024) {
+    return json(413, { error: "personalized_zip_output_too_large" });
+  }
   const safeName = String(product.title || "DRIPX-resource").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 64) || "DRIPX-resource";
   return new Response(output, {
     status: 200,
