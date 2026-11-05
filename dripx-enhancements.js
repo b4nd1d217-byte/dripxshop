@@ -273,12 +273,51 @@
     }
   },true);
 
+  function ensureOwnedProductsTab(){
+    const tabs=document.querySelector('.profile-tabs');
+    if(!tabs||tabs.querySelector('[data-dripx-owned-products]'))return;
+    const button=document.createElement('button');
+    button.type='button';button.className='tab';button.dataset.dripxOwnedProducts='true';button.textContent='Productos';
+    const license=tabs.querySelector('[data-profile-tab="licencia"]');
+    tabs.insertBefore(button,license||null);
+  }
+  async function renderOwnedProducts(){
+    const host=document.querySelector('.profile-content');
+    if(!host||!client)throw new Error('No se encontró el panel de usuario.');
+    const {data:{session},error:sessionError}=await client.auth.getSession();
+    if(sessionError)throw sessionError;
+    if(!session?.user?.id)throw new Error('Inicia sesión con Discord para consultar tus productos.');
+    const {data,error}=await client.from('dripx_entitlements')
+      .select('id,product_id,granted_at,dripx_products(id,title,description,product_type,file_path,price_usd)')
+      .eq('user_id',session.user.id).eq('active',true).order('granted_at',{ascending:false});
+    if(error)throw error;
+    const optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
+    const cards=(data||[]).map(row=>{
+      const p=Array.isArray(row.dripx_products)?row.dripx_products[0]:row.dripx_products;
+      if(!p)return '';
+      const downloadable=p.product_type==='resource'&&!!p.file_path;
+      return '<article class="order-card"><header><div><strong>'+escapeHtml(p.title||'Producto')+'</strong><br><small class="muted">'+(Number(p.price_usd)===0?'Acceso gratuito':'Acceso habilitado')+' · '+(row.granted_at?new Date(row.granted_at).toLocaleDateString('es-DO'):'')+'</small></div><span class="status approved">Activo</span></header><p class="muted">'+escapeHtml(p.description||'')+'</p>'+(downloadable?'<div class="order-actions"><button type="button" class="btn primary" data-download="'+escapeHtml(p.id)+'">Descargar</button></div>':'<small class="muted">Plan o acceso activo en tu cuenta.</small>')+'</article>';
+    }).filter(Boolean).join('');
+    host.innerHTML=(cards||'<div class="empty">Todavía no tienes productos habilitados. Los productos gratuitos que obtengas y las compras aprobadas aparecerán aquí.</div>');
+    if(optin)host.append(optin);
+    document.querySelectorAll('.profile-tabs .tab').forEach(x=>x.classList.toggle('active',x.hasAttribute('data-dripx-owned-products')));
+    ensureButtonIcons(host);
+  }
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-dripx-owned-products]');
+    if(!button)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    try{await renderOwnedProducts();}catch(error){console.error('[DRIPX] Products panel:',error);toast(error.message||'No se pudieron cargar tus productos.');}
+  },true);
+
   const cssObserver=new MutationObserver(()=>{
     replaceIcons();ensureButtonIcons();applyBrandLogo();
     if(document.querySelector('#resource-zip'))ensureStagePanel();
+    if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
     replaceIcons();ensureButtonIcons();applyBrandLogo();
+    if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
