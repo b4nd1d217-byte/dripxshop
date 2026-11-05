@@ -1,1 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 350"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".48" stop-color="#8d8d8d"/><stop offset=".7" stop-color="#fff"/><stop offset="1" stop-color="#555"/></linearGradient></defs><rect width="900" height="350" fill="#050505"/><g fill="#fff" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="132" text-anchor="middle"><text x="210" y="210">DRIP</text><text x="690" y="210">SHOP</text></g><path d="M330 18 L450 150 L570 18 L625 18 L480 178 L625 320 L570 320 L450 206 L330 320 L275 320 L420 178 L275 18Z" fill="url(#m)"/><text x="450" y="342" fill="#fff" font-family="Arial,sans-serif" font-size="24" letter-spacing="18" text-anchor="middle">STORE</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
+  <title id="title">DRIP X SHOP</title><desc id="desc">Crown emblem and DRIP X SHOP wordmark, transparent background</desc>
+  <defs>
+    <linearGradient id="crown" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8beaff"/><stop offset=".52" stop-color="#00c7ff"/><stop offset="1" stop-color="#2477ff"/></linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9fb8c8"/></linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7" result="blur"/><feColorMatrix in="blur" type="matrix" values="0 0 0 0 0 0 0 0 0 0.78 0 0 0 0 1 0 0 0 .6 0" result="tint"/><feMerge><feMergeNode in="tint"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g transform="translate(380 8)" filter="url(#glow)">
+    <path d="M-112 62 -142 14 -82 42 -44 -6 0 34 44 -6 82 42 142 14 112 62 94 88H-94Z" fill="url(#crown)" stroke="#a3edff" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M-88 72H88M-104 96H104" stroke="#00c7ff" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="-142" cy="12" r="9" fill="#d7f9ff"/><circle cx="-44" cy="-7" r="9" fill="#d7f9ff"/><circle cx="44" cy="-7" r="9" fill="#d7f9ff"/><circle cx="142" cy="12" r="9" fill="#d7f9ff"/>
+  </g>
+  <text x="380" y="190" fill="url(#word)" font-family="Arial,Helvetica,sans-serif" font-size="93" font-weight="900" letter-spacing="8" text-anchor="middle">DRIP X</text>
+  <path d="M170 213H590" stroke="#00c7ff" stroke-width="3" opacity=".9"/>
+  <text x="380" y="268" fill="#00c7ff" font-family="Arial,Helvetica,sans-serif" font-size="39" font-weight="700" letter-spacing="23" text-anchor="middle">SHOP</text>
+</svg>
