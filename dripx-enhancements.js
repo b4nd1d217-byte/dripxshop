@@ -195,9 +195,10 @@
     }
     const files=entries.map(entry=>{
       const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),script=scriptMap.get(rootPrefix?path.slice(rootPrefix.length):path);
-      const isLua=lower.endsWith('.lua'),isServer=isLua&&script!=='client'&&script!=='shared'&&script!==undefined;
-      const isShader=['fx','hlsl','glsl'].includes(ext),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
-      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isLua?'lua_other':(isShader?'shader':(isConfig?'config':'file'))),script_type:script||null};
+      const isLua=lower.endsWith('.lua'),isConfig=/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
+      const isServer=isLua&&script!=='client'&&script!=='shared'&&script!==undefined&&!isConfig;
+      const isShader=['fx','hlsl','glsl'].includes(ext);
+      return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))),script_type:script||null};
     });
     const server=files.filter(x=>x.kind==='server_lua').map(x=>rootPrefix?x.path.slice(rootPrefix.length):x.path);
     return {zip,entries,files,expanded,metaPath:meta?.name||null,rootPrefix,server,luaCount:files.filter(x=>x.path.toLowerCase().endsWith('.lua')).length};
