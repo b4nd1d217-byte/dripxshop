@@ -142,3 +142,8 @@
 .dx-route-back:focus-visible{outline:2px solid #00c7ff;outline-offset:3px}
 .dx-route-back svg{width:17px;height:17px;flex:none}
 @media(max-width:640px){.dx-route-back{min-height:40px;margin-bottom:14px}}
+
+
+/* Keep modal surfaces above the sticky header (visual-system sets header z-index: 1000). */
+#overlay,.overlay{z-index:1100!important}
+#cart,.cart{z-index:1200!important}
