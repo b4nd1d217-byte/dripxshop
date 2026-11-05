@@ -36,12 +36,12 @@ export async function patchApp(source) {
   once('name="price_usd" type="number" min="0.01" step="0.01"',
        'name="price_usd" type="number" min="0" step="0.01"', 'zero price inputs', true);
 
-  once("p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en tu cuenta.'",
-       "Number(p.price_usd)===0?'Este producto es gratuito. Al obtenerlo, se habilita en Mi cuenta > Productos.':(p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en tu cuenta.')",
+  once("p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en Mi cuenta > Licencia.'",
+       "Number(p.price_usd)===0?'Este producto es gratuito. Al obtenerlo, aparecerá en Mi cuenta > Licencia.':(p.product_type==='plan'?'El plan se activa en tu cuenta cuando administración confirma el pago.':'Una vez verificado el pago, administración habilita la descarga segura en tu cuenta.')",
        'free product detail text');
 
   once("if(b.hasAttribute('data-add')){const id=b.dataset.add;",
-       "if(b.hasAttribute('data-claim-free')){const id=b.dataset.claimFree;if(!state.user){toast('Inicia sesión con Discord para obtener este producto gratis.');await db.auth.signInWithOAuth({provider:'discord',options:{redirectTo:location.origin+'/#producto/'+id}});return;}const result=await call(db.rpc('dripx_claim_free_product',{p_product_id:id}));if(!result?.ok)throw new Error('No se pudo confirmar la entrega del producto.');toast(result?.already_owned?'Este producto ya estaba en tu cuenta.':'Producto gratuito añadido a tu cuenta.');window.__DRIPX_CATALOG_OWNERSHIP_REFRESH=true;window.dispatchEvent(new CustomEvent('dripx:ownership-changed'));location.hash='#productos';return;}if(b.hasAttribute('data-add')){const id=b.dataset.add;",
+       "if(b.hasAttribute('data-claim-free')){const id=b.dataset.claimFree;if(!state.user){toast('Inicia sesión con Discord para obtener este producto gratis.');await db.auth.signInWithOAuth({provider:'discord',options:{redirectTo:location.origin+'/#producto/'+id}});return;}const {data:{session},error:sessionError}=await db.auth.getSession();if(sessionError)throw sessionError;if(!session?.access_token)throw new Error('Tu sesión de Discord expiró. Vuelve a iniciar sesión.');const config=window.DRIPX_CONFIG||{};const membershipResponse=await fetch(String(config.supabaseUrl)+'/functions/v1/dripx-discord-membership',{method:'POST',headers:{apikey:config.supabaseKey||config.publishableKey,authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:'{}'});const membership=await membershipResponse.json().catch(()=>({}));if(!membershipResponse.ok||membership.member!==true)throw new Error(membership.message||'No se pudo verificar tu acceso al servidor oficial de Discord.');const result=await call(db.rpc('dripx_claim_free_product',{p_product_id:id}));if(!result?.ok)throw new Error('No se pudo confirmar la entrega del producto.');toast(result?.already_owned?'Este producto ya estaba en tu cuenta.':'Producto gratuito añadido a tu cuenta.');window.__DRIPX_CATALOG_OWNERSHIP_REFRESH=true;window.dispatchEvent(new CustomEvent('dripx:ownership-changed'));location.hash='#productos';return;}if(b.hasAttribute('data-add')){const id=b.dataset.add;",
        'free claim RPC');
 
   const profileOld = "}else{const lic=await call(db.rpc('customer_get_or_issue_account_license'));";
@@ -52,7 +52,7 @@ export async function patchApp(source) {
   const tabLicense = D + "tab==='licencia'?'active':''}";
   const tabProducts = D + "tab==='productos'?'active':''}";
   const oldTabs = '<button class="tab ' + tabInvoices + '" data-profile-tab="facturas">▤ Facturas</button><button class="tab ' + tabLicense + '" data-profile-tab="licencia">🔑 Licencia</button>';
-  const newTabs = '<button class="tab ' + tabInvoices + '" data-profile-tab="facturas">▤ Facturas</button><button class="tab ' + tabProducts + '" data-profile-tab="productos">Productos</button><button class="tab ' + tabLicense + '" data-profile-tab="licencia">🔑 Licencia</button>';
+  const newTabs = oldTabs;
   if (app.includes(oldTabs)) once(oldTabs, newTabs, 'profile products tab'); else console.warn('DRIPX patch: profile products tab already present or source layout differs; skipping optional tab injection.');
 
   once("await call(db.storage.from('product-files').upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'}));",
