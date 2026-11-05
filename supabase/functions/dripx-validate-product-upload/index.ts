@@ -213,7 +213,9 @@ async function validateProduct(req: Request) {
   const tokenMatch = licenseText.match(/local DRIPX_SHARED_GUARD_EXPECTED = "([a-f0-9]{48})"/);
   if (!tokenMatch || !licenseText.includes("DRIPX_PRODUCT_ID_PLACEHOLDER")
       || !licenseText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-      || !licenseText.includes("DRIPX_ACL_ACCOUNT_PLACEHOLDER")) {
+      || !licenseText.includes("DRIPX_ACL_ACCOUNT_PLACEHOLDER")
+      || !licenseText.includes('addEvent("dripx:license:ready", false)')
+      || !licenseText.includes('triggerEvent("dripx:license:ready", resourceRoot)')) {
     return json(409, { error: "dripx_license_template_invalid" });
   }
   if (!sharedText.includes('DRIPX_SHARED_LICENSE_GUARD = "' + tokenMatch[1] + '"')) {
