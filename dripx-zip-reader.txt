@@ -54,7 +54,7 @@
     const configCount=entries.filter(x=>/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(x.name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(x.name.toLowerCase().split('.').pop())).length;
     const shaderCount=entries.filter(x=>['fx','hlsl','glsl'].includes(x.name.toLowerCase().split('.').pop())).length;
     const clientCount=client.length;
-    $('#zip-analysis').innerHTML='<b>ZIP leído correctamente</b><br>'+entries.length+' archivos · '+lua.length+' Lua · '+server.length+' Lua servidor · '+clientCount+' Lua client/shared · '+shaderCount+' shaders · '+configCount+' archivos de configuración'+(rootPrefix?'<br>Carpeta principal normalizada: '+esc(rootPrefix):'');
+    $('#zip-analysis').innerHTML='<b>ZIP leído correctamente</b><br>'+entries.length+' archivos · '+lua.length+' Lua · '+server.length+' Lua servidor · '+clientCount+' Lua client · '+shaderCount+' shaders · '+configCount+' archivos de configuración'+(rootPrefix?'<br>Carpeta principal normalizada: '+esc(rootPrefix):'');
     $('#zip-file-list').innerHTML='<div class="dx-zip-list-head"><strong>Inventario completo del resource</strong><span>'+entries.length+' archivos</span></div>'+rows;
     $('#zip-protect').disabled=false;$('#zip-protect').textContent='Proteger Lua';$('#zip-compile').disabled=true;$('#zip-download').disabled=true;
     $('#zip-status').textContent='Selecciona los Lua de servidor y client que se compilarán/protegerán. Shared/config, shaders, XML e imágenes se mantienen sin cambiar.';

@@ -357,13 +357,31 @@
     const scope=root.querySelector?.('#app')||root;
     scope.querySelectorAll?.('[data-product-type="plan"],.plan-card,.product-card[data-type="plan"]').forEach(card=>{if(!card.closest('#product-form,.admin-products'))card.setAttribute('data-dripx-plan-art','true');});
   }
+  function installProductZipProtectionGuard(){
+    if(document.documentElement.dataset.dripxZipGuard==='1')return;
+    document.documentElement.dataset.dripxZipGuard='1';
+    document.addEventListener('submit',event=>{
+      const form=event.target;
+      if(!form||form.id!=='product-form')return;
+      const input=form.querySelector('input[name="file"]');
+      const file=input?.files?.[0];
+      if(!file||!/\.zip$/i.test(file.name))return;
+      const processed=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
+      if(!processed||!/-DRIPX-protegido\.zip$/i.test(file.name)){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const message='No se publicó el producto: primero analiza, compila y protege el ZIP en el panel de subida.';
+        if(typeof toast==='function')toast(message);else console.warn('[DRIPX]',message);
+      }
+    },true);
+  }
   const cssObserver=new MutationObserver(()=>{
     replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();
     if(document.querySelector('#resource-zip'))ensureStagePanel();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();applyPlanCardSkin();installProductZipProtectionGuard();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
