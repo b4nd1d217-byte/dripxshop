@@ -658,11 +658,12 @@
   let planResourceTimer=0,planResourceLoading=false;
   function schedulePlanResourceManager(){
     clearTimeout(planResourceTimer);
+    if(window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
     planResourceTimer=setTimeout(()=>{void renderPlanResourceManager();},150);
   }
   async function renderPlanResourceManager(){
     let panel=document.querySelector('#dx-plan-resource-manager');
-    if(!isAdminProductsRoute()||!client){panel?.remove();return;}
+    if(!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
     if(planResourceLoading||panel?.dataset.loaded==='1')return;
     planResourceLoading=true;
     try{
@@ -728,7 +729,7 @@
     const app=document.querySelector('#app');if(!app||app.dataset.dxPlanResourceObserver==='1')return;
     app.dataset.dxPlanResourceObserver='1';
     const observer=new MutationObserver(()=>{
-      if(isAdminProductsRoute()){
+      if(isAdminProductsRoute()&&window.DRIPX_IS_ADMIN===true){
         const panel=document.querySelector('#dx-plan-resource-manager');
         if(!panel||panel.dataset.loaded!=='1')schedulePlanResourceManager();
       }else document.querySelector('#dx-plan-resource-manager')?.remove();
