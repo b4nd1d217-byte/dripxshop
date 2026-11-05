@@ -836,14 +836,14 @@
     candidates.forEach(el=>{
       if(el.closest('#product-form,.dx-product-engine,.product-card,.category-filter,.category-manager,.admin-products'))return;
       const label=String(el.getAttribute('aria-label')||el.textContent||el.dataset.adminRoute||el.dataset.adminTab||'').replace(/[\s\n]+/g,' ').trim().toLowerCase();
-      if(!/^(proteger|proteger zip|proteccion zip|protección zip|construir zip)$/.test(label))return;
+      if(!/^(proteger|proteger zip|proteger recurso|proteccion|protección|protection|zip protection|proteccion zip|protección zip|construir zip)$/.test(label))return;
       const adminShell=el.closest('.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu');
       if(!adminShell)return;
       const item=el.closest('li,.admin-nav-item,.admin-menu-item,.admin-tab-item')||el;
       item.remove();
     });
     const route=String(location.hash||'').toLowerCase();
-    if(/^#admin(?:\/|$)/.test(route)&&/(proteger|proteger-zip|construir-zip)/.test(route))location.hash='#admin/productos';
+    if(/^#admin(?:\/|$)/.test(route)&&/(proteger|proteger-zip|proteccion|protección|proteger-recurso|construir-zip|protection)/.test(route))location.hash='#admin/productos';
   }
   let catalogOwnershipPromise=null,catalogOwnershipAt=0,catalogOwnershipUser='';
   async function syncCatalogOwnership(force=false){
