@@ -759,7 +759,7 @@
       panel=document.createElement('section');panel.id='dx-admin-overview';panel.className='dx-admin-overview';
       app.prepend(panel);
     }
-    if(adminOverviewPromise)return adminOverviewPromise;
+    if(adminOverviewPromise)return adminOverviewPromise.catch(()=>{});
     if(!force&&panel.dataset.loaded==='true'&&Date.now()-adminOverviewAt<60000)return;
     panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Datos en vivo de tu tienda</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Actualizar</button></div><div class="dx-admin-loading">Sincronizando información de administración…</div>';
     adminOverviewPromise=(async()=>{
