@@ -118,7 +118,7 @@
   }
   function applyBrandLogo(){
     const src='/assets/logo.svg';
-    const favicon=src+'?v=20261105-22';
+    const favicon=src+'?v=20261105-24';
     document.querySelectorAll('img[src="/assets/logo.svg"],img[src^="/assets/logo.svg"],img.hero-logo').forEach(img=>{
       img.decoding='async';img.loading='eager';img.alt='DRIP X SHOP';
     });
@@ -161,7 +161,7 @@
     const {data:{session},error}=await client.auth.getSession();if(error)throw error;
     if(!session?.user?.id||!session.access_token)throw new Error('Tu sesión expiró. Inicia sesión con Discord de nuevo.');
     const {data:admin,error:adminError}=await client.rpc('dripx_is_admin');if(adminError)throw adminError;
-    if(admin!==true)throw new Error('Solo administración puede guardar ZIPs en el área de protección.');
+    if(admin!==true)throw new Error('Solo administración puede proteger recursos desde Productos.');
     return session;
   }
   function tusUpload(bucket,path,file,onProgress){
@@ -658,11 +658,12 @@
   let planResourceTimer=0,planResourceLoading=false;
   function schedulePlanResourceManager(){
     clearTimeout(planResourceTimer);
+    if(window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
     planResourceTimer=setTimeout(()=>{void renderPlanResourceManager();},150);
   }
   async function renderPlanResourceManager(){
     let panel=document.querySelector('#dx-plan-resource-manager');
-    if(!isAdminProductsRoute()||!client){panel?.remove();return;}
+    if(!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
     if(planResourceLoading||panel?.dataset.loaded==='1')return;
     planResourceLoading=true;
     try{
@@ -728,7 +729,7 @@
     const app=document.querySelector('#app');if(!app||app.dataset.dxPlanResourceObserver==='1')return;
     app.dataset.dxPlanResourceObserver='1';
     const observer=new MutationObserver(()=>{
-      if(isAdminProductsRoute()){
+      if(isAdminProductsRoute()&&window.DRIPX_IS_ADMIN===true){
         const panel=document.querySelector('#dx-plan-resource-manager');
         if(!panel||panel.dataset.loaded!=='1')schedulePlanResourceManager();
       }else document.querySelector('#dx-plan-resource-manager')?.remove();
@@ -744,18 +745,21 @@
     const app=document.querySelector('#app');if(!app)return;
     const active=isAdminRoute();
     app.classList.toggle('dx-admin-view',active);
-    if(!active)document.querySelector('#dx-admin-overview')?.remove();
+    if(!active||window.DRIPX_IS_ADMIN!==true)document.querySelector('#dx-admin-overview')?.remove();
     else refreshAdminOverview(false);
   }
   async function refreshAdminOverview(force=false){
     const app=document.querySelector('#app');
-    if(!app||!isAdminRoute()||!client)return;
+    if(!app||!isAdminRoute()||!client||window.DRIPX_IS_ADMIN!==true){
+      document.querySelector('#dx-admin-overview')?.remove();
+      return;
+    }
     let panel=document.querySelector('#dx-admin-overview');
     if(!panel){
       panel=document.createElement('section');panel.id='dx-admin-overview';panel.className='dx-admin-overview';
       app.prepend(panel);
     }
-    if(adminOverviewPromise)return adminOverviewPromise;
+    if(adminOverviewPromise)return adminOverviewPromise.catch(()=>{});
     if(!force&&panel.dataset.loaded==='true'&&Date.now()-adminOverviewAt<60000)return;
     panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Datos en vivo de tu tienda</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Actualizar</button></div><div class="dx-admin-loading">Sincronizando información de administración…</div>';
     adminOverviewPromise=(async()=>{
@@ -792,7 +796,11 @@
     })();
     try{await adminOverviewPromise;}catch(error){
       panel=document.querySelector('#dx-admin-overview');
-      if(panel)panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>No se pudo sincronizar el panel</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Reintentar</button></div><p class="dx-admin-error">'+escapeHtml(error.message||'Error al consultar los datos administrativos.')+'</p>';
+      if(panel){
+        panel.dataset.loaded='true';
+        adminOverviewAt=Date.now();
+        panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>No se pudo sincronizar el panel</small></div><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>Reintentar</button></div><p class="dx-admin-error">'+escapeHtml(error.message||'Error al consultar los datos administrativos.')+'</p>';
+      }
       console.warn('[DRIPX] Admin overview:',error);
     }finally{adminOverviewPromise=null;}
   }

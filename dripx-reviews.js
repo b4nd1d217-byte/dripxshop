@@ -16,7 +16,7 @@ async function syncCatalogRatings(force=false){
  if(!force&&Date.now()-ratingLoadedAt<30000)return;
  ratingPromise=(async()=>{
   const {data,error}=await db.from('dripx_reviews').select('product_id,rating').eq('published',true);
-  if(error)throw error;
+  if(error){console.warn('[DRIPX] catalog ratings unavailable:',error.message||error);ratingMap={};ratingLoadedAt=Date.now();return;}
   const map={};
   for(const row of data||[]){const id=String(row.product_id);(map[id]??=[]).push(Number(row.rating)||0);}
   ratingMap=map;ratingLoadedAt=Date.now();
@@ -45,7 +45,7 @@ async function renderProductReviews(){
   root.dataset.ready='false';root.innerHTML='<div class="dx-reviews-loading">Cargando opiniones verificadas…</div>';
   const [{data:{session}},{data:product,error:pe},{data:reviews,error:re}]=await Promise.all([
    db.auth.getSession(),db.from('dripx_products').select('id,title').eq('id',id).maybeSingle(),
-   db.from('dripx_reviews').select('id,user_id,rating,body,public_name,published,created_at,updated_at').eq('product_id',id).eq('published',true).order('created_at',{ascending:false})
+   db.from('dripx_reviews').select('id,rating,body,public_name,published,created_at,updated_at').eq('product_id',id).eq('published',true).order('created_at',{ascending:false})
   ]);
   if(pe)throw pe;if(re)throw re;if(!product){root.remove();return;}
   let mine=null,owned=null;
@@ -56,9 +56,9 @@ async function renderProductReviews(){
    ]);
    if(mr.error)throw mr.error;if(er.error)throw er.error;mine=mr.data;owned=er.data;
   }
-  const visible=[...(mine?.published?[mine]:[]),...(reviews||[]).filter(r=>r.user_id!==session?.user?.id)];
+  const visible=[...(mine?.published?[mine]:[]),...(reviews||[]).filter(r=>r.id!==mine?.id)];
   const avg=visible.length?visible.reduce((s,r)=>s+Number(r.rating||0),0)/visible.length:0;
-  const list=visible.length?visible.map(r=>'<article class="dx-review-card"><div class="dx-review-card-head">'+stars(r.rating)+'<time>'+date(r.created_at)+'</time></div><p>'+esc(r.body)+'</p><small>'+(r.user_id===session?.user?.id?'Tu valoración':(r.public_name?'Cliente de DRIP X SHOP':'Comprador verificado'))+'</small></article>').join(''):'<div class="dx-review-empty"><span class="dx-review-empty-icon">'+starSvg()+'</span><strong>Aún no hay opiniones</strong><p>Comparte tu experiencia con este producto cuando lo tengas en tu cuenta.</p></div>';
+  const list=visible.length?visible.map(r=>'<article class="dx-review-card"><div class="dx-review-card-head">'+stars(r.rating)+'<time>'+date(r.created_at)+'</time></div><p>'+esc(r.body)+'</p><small>'+(r.id===mine?.id?'Tu valoración':(r.public_name?'Cliente de DRIP X SHOP':'Comprador verificado'))+'</small></article>').join(''):'<div class="dx-review-empty"><span class="dx-review-empty-icon">'+starSvg()+'</span><strong>Aún no hay opiniones</strong><p>Comparte tu experiencia con este producto cuando lo tengas en tu cuenta.</p></div>';
   const form=owned?'<form class="dx-review-editor" data-dx-review-form data-product-id="'+esc(id)+'" data-review-id="'+esc(mine?.id||'')+'" data-order-id="'+esc(owned.order_id||'')+'"><div class="dx-review-editor-title"><div><span class="dx-review-kicker">TU EXPERIENCIA</span><h3>'+(mine?'Editar tu valoración':'Valora este producto')+'</h3></div><span class="dx-rating-number" data-dx-rating-label>'+Number(mine?.rating||0)+'/5</span></div><div class="dx-star-picker" data-dx-star-picker data-rating="'+Number(mine?.rating||0)+'">'+[1,2,3,4,5].map(n=>'<button type="button" data-dx-star="'+n+'" aria-label="'+n+' estrellas" class="'+(n<=Number(mine?.rating||0)?'is-selected':'')+'">'+starSvg()+'</button>').join('')+'</div><label class="dx-review-comment">Tu comentario<textarea name="body" rows="4" minlength="10" maxlength="700" required placeholder="Cuéntanos cómo fue tu experiencia…">'+esc(mine?.body||'')+'</textarea></label><label class="dx-review-name"><input type="checkbox" name="public_name" '+(mine?.public_name?'checked':'')+'> Mostrar mi nombre público</label><button type="submit" class="dx-review-submit">'+starSvg()+(mine?'Guardar cambios':'Publicar valoración')+'</button></form>':(session?.user?.id?'<div class="dx-review-gate">Para valorar este producto, primero debes tenerlo habilitado en tu cuenta.</div>':'<div class="dx-review-gate">Inicia sesión con Discord y obtén este producto para publicar una valoración.</div>');
   root.innerHTML='<header class="dx-review-section-head"><div><span class="dx-review-kicker">COMUNIDAD DRIP X</span><h2>Valoraciones del producto</h2><p>Opiniones de clientes con acceso confirmado.</p></div><div class="dx-review-summary">'+stars(avg)+'<strong>'+avg.toFixed(1)+'</strong><small>'+visible.length+' '+(visible.length===1?'valoración':'valoraciones')+'</small></div></header><div class="dx-review-columns"><div class="dx-review-feed">'+list+'</div><aside class="dx-review-compose">'+form+'</aside></div>';
   root.dataset.ready='true';

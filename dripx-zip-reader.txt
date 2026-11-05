@@ -7,9 +7,12 @@
     if(!entries.length)throw new Error('El ZIP no contiene archivos.');
     if(entries.length>3000)throw new Error('El ZIP contiene demasiados archivos (máximo 3.000).');
     if(entries.some(x=>x.name.startsWith('/')||x.name.includes('\\')||x.name.split('/').some(part=>part==='..'||part==='.'||!part)))throw new Error('El ZIP contiene rutas inseguras o inválidas.');
-    const expanded=entries.reduce((n,x)=>n+Number(x._data?.uncompressedSize||0),0);
+    const normalizedSizeByName=new Map();
+    const expanded=entries.reduce((n,x)=>n+Number(normalizedSizeByName.get(x.name)??x._data?.uncompressedSize??x._data?.length??0),0);
     if(expanded>200*1024*1024)throw new Error('El contenido descomprimido supera el límite de seguridad de 200 MB.');
-    let meta=entries.find(x=>x.name.toLowerCase()==='meta.xml');
+    const metaCandidates=entries.filter(x=>x.name.toLowerCase()==='meta.xml'||x.name.toLowerCase().endsWith('/meta.xml'));
+    if(metaCandidates.length>1)throw new Error('El ZIP debe contener un único meta.xml. Se encontraron varios archivos de entrada.');
+    let meta=metaCandidates.find(x=>x.name.toLowerCase()==='meta.xml')||null;
     let rootPrefix='';
     if(!meta){
       const nested=entries.filter(x=>x.name.toLowerCase().endsWith('/meta.xml'));
@@ -17,7 +20,7 @@
         const prefix=nested[0].name.slice(0,nested[0].name.lastIndexOf('/')+1);
         if(!entries.every(x=>x.name.startsWith(prefix)))throw new Error('El ZIP mezcla archivos de varios recursos. Coloca un único resource MTA:SA en la raíz.');
         const normalized=new JSZip();
-        for(const entry of entries){const relative=entry.name.slice(prefix.length);if(relative)normalized.file(relative,entry.async('uint8array'),{date:entry.date,createFolders:false});}
+        for(const entry of entries){const relative=entry.name.slice(prefix.length);if(relative){const data=await entry.async('uint8array');normalizedSizeByName.set(relative,data.byteLength);normalized.file(relative,data,{date:entry.date,createFolders:false});}}
         zip=normalized;rootPrefix=prefix;entries=Object.values(zip.files).filter(x=>!x.dir);meta=entries.find(x=>x.name.toLowerCase()==='meta.xml');
       }
     }
@@ -48,7 +51,7 @@
       const name=entry.name,lower=name.toLowerCase(),script=scriptByPath.get(name),ext=lower.split('.').pop();
       const isServer=server.some(x=>x.name===name),isClient=client.some(x=>x.name===name),isLua=lower.endsWith('.lua'),isShader=['fx','hlsl','glsl'].includes(ext),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(name)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext),isShared=script?.type==='shared',isProtectedLua=isLua&&!isConfig&&!isShared;
       const kind=isConfig?'Configuración':(isShared?'Lua type shared · sin modificar':(isServer?'Lua servidor · protegido':(isClient?'Lua cliente · protegido':(isProtectedLua?'Lua adicional · protegido':(isShader?'Shader':'Archivo')))));
-      const size=bytes(entry._data?.uncompressedSize||0);
+      const size=bytes(normalizedSizeByName.get(name)??entry._data?.uncompressedSize??entry._data?.length??0);
       if(isProtectedLua)return '<label class="zip-file dx-zip-entry"><input type="checkbox" data-zip-lua="'+esc(name)+'" checked><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+'</small></label>';
       return '<div class="zip-file dx-zip-entry dx-zip-static"><span class="dx-zip-name">'+esc(name)+'</span><small class="dx-zip-kind">'+kind+' · '+size+(script?' · '+esc(script.type):'')+'</small></div>';
     }).join('');
