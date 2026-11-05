@@ -482,15 +482,15 @@
     ]);
     for(const result of [entRes,planRes,ordersRes,itemsRes])if(result.error)throw result.error;
     const entitlements=entRes.data||[],allPlans=planRes.data||[];
-    const activePlans=allPlans.filter(p=>p.active===true&&(!p.expires_at||new Date(p.expires_at).getTime()>now));
-    const relevantOrderIds=new Set([...entitlements.map(x=>x.order_id),...allPlans.map(x=>x.order_id)].filter(Boolean).map(String));
-    const orders=(ordersRes.data||[]).filter(x=>relevantOrderIds.has(String(x.id)));
-    const items=(itemsRes.data||[]).filter(x=>relevantOrderIds.has(String(x.order_id)));
+    const orders=ordersRes.data||[],items=itemsRes.data||[];
     window.DRIPX_SET_INVOICE_DATA?.(orders,items);
     const orderMap=new Map(orders.map(x=>[String(x.id),x]));
+    const approvedOrderIds=new Set(orders.filter(order=>order.status==='approved').map(order=>String(order.id)));
+    const orderApproved=orderId=>!orderId||approvedOrderIds.has(String(orderId));
+    const activePlans=allPlans.filter(plan=>plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now)&&orderApproved(plan.order_id));
     const maps=activePlans.length?await client.from('dripx_plan_resources').select('plan_product_id,resource_product_id').in('plan_product_id',[...new Set(activePlans.map(p=>p.product_id))]):{data:[],error:null};
     if(maps.error)throw maps.error;
-    const directRows=entitlements.filter(row=>{const p=Array.isArray(row.dripx_products)?row.dripx_products[0]:row.dripx_products;return !p||p.product_type==='resource';});
+    const directRows=entitlements.filter(row=>orderApproved(row.order_id));
     const directIds=new Set(directRows.map(x=>String(x.product_id))),planSources=new Map();
     for(const m of maps.data||[]){const plan=activePlans.find(p=>String(p.product_id)===String(m.plan_product_id));if(!plan)continue;const id=String(m.resource_product_id);if(!planSources.has(id))planSources.set(id,[]);planSources.get(id).push(plan);}
     const ids=[...new Set([...directIds,...planSources.keys()])];
@@ -507,13 +507,19 @@
     }).join('');
     const planCards=allPlans.map(plan=>{
       const p=Array.isArray(plan.dripx_products)?plan.dripx_products[0]:plan.dripx_products,order=plan.order_id?orderMap.get(String(plan.order_id)):null;
-      const active=plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now);
+      const active=plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now)&&orderApproved(plan.order_id);
       const count=(maps.data||[]).filter(m=>String(m.plan_product_id)===String(plan.product_id)).length;
       const inv=order?.status==='approved'?'<button type="button" class="btn secondary" data-dx-invoice="'+escapeHtml(order.id)+'">'+iconMarkup('file')+' Factura</button>':'<button type="button" class="btn secondary" disabled>'+iconMarkup('file')+' Factura pendiente</button>';
       return '<article class="order-card dx-owned-plan"><header><div><strong>'+escapeHtml(p?.title||plan.plan_code||'Plan')+'</strong><br><small class="muted">Plan adquirido · '+(plan.expires_at?'hasta '+new Date(plan.expires_at).toLocaleDateString('es-DO'):'sin vencimiento')+'</small></div><span class="status '+(active?'approved':'muted')+'">'+(active?'Activo':'Finalizado')+'</span></header><p class="muted">'+escapeHtml(p?.description||'Acceso temporal a recursos seleccionados de la tienda.')+'</p><small class="dx-owned-access">'+count+' recursos incluidos · '+(active?'se revocan al vencer':'acceso no vigente')+'</small><div class="order-actions">'+inv+'</div></article>';
     }).join('');
-    const app=document.querySelector('#app'),optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
-    host.innerHTML='<section class="dx-owned-products-view"><header class="dx-library-heading"><div><span class="dx-eyebrow">BIBLIOTECA PERSONAL</span><h2>Productos autorizados</h2><p>Compras individuales y recursos incluidos en tus planes vigentes.</p></div><span>'+((productRes.data||[]).length)+' recursos</span></header>'+(planCards?'<section class="dx-owned-plan-list"><h3>Tus planes</h3>'+planCards+'</section>':'')+(resources?'<section class="dx-owned-resource-list"><h3>Recursos disponibles</h3><div class="dx-owned-resource-grid">'+resources+'</div></section>':'<div class="empty">No tienes recursos autorizados ahora mismo. Tus compras y los recursos de planes activos aparecerán aquí.</div>')+'</section>';
+    const purchaseHistory=orders.map(order=>{
+      const lines=items.filter(item=>String(item.order_id)===String(order.id));
+      const approved=order.status==='approved';
+      const invoice=approved?'<button type="button" class="btn secondary" data-dx-invoice="'+escapeHtml(order.id)+'">'+iconMarkup('file')+' Factura</button>':'<button type="button" class="btn secondary" disabled>'+iconMarkup('file')+' Factura al aprobarse</button>';
+      return '<article class="order-card dx-owned-order"><header><div><strong>Pedido '+escapeHtml(String(order.id).slice(0,8).toUpperCase())+'</strong><br><small class="muted">'+(order.created_at?new Date(order.created_at).toLocaleDateString('es-DO'):'')+'</small></div><span class="status '+(approved?'approved':'')+'">'+escapeHtml(order.status||'pendiente')+'</span></header><p class="muted">'+(lines.length?lines.map(line=>escapeHtml(line.product_title||'Producto')).join(' · '):'Compra digital DRIP X SHOP')+' · '+new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(order.total)||0)+'</p><div class="order-actions">'+invoice+'</div></article>';
+    }).join('');
+    const optin=host.querySelector('.leaderboard-optin')?.cloneNode(true);
+    host.innerHTML='<section class="dx-owned-products-view"><header class="dx-library-heading"><div><span class="dx-eyebrow">BIBLIOTECA PERSONAL</span><h2>Productos autorizados</h2><p>Compras individuales y recursos incluidos en tus planes vigentes.</p></div><span>'+((productRes.data||[]).length)+' recursos</span></header>'+(planCards?'<section class="dx-owned-plan-list"><h3>Tus planes</h3>'+planCards+'</section>':'')+(resources?'<section class="dx-owned-resource-list"><h3>Recursos disponibles</h3><div class="dx-owned-resource-grid">'+resources+'</div></section>':'<div class="empty">No tienes recursos autorizados ahora mismo. Tus compras y los recursos de planes activos aparecerán aquí.</div>')+(purchaseHistory?'<section class="dx-owned-order-history"><h3>Historial de compras</h3>'+purchaseHistory+'</section>':'')+'</section>';
     if(optin)host.append(optin);ensureOwnedProductsTab();
     document.querySelectorAll('.profile-tabs .tab').forEach(x=>x.classList.toggle('active',x.hasAttribute('data-dripx-owned-products')));
     ensureButtonIcons(host);
@@ -821,7 +827,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);ensureResourceNameField(document.querySelector('#product-form'));clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
