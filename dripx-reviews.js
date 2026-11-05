@@ -41,6 +41,7 @@ async function renderProductReviews(){
 }
 async function renderAdminReviews(){
  if(!db||!/^#admin(?:\/|$)/i.test(location.hash)){$('#dx-admin-review-center')?.remove();return;}
+ if($('#dx-admin-review-center')?.dataset.ready==='true')return;
  if(adminBusy)return;adminBusy=true;
  try{
   const {data:isAdmin,error:authErr}=await db.rpc('dripx_is_admin');if(authErr||isAdmin!==true){$('#dx-admin-review-center')?.remove();return;}
