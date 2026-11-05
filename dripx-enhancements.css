@@ -134,3 +134,11 @@
  .dx-owned-order .order-actions{justify-content:stretch}
  .dx-owned-order .order-actions .btn{flex:1}
 }
+
+
+/* Route navigation: premium back action for Products, Help and product details. */
+.dx-route-back{display:inline-flex;align-items:center;gap:10px;min-height:42px;margin:0 0 20px;padding:0 16px;border:1px solid rgba(0,199,255,.28);border-radius:12px;background:linear-gradient(135deg,rgba(0,199,255,.12),rgba(0,199,255,.035));color:#dff8ff;font:700 13px/1 inherit;letter-spacing:.01em;cursor:pointer;transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.dx-route-back:hover{transform:translateY(-1px);border-color:rgba(0,199,255,.62);background:rgba(0,199,255,.14)}
+.dx-route-back:focus-visible{outline:2px solid #00c7ff;outline-offset:3px}
+.dx-route-back svg{width:17px;height:17px;flex:none}
+@media(max-width:640px){.dx-route-back{min-height:40px;margin-bottom:14px}}
