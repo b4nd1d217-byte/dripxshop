@@ -46,14 +46,14 @@ export async function patchApp(source) {
 
   const profileOld = "}else{const lic=await call(db.rpc('customer_get_or_issue_account_license'));";
   const profileNew = "}else if(tab==='productos'){const rows=await call(db.from('dripx_entitlements').select('id,product_id,granted_at,dripx_products(id,title,description,product_type,file_path,price_usd)').eq('user_id',state.user.id).eq('active',true).order('granted_at',{ascending:false}));content=rows.length?rows.map(e=>{const p=e.dripx_products||{};return '<article class=\"order-card\"><header><div><strong>'+esc(p.title||'Producto')+'</strong><br><small class=\"muted\">'+(Number(p.price_usd)===0?'Acceso gratuito':'Acceso habilitado')+' · '+new Date(e.granted_at).toLocaleDateString('es-DO')+'</small></div><span class=\"status approved\">Activo</span></header>'+(p.file_path?'<div class=\"order-actions\"><button class=\"btn primary\" data-download=\"'+esc(p.id)+'\">Descargar resource</button></div>':'<small class=\"muted\">Plan o acceso activo en tu cuenta.</small>')+'</article>';}).join(''):'<div class=\"empty\">Todavía no tienes productos habilitados.</div>';}else{const lic=await call(db.rpc('customer_get_or_issue_account_license'));";
-  once(profileOld, profileNew, 'profile entitlements tab');
+  if (app.includes(profileOld)) once(profileOld, profileNew, 'profile entitlements tab'); else console.warn('DRIPX patch: profile entitlements already implemented or source layout differs; keeping original profile renderer.');
 
   const tabInvoices = D + "tab==='facturas'?'active':''}";
   const tabLicense = D + "tab==='licencia'?'active':''}";
   const tabProducts = D + "tab==='productos'?'active':''}";
   const oldTabs = '<button class="tab ' + tabInvoices + '" data-profile-tab="facturas">▤ Facturas</button><button class="tab ' + tabLicense + '" data-profile-tab="licencia">🔑 Licencia</button>';
   const newTabs = '<button class="tab ' + tabInvoices + '" data-profile-tab="facturas">▤ Facturas</button><button class="tab ' + tabProducts + '" data-profile-tab="productos">Productos</button><button class="tab ' + tabLicense + '" data-profile-tab="licencia">🔑 Licencia</button>';
-  once(oldTabs, newTabs, 'profile products tab');
+  if (app.includes(oldTabs)) once(oldTabs, newTabs, 'profile products tab'); else console.warn('DRIPX patch: profile products tab already present or source layout differs; skipping optional tab injection.');
 
   once("await call(db.storage.from('product-files').upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'}));",
        "await window.DRIPX_UPLOAD_FILE('product-files',path,file,pct=>{const status=document.querySelector('#product-zip-upload-state');if(status)status.textContent='Subiendo ZIP protegido… '+Math.round(pct)+'%';});",
