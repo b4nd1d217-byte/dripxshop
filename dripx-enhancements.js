@@ -323,6 +323,33 @@
       download.setAttribute('aria-label','Generar el ZIP final protegido');
       if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor DRIPX no está cargado. Recarga la página.');
       await window.DRIPX_LOAD_ZIP(file);
+      const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
+      if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function')throw new Error('El motor de protección no está conectado al formulario de Productos. Recarga la página.');
+      if(engine.dataset.dripxActionsBound!=='true'){
+        const bindAction=(button,action,step)=>{
+          button.addEventListener('click',async event=>{
+            event.preventDefault();
+            if(button.disabled)return;
+            button.disabled=true;
+            const status=engine.querySelector('#zip-status');
+            if(status)status.textContent=step;
+            try{
+              await action();
+            }catch(error){
+              if(status)status.textContent='Error: '+(error?.message||'Falló el proceso DRIPX.');
+              if(button===protect){protect.disabled=false;compile.disabled=true;download.disabled=true;}
+              else if(button===compile){compile.disabled=false;download.disabled=true;}
+              else if(button===download){download.disabled=false;}
+              console.error('[DRIPX] Embedded product protection action:',error);
+              toast(error?.message||'Falló la protección del ZIP.');
+            }
+          });
+        };
+        bindAction(protect,actions.protect,'Protegiendo automáticamente los scripts de servidor…');
+        bindAction(compile,actions.compile,'Compilando automáticamente los scripts Lua…');
+        bindAction(download,actions.download,'Generando el ZIP protegido para el producto…');
+        engine.dataset.dripxActionsBound='true';
+      }
       if(!engine.querySelector('#zip-analysis')||!engine.querySelector('#zip-file-list'))throw new Error('El lector ZIP del motor no pudo inicializar el inventario del resource.');
       return engine;
     })();
