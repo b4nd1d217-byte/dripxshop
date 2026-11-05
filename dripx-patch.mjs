@@ -139,5 +139,10 @@ export async function patchApp(source) {
   ].join(\"\\n\");
   app = app.slice(0, compileBlockStart) + safeMetaRewrite + app.slice(compileBlockEndLine + 1);
 
+
+  once("    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');",
+       "    const sharedLuaSources=new Set(scripts.filter(x=>x.type==='shared').map(x=>x.src));for(const entry of entries){if(!entry.name.toLowerCase().endsWith('.lua'))continue;const config=/((^|\\/)(config|settings|shared|language|locale)[^/]*\\.lua$)/i.test(entry.name);if(config||entry.name==='dripx_license.lua'||sharedLuaSources.has(entry.name))continue;throw new Error('El ZIP conserva Lua fuente sin compilar: '+entry.name);}\\n    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');",
+       'reject leftover Lua source before publication');
+
   return app;
 }
