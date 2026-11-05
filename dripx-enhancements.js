@@ -189,13 +189,13 @@
     if(meta){
       const xml=new DOMParser().parseFromString(await meta.async('string'),'application/xml');
       if(!xml.querySelector('parsererror'))for(const node of xml.querySelectorAll('script')){
-        const src=String(node.getAttribute('src')||'').replace(/\\/g,'/').replace(/^\.\//,'');
+        const src=String(node.getAttribute('src')||'').replace(/\/g,'/').replace(/^\.\//,'');
         if(src)scriptMap.set(src,(node.getAttribute('type')||'server').toLowerCase());
       }
     }
     const files=entries.map(entry=>{
       const path=entry.name,lower=path.toLowerCase(),ext=lower.split('.').pop(),script=scriptMap.get(rootPrefix?path.slice(rootPrefix.length):path);
-      const isLua=lower.endsWith('.lua'),isConfig=/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
+      const isLua=lower.endsWith('.lua'),isConfig=/(^|\/)(config|settings|shared|language|locale)[^/]*\.(lua|xml|json|ini|cfg|conf|ya?ml)$/i.test(path)||['xml','json','ini','cfg','conf','yaml','yml'].includes(ext);
       const isServer=isLua&&script!=='client'&&script!=='shared'&&script!==undefined&&!isConfig;
       const isShader=['fx','hlsl','glsl'].includes(ext);
       return {path,bytes:Number(entry._data?.uncompressedSize||0),kind:isServer?'server_lua':(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))),script_type:script||null};
