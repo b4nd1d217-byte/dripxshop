@@ -44,7 +44,7 @@
     const isSharedLua=x=>scriptByPath.get(x.name)?.type==='shared';
     const server=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='server'&&!isConfigLua(x);});
     const client=lua.filter(x=>{const script=scriptByPath.get(x.name);return script&&script.type==='client'&&!isConfigLua(x);});
-    const compileTargets=lua.filter(x=>scriptByPath.has(x.name)&&!isConfigLua(x)&&!isSharedLua(x));
+    const compileTargets=lua.filter(x=>!isConfigLua(x)&&!isSharedLua(x));
     if(!lua.length)throw new Error('El resource no contiene archivos Lua para proteger.');
     if(entries.some(x=>['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac'].includes(x.name.split('/').pop().toLowerCase())))throw new Error('El ZIP usa un nombre reservado por el sistema de licencias DRIPX. Renombra ese archivo y vuelve a subirlo.');
     state.zipBuild={zip,metaName:meta.name,metaText,entries,lua,server,client,compileTargets,scriptSrcByFile,selected:new Set(compileTargets.map(x=>x.name)),compiled:false,protected:false,rootPrefix};
