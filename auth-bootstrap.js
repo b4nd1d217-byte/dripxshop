@@ -40,7 +40,8 @@
         await sendLog(token, 'logout');
       }
       if (url?.origin === SUPABASE_URL && url.pathname.startsWith('/rest/v1/tickets') && method === 'DELETE' && token) {
-        const ticketId = String(url.searchParams.get('id') || '').replace(/^eq\\./, '');
+        const rawTicketId = String(url.searchParams.get('id') || '');
+        const ticketId = rawTicketId.startsWith('eq.') ? rawTicketId.slice(3) : rawTicketId;
         if (UUID_RE.test(ticketId)) await sendLog(token, 'ticket_deleted', { ticket_id: ticketId });
       }
       const response = await nativeFetch(input, init);
