@@ -6,7 +6,7 @@
       {"key":"X-Content-Type-Options","value":"nosniff"},
       {"key":"Referrer-Policy","value":"strict-origin-when-cross-origin"},
       {"key":"Permissions-Policy","value":"camera=(), microphone=(), geolocation=()"},
-      {"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://tlhbxhfszoxgfewuofof.supabase.co wss://tlhbxhfszoxgfewuofof.supabase.co; img-src 'self' data: https: blob:; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"}
+      {"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://tlhbxhfszoxgfewuofof.supabase.co wss://tlhbxhfszoxgfewuofof.supabase.co https://tlhbxhfszoxgfewuofof.storage.supabase.co; img-src 'self' data: https: blob:; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"}
     ]},
     {"source":"/config.js","headers":[{"key":"Cache-Control","value":"no-store, max-age=0"}]}
   ]
