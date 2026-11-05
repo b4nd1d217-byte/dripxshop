@@ -189,7 +189,7 @@
     if(meta){
       const xml=new DOMParser().parseFromString(await meta.async('string'),'application/xml');
       if(!xml.querySelector('parsererror'))for(const node of xml.querySelectorAll('script')){
-        const src=String(node.getAttribute('src')||'').replace(/\/g,'/').replace(/^\.\//,'');
+        const src=String(node.getAttribute('src')||'').split(String.fromCharCode(92)).join('/').replace(/^\.\//,'');
         if(src)scriptMap.set(src,(node.getAttribute('type')||'server').toLowerCase());
       }
     }
