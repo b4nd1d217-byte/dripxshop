@@ -298,7 +298,7 @@
     const nativeAnchorClick=HTMLAnchorElement.prototype.click;
     URL.createObjectURL=function(object){
       const url=native(object);
-      if(!captured&&object instanceof Blob&&object.size>0){
+      if(!captured&&object instanceof Blob&&object.size>0&&/zip/i.test(String(object.type||''))){
         captured=true;
         try{
           const source=input.files?.[0],sourceName=source?.name||'resource.zip',name=(sourceName.toLowerCase().endsWith('.zip')?sourceName.slice(0,-4):sourceName)+'-DRIPX-protegido.zip';
