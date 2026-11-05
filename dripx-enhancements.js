@@ -492,12 +492,9 @@
     }
   });
   function ensureOwnedProductsTab(){
-    const tabs=document.querySelector('.profile-tabs');
-    if(!tabs||tabs.querySelector('[data-dripx-owned-products],[data-profile-tab="productos"]'))return;
-    const button=document.createElement('button');
-    button.type='button';button.className='tab';button.dataset.dripxOwnedProducts='true';button.textContent='Productos';
-    const license=tabs.querySelector('[data-profile-tab="licencia"]');
-    tabs.insertBefore(button,license||null);
+    // All acquired resources now live inside the permanent Licencia workspace.
+    document.querySelectorAll('.profile-tabs [data-dripx-owned-products],.profile-tabs [data-profile-tab="productos"]').forEach(button=>button.remove());
+    document.querySelectorAll('.profile-tabs .tab').forEach(button=>{if(/^\s*productos\s*$/i.test(button.textContent||''))button.remove();});
   }
   async function renderOwnedProducts(){
     const host=document.querySelector('.profile-content');
