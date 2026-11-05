@@ -778,10 +778,12 @@
       if(sessionError)throw sessionError;
       const userId=session?.user?.id||'';
       if(!userId){
-        document.querySelectorAll('#app [data-dripx-owned="true"]').forEach(button=>{
-          button.disabled=false;button.removeAttribute('data-dripx-owned');
-          if(button.dataset.dripxOriginalLabel)button.textContent=button.dataset.dripxOriginalLabel;
-          delete button.dataset.dripxOriginalLabel;
+        document.querySelectorAll('#app [data-dripx-owned]').forEach(button=>{
+          button.disabled=button.dataset.dripxOriginalDisabled==='1';
+          if(button.dataset.dripxOriginalHtml)button.innerHTML=button.dataset.dripxOriginalHtml;
+          if(button.dataset.dripxOriginalTitle)button.title=button.dataset.dripxOriginalTitle;else button.removeAttribute('title');
+          if(button.dataset.dripxOriginalAria)button.setAttribute('aria-label',button.dataset.dripxOriginalAria);else button.removeAttribute('aria-label');
+          ['dripxOwned','dripxOriginalHtml','dripxOriginalDisabled','dripxOriginalTitle','dripxOriginalAria'].forEach(key=>delete button.dataset[key]);
         });
         catalogOwnershipUser='';catalogOwnershipAt=0;return;
       }
@@ -794,13 +796,22 @@
         document.querySelectorAll('#app [data-add],#app [data-claim-free]').forEach(button=>{
           const id=String(button.dataset.add||button.dataset.claimFree||'');
           if(!id)return;
-          if(!button.dataset.dripxOriginalLabel)button.dataset.dripxOriginalLabel=button.textContent||'Obtener';
+          if(button.dataset.dripxOriginalHtml===undefined)button.dataset.dripxOriginalHtml=button.innerHTML;
+          if(button.dataset.dripxOriginalDisabled===undefined)button.dataset.dripxOriginalDisabled=button.disabled?'1':'0';
+          if(button.dataset.dripxOriginalTitle===undefined)button.dataset.dripxOriginalTitle=button.getAttribute('title')||'';
+          if(button.dataset.dripxOriginalAria===undefined)button.dataset.dripxOriginalAria=button.getAttribute('aria-label')||'';
           const has=owned.has(id);
           button.dataset.dripxOwned=has?'true':'false';
-          button.disabled=has;
-          button.textContent=has?'Ya lo tienes':button.dataset.dripxOriginalLabel;
-          button.title=has?'Este producto ya está habilitado en tu cuenta':'';
-          button.setAttribute('aria-label',has?'Ya tienes este producto':'');
+          button.disabled=has||button.dataset.dripxOriginalDisabled==='1';
+          if(has){
+            button.innerHTML=iconMarkup('check')+'<span>Ya lo tienes</span>';
+            button.title='Este producto ya está habilitado en tu cuenta';
+            button.setAttribute('aria-label','Ya tienes este producto');
+          }else{
+            button.innerHTML=button.dataset.dripxOriginalHtml;
+            if(button.dataset.dripxOriginalTitle)button.title=button.dataset.dripxOriginalTitle;else button.removeAttribute('title');
+            if(button.dataset.dripxOriginalAria)button.setAttribute('aria-label',button.dataset.dripxOriginalAria);else button.removeAttribute('aria-label');
+          }
         });
         catalogOwnershipUser=userId;catalogOwnershipAt=Date.now();
       })();
@@ -808,6 +819,8 @@
     }catch(error){console.warn('[DRIPX] Catalog ownership sync:',error?.message||error);}
     finally{catalogOwnershipPromise=null;}
   }
+  window.DRIPX_SYNC_CATALOG_OWNERSHIP=syncCatalogOwnership;
+  window.addEventListener('dripx:ownership-changed',()=>{void syncCatalogOwnership(true);});
   async function downloadOwnedProduct(productId,button){
     if(!client||!productId)throw new Error('Producto no válido.');
     const {data:{session},error}=await client.auth.getSession();if(error)throw error;
