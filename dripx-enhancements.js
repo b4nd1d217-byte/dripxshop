@@ -745,12 +745,15 @@
     const app=document.querySelector('#app');if(!app)return;
     const active=isAdminRoute();
     app.classList.toggle('dx-admin-view',active);
-    if(!active)document.querySelector('#dx-admin-overview')?.remove();
+    if(!active||window.DRIPX_IS_ADMIN!==true)document.querySelector('#dx-admin-overview')?.remove();
     else refreshAdminOverview(false);
   }
   async function refreshAdminOverview(force=false){
     const app=document.querySelector('#app');
-    if(!app||!isAdminRoute()||!client)return;
+    if(!app||!isAdminRoute()||!client||window.DRIPX_IS_ADMIN!==true){
+      document.querySelector('#dx-admin-overview')?.remove();
+      return;
+    }
     let panel=document.querySelector('#dx-admin-overview');
     if(!panel){
       panel=document.createElement('section');panel.id='dx-admin-overview';panel.className='dx-admin-overview';
