@@ -393,8 +393,8 @@
       const result=await scanZip(file);
       if(input.dataset.dripxZipRun!==runId)return;
       const rows=result.files.slice(0,180).map(item=>{
-        const compile=item.kind==='server_lua'||item.kind==='client_lua';
-        const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='shared_lua'||item.kind==='config'?'Configuración / shared':'Archivo conservado';
+        const compile=['server_lua','client_lua','lua_other'].includes(item.kind);
+        const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='lua_other'?'Lua adicional':item.kind==='shared_lua'||item.kind==='config'?'Configuración / shared':'Archivo conservado';
         const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
         return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(item.path)+'</span><small>'+label+' · '+formatBytes(item.bytes)+'</small></div>';
       }).join('');
@@ -403,7 +403,8 @@
       if(input.dataset.dripxZipRun!==runId)return;
       const protect=engine.querySelector('#zip-protect'),compile=engine.querySelector('#zip-compile'),download=engine.querySelector('#zip-download');
       if(!protect||!compile||!download)throw new Error('Faltan controles del motor de protección.');
-      if(result.server.length===0)throw new Error('El ZIP no contiene scripts Lua de servidor declarados en meta.xml. No se puede aplicar la licencia DRIPX.');
+      const compilableLua=result.files.filter(item=>item.path.toLowerCase().endsWith('.lua')&&!['config','shared_lua'].includes(item.kind));
+      if(!compilableLua.length)throw new Error('El ZIP no contiene archivos Lua compilables. Los config y type="shared" se conservan sin compilar.');
       setProductZipStatus('02/4 · Protegiendo el resource y preparando la validación DRIPX…','processing');
       node.querySelectorAll('.dx-auto-step')[1]?.classList.add('is-active');
       if(protect.disabled)throw new Error('El motor no habilitó la protección. Revisa meta.xml y los scripts Lua.');
