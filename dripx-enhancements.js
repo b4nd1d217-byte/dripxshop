@@ -161,7 +161,7 @@
     const {data:{session},error}=await client.auth.getSession();if(error)throw error;
     if(!session?.user?.id||!session.access_token)throw new Error('Tu sesión expiró. Inicia sesión con Discord de nuevo.');
     const {data:admin,error:adminError}=await client.rpc('dripx_is_admin');if(adminError)throw adminError;
-    if(admin!==true)throw new Error('Solo administración puede guardar ZIPs en el área de protección.');
+    if(admin!==true)throw new Error('Solo administración puede proteger recursos desde Productos.');
     return session;
   }
   function tusUpload(bucket,path,file,onProgress){
