@@ -114,19 +114,12 @@
     });
   }
   function applyBrandLogo(){
-    const src=window.DRIPX_BRAND_LOGO_DATA;
-    if(!src)return;
+    const src='/assets/logo.svg';
     document.querySelectorAll('img[src="/assets/logo.svg"],img[src^="/assets/logo.svg"],img.hero-logo').forEach(img=>{
-      if(img.src!==src){img.src=src;img.decoding='async';img.loading='eager';img.alt='DRIP X SHOP';}
+      img.decoding='async';img.loading='eager';img.alt='DRIP X SHOP';
     });
-    document.querySelectorAll('link[rel="icon"]').forEach(link=>{if(link.href!==src)link.href=src;});
+    document.querySelectorAll('link[rel="icon"]').forEach(link=>{link.href=src;});
   }
-  fetch('/assets/dripx-logo.b64',{cache:'force-cache'}).then(response=>{
-    if(!response.ok)throw new Error('brand asset unavailable');return response.text();
-  }).then(value=>{
-    const clean=value.trim();
-    if(/^[A-Za-z0-9+/]+={0,2}$/.test(clean)){window.DRIPX_BRAND_LOGO_DATA='data:image/webp;base64,'+clean;applyBrandLogo();}
-  }).catch(error=>console.warn('[DRIPX] Transparent logo was not loaded:',error));
 
   function formatBytes(value){const n=Number(value)||0;return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';}
   function toast(message){const node=document.querySelector('#toast');if(node){node.textContent=message;node.classList.add('show');setTimeout(()=>node.classList.remove('show'),3600);}}
