@@ -42,7 +42,9 @@
       const response = await nativeFetch(input, init);
       if (!response.ok || url?.origin !== SUPABASE_URL) return response;
       if (url.pathname === '/auth/v1/token') {
-        try { const data = await response.clone().json(); if (data?.access_token) void sendLog(data.access_token, 'login'); } catch (_) {}
+        if (url.searchParams.get('grant_type') === 'pkce') {
+          try { const data = await response.clone().json(); if (data?.access_token) void sendLog(data.access_token, 'login'); } catch (_) {}
+        }
         return response;
       }
       if (!token || !url.pathname.startsWith('/rest/v1/') && !url.pathname.startsWith('/functions/v1/')) return response;
@@ -77,8 +79,9 @@
       } else if (path === 'dripx_orders' && method === 'PATCH' && first.payment_proof_path) {
         const orderId = uuidOrEmpty(idFromQuery);
         if (orderId) fire('payment_proof', { order_id: orderId });
-      } else if (path === 'dripx_products' && method === 'POST') {
-        try { const row = await response.clone().json(); const product = Array.isArray(row) ? row[0] : row; const productId = uuidOrEmpty(product?.id); if (productId) fire('resource_created', { product_id: productId }); } catch (_) {}
+      } else if (path === 'dripx_products' && method === 'PATCH' && first.status === 'published') {
+        const productId = uuidOrEmpty(idFromQuery);
+        if (productId) fire('resource_created', { product_id: productId });
       } else if (path === 'functions/v1/dripx-lua-compiler' && method === 'POST') {
         fire('resource_compiled', {});
       } else if (path === 'tickets' && method === 'DELETE') {
