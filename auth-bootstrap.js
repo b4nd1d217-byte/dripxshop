@@ -40,15 +40,24 @@
     return String(data).split(',')[1]||'';
   }
   const sendLog = async (token, event, details = {}) => {
-    if (!token || !SUPABASE_URL || !SUPABASE_KEY) return;
+    if (!token || !SUPABASE_URL || !SUPABASE_KEY) return { sent: false, reason: 'missing_session_or_config' };
     try {
-      await nativeFetch(SUPABASE_URL + '/functions/v1/dripx-discord-logs', {
+      const response = await nativeFetch(SUPABASE_URL + '/functions/v1/dripx-discord-logs', {
         method: 'POST',
         headers: { apikey: SUPABASE_KEY, authorization: 'Bearer ' + token, 'content-type': 'application/json' },
         body: JSON.stringify({ event, details }),
-        signal: AbortSignal.timeout(event === 'coupon_created' ? 16000 : 7000)
+        signal: AbortSignal.timeout(event === 'coupon_created' ? 18000 : 15000)
       });
-    } catch (error) { console.warn('[DRIPX] Discord log delivery failed:', error?.message || error); }
+      const result = await response.clone().json().catch(() => ({}));
+      if (!response.ok || result.sent !== true) {
+        console.warn('[DRIPX] Discord embed delivery failed:', event, response.status, result.reason || result.error || result.stage || 'unknown');
+        return { sent: false, status: response.status, ...result };
+      }
+      return result;
+    } catch (error) {
+      console.warn('[DRIPX] Discord log delivery failed:', event, error?.message || error);
+      return { sent: false, reason: error?.message || 'network_error' };
+    }
   };
   if (!window.__dripxLogFetchInstalled && SUPABASE_URL) {
     window.__dripxLogFetchInstalled = true;
@@ -138,11 +147,18 @@
             fire('coupon_created', { coupon_id: couponId, coupon_table: path, image_png_base64 });
           }
         } catch (error) { console.warn('[DRIPX] No se pudo generar la imagen del cupón:', error?.message || error); }
+      } else if (path === 'dripx_products' && method === 'POST') {
+        try {
+          const inserted = await response.clone().json();
+          const product = Array.isArray(inserted) ? inserted[0] : inserted;
+          const productId = uuidOrEmpty(product?.id);
+          if (productId && product?.status === 'published') fire('resource_created', { product_id: productId });
+        } catch (_) {}
       } else if (path === 'dripx_products' && method === 'PATCH' && first.status === 'published') {
         const productId = uuidOrEmpty(idFromQuery);
         if (productId) fire('resource_created', { product_id: productId });
       } else if (path === 'functions/v1/dripx-lua-compiler' && method === 'POST') {
-        fire('resource_compiled', {});
+        fire('resource_compiled', { filename: first.filename || 'script.lua' });
       }
       return response;
     };
