@@ -590,7 +590,7 @@
       ];
       panel=document.querySelector('#dx-admin-overview');
       if(!panel||!isAdminRoute())return;
-      panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Indicadores consultados directamente desde Supabase</small></div><div class="dx-admin-overview-tools"><span class="dx-admin-sync">Actualizado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})+'</span><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>'+iconMarkup('arrow')+' Actualizar</button></div></div><div class="dx-admin-overview-grid">'+metrics.map(metric=>'<article class="dx-admin-metric"><div class="dx-admin-metric-top"><span class="dx-admin-metric-icon">'+iconMarkup(metric.icon)+'</span><span>'+escapeHtml(metric.label)+'</span></div><strong>'+metric.value+'</strong><small>'+escapeHtml(metric.detail)+'</small></article>').join('')+'</div>';
+      panel.innerHTML='<div class="dx-admin-overview-head"><div><span class="dx-admin-kicker">CENTRO DE CONTROL</span><strong>Resumen operativo</strong><small>Indicadores consultados directamente desde Supabase</small></div><div class="dx-admin-overview-tools"><span class="dx-admin-sync">Actualizado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})+'</span><button type="button" class="dx-admin-refresh" data-dx-admin-refresh>'+iconMarkup('arrow')+' Actualizar</button></div></div><div class="dx-admin-overview-grid">'+metrics.map(metric=>'<article class="dx-admin-metric"><div class="dx-admin-metric-top"><span class="dx-admin-metric-icon">'+iconMarkup(metric.icon)+'</span><span>'+escapeHtml(metric.label)+'</span></div><strong>'+metric.value+'</strong><small>'+escapeHtml(metric.detail)+'</small></article>').join('')+'</div><section class="dx-admin-log-test"><div class="dx-admin-log-copy"><strong>Diagnóstico de Discord</strong><small>Envía un embed real al canal seleccionado y confirma la respuesta del webhook.</small></div><div class="dx-admin-log-actions"><div class="dx-admin-log-picker"><button type="button" class="dx-admin-log-select" data-dx-log-toggle aria-expanded="false"><span data-dx-log-current>Seguridad</span>'+iconMarkup('chevron-down')+'</button><input type="hidden" data-dx-log-category value="security"><div class="dx-admin-log-menu" data-dx-log-menu hidden><button type="button" data-dx-log-option="security">Seguridad</button><button type="button" data-dx-log-option="sales">Ventas</button><button type="button" data-dx-log-option="store">Tienda</button><button type="button" data-dx-log-option="support">Soporte</button><button type="button" data-dx-log-option="licenses">Licencias</button></div></div><button type="button" class="dx-admin-log-send" data-dx-test-discord>'+iconMarkup('discord')+' Probar embed</button></div><p class="dx-admin-log-status" data-dx-log-test-status role="status">Sin pruebas recientes.</p></section>';
       panel.dataset.loaded='true';adminOverviewAt=Date.now();
     })();
     try{await adminOverviewPromise;}catch(error){
@@ -599,10 +599,67 @@
       console.warn('[DRIPX] Admin overview:',error);
     }finally{adminOverviewPromise=null;}
   }
-  document.addEventListener('click',event=>{
-    const button=event.target.closest('[data-dx-admin-refresh]');
-    if(!button)return;
-    event.preventDefault();event.stopPropagation();refreshAdminOverview(true);
+  document.addEventListener('click',async event=>{
+    const toggle=event.target.closest('[data-dx-log-toggle]');
+    if(toggle){
+      event.preventDefault();event.stopImmediatePropagation();
+      const menu=toggle.closest('.dx-admin-log-picker')?.querySelector('[data-dx-log-menu]');
+      const open=!!menu?.hidden;
+      if(menu)menu.hidden=!open;
+      toggle.setAttribute('aria-expanded',String(open));
+      return;
+    }
+    const option=event.target.closest('[data-dx-log-option]');
+    if(option){
+      event.preventDefault();event.stopImmediatePropagation();
+      const picker=option.closest('.dx-admin-log-picker');
+      const hidden=picker?.querySelector('[data-dx-log-category]');
+      const toggleButton=picker?.querySelector('[data-dx-log-toggle]');
+      const menu=picker?.querySelector('[data-dx-log-menu]');
+      if(hidden)hidden.value=option.dataset.dxLogOption||'security';
+      const current=toggleButton?.querySelector('[data-dx-log-current]');
+      if(current)current.textContent=option.textContent||'Seguridad';
+      if(menu)menu.hidden=true;
+      toggleButton?.setAttribute('aria-expanded','false');
+      return;
+    }
+    const testButton=event.target.closest('[data-dx-test-discord]');
+    if(testButton){
+      event.preventDefault();event.stopImmediatePropagation();
+      if(testButton.disabled)return;
+      const status=document.querySelector('[data-dx-log-test-status]');
+      const category=document.querySelector('[data-dx-log-category]')?.value||'security';
+      testButton.disabled=true;
+      if(status)status.textContent='Enviando prueba y esperando confirmación de Discord…';
+      try{
+        const session=await getAdminSession();
+        if(!session?.user?.id)throw new Error('La sesión administrativa no está disponible.');
+        const response=await client.functions.invoke('dripx-discord-logs',{body:{event:'test_embed',details:{category}}});
+        if(response.error){
+          let detail='';
+          try{detail=await response.error.context?.clone?.().text?.()||'';}catch(_){}
+          throw new Error(detail||response.error.message||'No se pudo contactar el servicio de logs.');
+        }
+        if(!response.data?.sent)throw new Error(response.data?.reason||response.data?.error||'Discord no confirmó el embed.');
+        if(status)status.textContent='Confirmado: Discord aceptó el embed en la categoría '+category+'.';
+        toast('Embed de prueba enviado y confirmado por Discord.');
+      }catch(error){
+        const message=error?.message||'Error de conexión con Discord.';
+        if(status)status.textContent='No enviado: '+message;
+        console.error('[DRIPX] Discord test embed:',error);
+        toast('No se pudo confirmar el embed: '+message);
+      }finally{testButton.disabled=false;}
+      return;
+    }
+    const refresh=event.target.closest('[data-dx-admin-refresh]');
+    if(refresh){
+      event.preventDefault();event.stopImmediatePropagation();refreshAdminOverview(true);
+      return;
+    }
+    if(!event.target.closest('.dx-admin-log-picker')){
+      document.querySelectorAll('[data-dx-log-menu]').forEach(menu=>menu.hidden=true);
+      document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
+    }
   },true);
   window.addEventListener('hashchange',()=>{markAdminView();syncCategoryOptions(true);});
 
