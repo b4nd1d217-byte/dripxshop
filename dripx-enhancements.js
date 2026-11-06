@@ -158,8 +158,14 @@
   }
   async function getAdminSession(){
     if(!client)throw new Error('No se pudo iniciar el cliente de Supabase.');
-    const {data:{session},error}=await client.auth.getSession();if(error)throw error;
-    if(!session?.user?.id||!session.access_token)throw new Error('Tu sesión expiró. Inicia sesión con Discord de nuevo.');
+    const current=await client.auth.getSession();if(current.error)throw current.error;
+    let session=current.data?.session||null;
+    const expires=Number(session?.expires_at||0)*1000;
+    if(!session?.access_token||!session.user?.id||(expires&&expires<Date.now()+90000)){
+      const refreshed=await client.auth.refreshSession();if(refreshed.error)throw refreshed.error;
+      session=refreshed.data?.session||null;
+    }
+    if(!session?.user?.id||!session.access_token)throw new Error('Tu sesión expiró. Inicia sesión con Discord de nuevo; el ZIP seleccionado se conservará.');
     const {data:admin,error:adminError}=await client.rpc('dripx_is_admin');if(adminError)throw adminError;
     if(admin!==true)throw new Error('Solo administración puede proteger recursos desde Productos.');
     return session;
@@ -174,7 +180,7 @@
         const upload=new window.tus.Upload(file,{
           endpoint:'https://'+projectRef+'.storage.supabase.co/storage/v1/upload/resumable',
           retryDelays:[0,3000,5000,10000,20000],
-          headers:{authorization:'Bearer '+session.access_token,apikey:C.supabaseKey||C.publishableKey,'x-upsert':'false'},
+          headers:{authorization:'Bearer '+session.access_token,apikey:C.supabaseKey||C.publishableKey,'x-upsert':'true'},
           metadata:{bucketName:bucket,objectName:path,contentType:'application/zip',cacheControl:'3600'},
           chunkSize:6*1024*1024,uploadDataDuringCreation:true,removeFingerprintOnSuccess:true,
           fingerprint:async(f)=>[bucket,path,f.name,f.size,f.lastModified].join('-'),
@@ -443,6 +449,32 @@
       const steps=node.querySelectorAll('.dx-auto-step');steps.forEach(step=>step.classList.remove('is-active'));
       console.error('[DRIPX] Automatic product ZIP protection:',error);
       toast(error.message||'Falló la protección del ZIP.');
+      const retry=document.createElement('button');
+      retry.type='button';retry.className='dx-zip-retry';
+      retry.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/></svg><span>Reanudar proceso</span>';
+      retry.addEventListener('click',async()=>{
+        retry.disabled=true;lockProductSubmit(form,true);
+        try{
+          const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
+          if(typeof actions?.resume!=='function')throw new Error('El motor de reanudación no está disponible. Recarga la página; el ZIP original permanece seleccionado.');
+          setProductZipStatus('Reanudando desde el último paso completado…','processing');
+          armCompiledZipCapture(input);
+          await actions.resume();
+          const protectedFile=input.files?.[0];
+          if(!protectedFile||!window.__DRIPX_PROCESSED_PRODUCT_ZIP||protectedFile.name!==window.__DRIPX_PROCESSED_PRODUCT_ZIP.name)throw new Error('El ZIP final no pudo adjuntarse al formulario.');
+          input.dataset.dripxZipReady='true';node.dataset.state='success';
+          node.querySelectorAll('.dx-auto-step').forEach(step=>step.classList.add('is-done'));
+          const summary=node.querySelector('.dx-preview-summary b');if(summary){summary.className='ok';summary.textContent='Protección DRIPX completada';}
+          setProductZipStatus('Proceso completado. El formulario y sus datos siguen disponibles para guardar el producto.','success');
+          retry.remove();lockProductSubmit(form,false);input.dispatchEvent(new Event('change',{bubbles:true}));
+          toast('ZIP protegido correctamente. Ya puedes guardar el producto.');
+        }catch(retryError){
+          retry.disabled=false;lockProductSubmit(form,false);
+          setProductZipStatus('No se pudo reanudar: '+(retryError?.message||'error desconocido'),'error');
+          console.error('[DRIPX] ZIP resume failed:',retryError);toast(retryError?.message||'No se pudo reanudar el ZIP.');
+        }
+      });
+      node.append(retry);
       lockProductSubmit(form,false);
     }
   }
