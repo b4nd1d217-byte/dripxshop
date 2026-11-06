@@ -59,6 +59,24 @@ const requiredFeatures = [
 ];
 const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
+const patchSource = await readFile('dripx-patch.mjs', 'utf8');
+const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
+const uploadUi = await readFile('dripx-enhancements.js', 'utf8');
+const uploadCss = await readFile('dripx-enhancements.css', 'utf8');
+const uploadChecks = [
+  [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
+  [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
+  [appText.includes('async function resumeZip()'), 'ZIP resume action'],
+  [appText.includes('b.finalBlobSize=blob.size'), 'final archive identity check'],
+  [appText.includes('El borrador se conservó'), 'draft preservation after upload errors'],
+  [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
+  [zipReader.includes("(type==='server'||type==='client')&&record?.kind!=='config'"), 'compile only declared executable Lua'],
+  [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
+  [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
+  [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling']
+];
+const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
+if (failedUploadChecks.length) throw new Error('DRIPX upload pipeline checks failed: ' + failedUploadChecks.join(', '));
 const cssSource = Buffer.concat([css, extraCss]).toString('utf8') + await readFile('dist/dripx-visual-system.css', 'utf8');
 if (!cssSource.includes('@media(max-width:720px)') || !cssSource.includes(':focus-visible')) {
   throw new Error('DRIPX responsive/accessibility styles are missing.');
