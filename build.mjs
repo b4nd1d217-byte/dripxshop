@@ -63,6 +63,10 @@ const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
 const uploadUi = await readFile('dripx-enhancements.js', 'utf8');
 const uploadCss = await readFile('dripx-enhancements.css', 'utf8');
+const uploadValidator = await readFile('supabase/functions/dripx-validate-product-upload/index.ts', 'utf8');
+const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
+const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
+const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
@@ -77,10 +81,10 @@ const uploadChecks = [
   [zipReader.includes("archiveNames=entries.map(entry=>entry.name)") && !zipReader.includes("archiveNames=files.map("), 'ZIP platform detection without temporal-dead-zone access'],
   [zipReader.includes("exactamente un único script shared") && zipReader.includes('infoType!==\'script\''), 'MTA metadata and license shared-script integrity'],
   [zipReader.includes('resource FiveM'), 'FiveM archive rejection with explicit guidance'],
-  [validator.result.content.includes('meta_info_incomplete') && validator.result.content.includes('meta_script_type_invalid'), 'server-side MTA metadata validation'],
-  [license.result.content.includes('resource_meta_info_incomplete') && license.result.content.includes('startsAt <= now'), 'download metadata and plan start-time validation'],
-  [profileMig.result.content.includes('grant update (leaderboard_public, updated_at)'), 'profile privilege allowlist migration'],
-  [buyerMig.result.content.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in']
+  [uploadValidator.includes('meta_info_incomplete') && uploadValidator.includes('meta_script_type_invalid'), 'server-side MTA metadata validation'],
+  [downloadFunction.includes('resource_meta_info_incomplete') && downloadFunction.includes('startsAt <= now'), 'download metadata and plan start-time validation'],
+  [profileMigration.includes('grant update (leaderboard_public, updated_at)'), 'profile privilege allowlist migration'],
+  [privacyMigration.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in'],
   [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
   [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling']
