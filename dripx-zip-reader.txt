@@ -1,3 +1,5 @@
+  const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
+  function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
   async function loadZipForProtection(file){
     const ensureZipUiNode=(id,tag)=>{
       let node=document.getElementById(id);
@@ -9,13 +11,16 @@
       host.append(node);
       return node;
     };
-    const LIMITS={meta:2*1024*1024};
+    const LIMITS={meta:2*1024*1024,compressed:100*1024*1024,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
+    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP comprimido supera 100 MB. Optimiza el resource o divídelo en módulos; el límite protege la memoria de procesamiento.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
-    const archive=await JSZip.loadAsync(file,{checkCRC32:true,createFolders:false});
+    const archive=await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
     const allEntries=Object.values(archive.files||{});
     if(!allEntries.length)throw new Error('El ZIP no contiene entradas.');
+    if(allEntries.length>LIMITS.entries)throw new Error('El ZIP contiene demasiadas entradas, incluidas carpetas.');
+    if(allEntries.filter(entry=>!entry.dir).length>LIMITS.files)throw new Error('El ZIP supera el límite de 3.000 archivos.');
     const normalizePath=(entry)=>{
       const original=String(entry.unsafeOriginalName??entry.name??'');
       if(!original||original.length>1024)throw new Error('El ZIP contiene una ruta vacía o demasiado larga.');
@@ -42,6 +47,7 @@
       if(isNoise(path))continue;
       const size=Number(entry._data?.uncompressedSize??entry._data?.length??0);
       if(!Number.isSafeInteger(size)||size<0)throw new Error('El ZIP declara un tamaño de archivo inválido.');
+      if(size>LIMITS.entry)throw new Error('El archivo '+path+' supera 100 MB descomprimidos.');
       const rawMode=entry.unixPermissions;
       const mode=typeof rawMode==='string'?parseInt(rawMode,8):Number(rawMode||0);
       if(Number.isFinite(mode)&&(mode&0o170000)===0o120000)throw new Error('El ZIP contiene un enlace simbólico y no puede procesarse.');
@@ -51,6 +57,7 @@
     if(!records.length)throw new Error('El ZIP no contiene archivos utilizables.');
     const totalExpanded=records.reduce((sum,item)=>sum+item.size,0);
     if(!Number.isSafeInteger(totalExpanded))throw new Error('El tamaño total descomprimido no es válido.');
+    if(totalExpanded>LIMITS.expanded)throw new Error('El ZIP supera 200 MB descomprimidos y no puede procesarse con seguridad.');
     const originalNames=new Set();
     for(const item of records){
       const key=item.path.toLowerCase();
@@ -92,6 +99,8 @@
     for(const item of normalizedRecords){
       const data=await item.entry.async('uint8array');
       if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
+      const expectedCrc=Number(item.entry._data?.crc32);
+      if(!Number.isFinite(expectedCrc)||expectedCrc<0||expectedCrc>0xffffffff||dripxZipCRC32(data)!==(expectedCrc>>>0))throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,
@@ -106,6 +115,9 @@
     if(/<!DOCTYPE/i.test(metaText))throw new Error('meta.xml contiene una declaración DOCTYPE no permitida.');
     const parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
+    const infoNode=parsed.querySelector('info'),infoText=Array.from(infoNode?.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=files.map(item=>item.path).join(' ');
+    const hasFiveMManifest=entries.some(entry=>/^(fxmanifest|__resource)\.lua$/i.test(entry.name.split('/').pop()||''));
+    if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA con meta.xml y scripts compatibles.');
     const normalizeScriptPath=value=>{
       let path=String(value||'').split(String.fromCharCode(92)).join('/');
       path=path.replace(/^(?:\.\/)+/,'');
