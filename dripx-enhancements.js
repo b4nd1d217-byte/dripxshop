@@ -908,7 +908,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
@@ -1047,8 +1047,35 @@
     if(owned){event.preventDefault();event.stopImmediatePropagation();toast('Este producto ya está habilitado en Mi cuenta > Productos.');}
   },true);
 
+  function installDescriptionToolbar(){
+    const form=document.querySelector('#product-form');
+    const field=form?.querySelector('[name="description"]');
+    if(!field||field.dataset.dripxDescriptionEditor==='1')return;
+    field.dataset.dripxDescriptionEditor='1';
+    const wrap=document.createElement('div');wrap.className='dx-description-editor';
+    const toolbar=document.createElement('div');toolbar.className='dx-description-tools';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','Insertar símbolos en la descripción');
+    const controls=[
+      ['check','✓ ','Insertar punto destacado'],
+      ['star','★ ','Insertar característica'],
+      ['info','ⓘ ','Insertar nota'],
+      ['arrow','→ ','Insertar paso'],
+      ['plus','• ','Insertar viñeta']
+    ];
+    for(const [icon,value,label] of controls){
+      const button=document.createElement('button');button.type='button';button.className='dx-description-tool';button.title=label;button.setAttribute('aria-label',label);button.innerHTML=iconMarkup(icon);
+      button.addEventListener('click',()=>{
+        const start=Number.isInteger(field.selectionStart)?field.selectionStart:field.value.length;
+        const end=Number.isInteger(field.selectionEnd)?field.selectionEnd:start;
+        field.setRangeText(value,start,end,'end');field.focus();field.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+      toolbar.append(button);
+    }
+    const parent=field.parentElement;if(!parent)return;
+    parent.insertBefore(wrap,field);wrap.append(toolbar,field);
+    field.classList.add('dx-description-input');
+  }
   function boot(){
-    replaceIcons();ensureButtonIcons();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
+    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
