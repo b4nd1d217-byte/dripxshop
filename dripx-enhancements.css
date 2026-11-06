@@ -151,3 +151,25 @@
 /* Hidden internal ZIP motor: actions remain callable by the automatic upload pipeline. */
 .dx-product-engine[hidden]{display:none!important}
 .dx-product-protection-intro{display:none!important}
+
+
+/* ZIP processing feedback: clear states, readable inventory and touch-friendly mobile controls */
+.dx-upload-state{border:1px solid rgba(145,185,210,.12);line-height:1.5;overflow-wrap:anywhere}
+.dx-upload-state[data-state="success"]{color:#77e0b2;background:rgba(54,198,137,.08);border-color:rgba(54,198,137,.24)}
+.dx-upload-state[data-state="error"]{color:#ff9a9a;background:rgba(255,90,90,.08);border-color:rgba(255,90,90,.25)}
+.dx-upload-state[data-state="processing"]{color:#8de8ff;background:rgba(0,199,255,.07);border-color:rgba(0,199,255,.2)}
+.dx-product-engine #zip-file-list{max-height:min(46vh,440px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.dx-zip-entry{min-width:0}
+.dx-zip-name{min-width:0;overflow-wrap:anywhere}
+.dx-product-zip-preview,.dx-staging-panel{min-width:0}
+@media(max-width:640px){
+  .dx-product-engine,.dx-staging-panel{padding:10px}
+  .dx-zip-entry{align-items:flex-start!important;gap:7px!important;padding:9px 7px!important}
+  .dx-zip-name{flex:1 1 100%;font-size:11px}
+  .dx-zip-kind{margin-left:27px}
+  .dx-upload-file{grid-template-columns:20px minmax(0,1fr);align-items:start}
+  .dx-upload-file small{grid-column:2;text-align:left}
+  .dx-recent-main{min-width:0}
+  .dx-recent-actions{width:100%;flex-wrap:wrap}
+  .dx-recent-actions .btn{flex:1 1 auto;min-height:38px}
+}
