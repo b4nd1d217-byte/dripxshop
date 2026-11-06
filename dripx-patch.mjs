@@ -121,17 +121,37 @@ export async function patchApp(source) {
   const pipelineEnd = app.indexOf("  async function renderAdmin(){", pipelineStart);
   if (pipelineStart < 0 || pipelineEnd < 0) throw new Error('DRIPX patch failed: legacy ZIP pipeline boundaries');
   const modernPipeline = String.raw`  async function protectZip(){
-    const b=state.zipBuild;if(!b?.zip)throw new Error('Selecciona el ZIP original.');
+    const b=state.zipBuild;
+    if(!b?.zip)throw new Error('Selecciona el ZIP original.');
     if(b.protected)throw new Error('Este ZIP ya fue protegido.');
-    if(!b.shared?.length)throw new Error('Se requiere un Lua existente type="shared".');
-    if(!b.server?.length)throw new Error('Se requiere al menos un script server.');
-    const working=await JSZip.loadAsync(await b.zip.generateAsync({type:'uint8array'})),productId=b.productId||crypto.randomUUID(),nl=String.fromCharCode(10);
-    const shared=b.shared[0].name;let sharedText=await working.file(shared).async('string');if(sharedText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'))throw new Error('ZIP ya protegido.');
-    working.file(shared,sharedText+nl+'-- DRIP X SHOP license binding'+nl+'DRIPX_LICENSE_KEY = "DRIPX_LICENSE_KEY_PLACEHOLDER"'+nl);
+    if(!b.shared?.length)throw new Error('Se requiere un archivo Lua existente declarado como shared.');
+    if(b.shared.length!==1)throw new Error('El resource debe tener exactamente un archivo shared para alojar la clave.');
+    if(!b.server?.length)throw new Error('Se requiere al menos un script de servidor para validar la licencia.');
+    const working=b.zip,productId=b.productId||crypto.randomUUID(),nl=String.fromCharCode(10);
+    const shared=b.shared[0].name,sharedFile=working.file(shared);
+    if(!sharedFile)throw new Error('No se encuentra el archivo shared: '+shared);
+    const sharedText=await sharedFile.async('string');
+    if(sharedText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'))throw new Error('El ZIP ya contiene un marcador de licencia.');
     const serverNames=b.server.map(x=>x.name),clientNames=b.client.map(x=>x.name);
-    for(let i=0;i<serverNames.length;i++){const name=serverNames[i],src=await working.file(name).async('string');if(src.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);const prefix=i===0?'addEvent("dripx:license:ready",false)'+nl:'';working.file(name,prefix+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+src+nl+'end'+nl+'addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) end,true,"high")'+nl);}
-    for(const name of clientNames){const src=await working.file(name).async('string');if(src.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);working.file(name,'if not DRIPX_CLIENT_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:clientReady",true) DRIPX_CLIENT_LICENSE_EVENT_REGISTERED=true end'+nl+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+src+nl+'end'+nl+'addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) if not DRIPX_CLIENT_START_REPLAYED then DRIPX_CLIENT_START_REPLAYED=true setTimer(function() triggerEvent("onClientResourceStart",resourceRoot,getThisResource()) end,50,1) end end)'+nl);}
-    const first=serverNames[0],firstText=await working.file(first).async('string');
+    const serverPayloads=[],clientPayloads=[];
+    for(let i=0;i<serverNames.length;i++){
+      const name=serverNames[i],file=working.file(name);
+      if(!file)throw new Error('Falta el script de servidor: '+name);
+      const source=await file.async('string');
+      if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
+      const prefix=i===0?'addEvent("dripx:license:ready",false)'+nl:'';
+      serverPayloads.push({name,source:prefix+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) end,true,"high")'+nl});
+    }
+    for(const name of clientNames){
+      const file=working.file(name);if(!file)throw new Error('Falta el script de cliente: '+name);
+      const source=await file.async('string');
+      if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
+      clientPayloads.push({name,source:'if not DRIPX_CLIENT_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:clientReady",true) DRIPX_CLIENT_LICENSE_EVENT_REGISTERED=true end'+nl+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) if not DRIPX_CLIENT_START_REPLAYED then DRIPX_CLIENT_START_REPLAYED=true setTimer(function() triggerEvent("onClientResourceStart",resourceRoot,getThisResource()) end,50,1) end end)'+nl});
+    }
+    const metaFile=working.file(b.metaName);if(!metaFile)throw new Error('No se encuentra meta.xml.');
+    let meta=await metaFile.async('string');
+    if(/DRIPX_PRODUCT_ID:/i.test(meta))throw new Error('meta.xml ya contiene un ID DRIPX.');
+    const close=meta.lastIndexOf('</meta>');if(close<0)throw new Error('meta.xml no tiene cierre válido.');
     const runtime=['-- DRIPX license bootstrap','local DRIPX_PRODUCT_ID="'+productId+'"','local DRIPX_API="https://tlhbxhfszoxgfewuofof.supabase.co/functions/v1/dripx-license"','local DRIPX_VALIDATED=false','local DRIPX_STOPPING=false','local DRIPX_BOOTSTRAP_STARTED=false','local DRIPX_CLIENT_READY={}','local DRIPX_TIMER','local dripxValidate',
       'local function dripxStop() if DRIPX_STOPPING then return end DRIPX_STOPPING=true if isTimer(DRIPX_TIMER) then killTimer(DRIPX_TIMER) end setTimer(function() stopResource(getThisResource()) end,500,1) end',
       'local function dripxInstall() if type(hash)~="function" then return nil end return hash("sha1",string.lower(tostring(DRIPX_LICENSE_KEY or "")).."|"..tostring(getServerPort())) end',
@@ -141,11 +161,17 @@ export async function patchApp(source) {
       'addEventHandler("onPlayerResourceStart",root,function(resource) if resource==getThisResource() and not DRIPX_CLIENT_READY[source] then DRIPX_CLIENT_READY[source]=true triggerClientEvent(source,"dripx:license:clientReady",resourceRoot) end end)',
       'addEventHandler("onPlayerQuit",root,function() DRIPX_CLIENT_READY[source]=nil end)',
       'addEventHandler("onResourceStop",resourceRoot,function() if isTimer(DRIPX_TIMER) then killTimer(DRIPX_TIMER) end end)'].join(nl);
-    working.file(first,firstText+nl+runtime+nl);
-    let meta=await working.file(b.metaName).async('string');const close=meta.lastIndexOf('</meta>');if(close<0)throw new Error('meta.xml no tiene cierre válido.');meta=meta.slice(0,close)+'<!-- DRIPX_PRODUCT_ID: '+productId+' -->'+nl+meta.slice(close);working.file(b.metaName,meta);
-    b.zip=working;b.productId=productId;b.protected=true;b.compiled=false;b.licenseInjected=true;
-    const a=document.querySelector('#zip-protect'),c=document.querySelector('#zip-compile'),d=document.querySelector('#zip-download');if(a)a.disabled=true;if(c)c.disabled=false;if(d)d.disabled=true;
-    const st=document.querySelector('#zip-status');if(st)st.textContent='Protección DRIPX integrada en shared, servidor y cliente.';
+    working.file(shared,sharedText+nl+'-- DRIP X SHOP license binding'+nl+'DRIPX_LICENSE_KEY = "DRIPX_LICENSE_KEY_PLACEHOLDER"'+nl);
+    for(const item of serverPayloads)working.file(item.name,item.source);
+    for(const item of clientPayloads)working.file(item.name,item.source);
+    const first=serverPayloads[0];
+    working.file(first.name,first.source+nl+runtime+nl);
+    meta=meta.slice(0,close)+'<!-- DRIPX_PRODUCT_ID: '+productId+' -->'+nl+meta.slice(close);
+    working.file(b.metaName,meta);
+    b.zip=working;b.productId=productId;b.protected=true;b.compiled=false;b.compiledFiles=[];b.licenseInjected=true;b.finalBlobSize=0;
+    const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
+    if(protect)protect.disabled=true;if(compile)compile.disabled=false;if(download)download.disabled=true;
+    const status=document.querySelector('#zip-status');if(status)status.textContent='Protección integrada · '+serverNames.length+' scripts de servidor · '+clientNames.length+' de cliente.';
     return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length};
   }
   async function compileZip(){
