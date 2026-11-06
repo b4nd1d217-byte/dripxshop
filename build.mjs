@@ -99,7 +99,12 @@ const uploadChecks = [
   [uploadUi.includes('function categoryViewActive()') && uploadUi.includes('async function renderCategoryManager(force=false)') && uploadUi.includes('data-dx-category-action="delete"'), 'complete admin category manager with CRUD controls'],
   [uploadUi.includes('const source=activeNames;') && uploadUi.includes('categorySyncAt=0'), 'new product selector uses active categories and refreshes after changes'],
   [patchSource.includes("categoryRecord=await call(db.from('dripx_categories')") && patchSource.includes('category:categoryName,'), 'new products must reference an active Supabase category'],
-  [categoryMigration.includes('dripx_guard_category_references') && categoryMigration.includes('No se puede eliminar esta categoría'), 'database category rename/delete safeguards']
+  [categoryMigration.includes('dripx_guard_category_references') && categoryMigration.includes('No se puede eliminar esta categoría'), 'database category rename/delete safeguards'],
+  [uploadUi.includes('function isAdminNavigationControl(control)') && uploadUi.includes('!isAdminNavigationControl(control)'), 'category panel only reacts to real admin navigation controls'],
+  [uploadUi.includes('if(categoryManagerTimer&&!force)return;') && uploadUi.includes('categoryManagerTimer=0;'), 'category panel render scheduler cannot be starved by repeated DOM mutations'],
+  [uploadUi.includes('function installCategoryAuthLifecycle()') && uploadUi.includes("event==='SIGNED_OUT'"), 'category panel session lifecycle only clears on real sign-out/user change'],
+  [uploadUi.includes('window.__DRIPX_ADMIN_SESSION_VERIFIED=true') && uploadUi.includes('window.__DRIPX_ADMIN_VERIFIED_USER_ID=String(session.user.id)'), 'category panel keeps verified admin state across transient UI refreshes'],
+  [!uploadUi.includes('if(!categoryViewActive()||!client||window.DRIPX_IS_ADMIN!==true)'), 'category panel is not removed by temporary DRIPX_IS_ADMIN UI flag changes']
 ];
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedUploadChecks.length) throw new Error('DRIPX upload pipeline checks failed: ' + failedUploadChecks.join(', '));
