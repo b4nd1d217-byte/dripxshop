@@ -38,14 +38,14 @@ await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
 await copyFile('dripx-reviews.js', 'dist/dripx-reviews.js');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
-const localRefs = [...shell.matchAll(/(?:src|href)="(\\/[^"?#]+)(?:\\?[^\"]*)?"/g)].map(match => match[1]);
+const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
 for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
 const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-account-panel.js','dist/dripx-reviews.js'];
-const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\\n');
-if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\\s*[:=]\\s*["'][^"']{20,}/i.test(clientSource)) {
+const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
+if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
 }
 const requiredFeatures = [
