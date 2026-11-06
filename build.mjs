@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, cp, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, cp, copyFile, access } from 'node:fs/promises';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { Script } from 'node:vm';
 
@@ -37,4 +37,30 @@ await copyFile('dripx-account-panel.css', 'dist/dripx-account-panel.css');
 await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
 await copyFile('dripx-reviews.js', 'dist/dripx-reviews.js');
 await cp('assets', 'dist/assets', { recursive: true });
-console.log(`DRIP X SHOP build OK · app.js ${appText.length} bytes · CSS ${css.length + extraCss.length} bytes · free products + ZIP reader/staging + SVG icons enabled`);
+const shell = await readFile('dist/index.html', 'utf8');
+const localRefs = [...shell.matchAll(/(?:src|href)="(\\/[^"?#]+)(?:\\?[^\"]*)?"/g)].map(match => match[1]);
+for (const ref of localRefs) {
+  try { await access('dist' + ref); }
+  catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
+}
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-account-panel.js','dist/dripx-reviews.js'];
+const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\\n');
+if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\\s*[:=]\\s*["'][^"']{20,}/i.test(clientSource)) {
+  throw new Error('A server-side Supabase secret was detected in a public client asset.');
+}
+const requiredFeatures = [
+  'dripx_claim_free_product',
+  'dripx-validate-product-upload',
+  'DRIPX_UPLOAD_FILE',
+  'dripx-license/download',
+  'dripx-discord-logs',
+  'dripx-account-panel',
+  'dripx-reviews'
+];
+const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
+if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
+const cssSource = Buffer.concat([css, extraCss]).toString('utf8');
+if (!cssSource.includes('@media(max-width:720px)') || !cssSource.includes(':focus-visible')) {
+  throw new Error('DRIPX responsive/accessibility styles are missing.');
+}
+console.log(`DRIP X SHOP build OK · static asset, client-secret, feature, responsive and accessibility smoke checks passed · app.js ${appText.length} bytes · CSS ${css.length + extraCss.length} bytes · free products + ZIP reader/staging + SVG icons enabled`);
