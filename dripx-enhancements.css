@@ -200,3 +200,34 @@
 .dx-description-tool:focus-visible,.dx-zip-retry:focus-visible{outline:2px solid var(--accent,#d34b4b);outline-offset:2px}
 .dx-description-input{min-height:120px;line-height:1.65}
 @media(max-width:720px){.dx-product-zip-preview{padding:13px}.dx-product-zip-preview .dx-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-product-zip-preview .dx-preview-files{grid-template-columns:1fr}.dx-description-tools{width:100%;justify-content:flex-start}}
+
+
+/* DRIP X · Product creation workspace — visual refinement, existing palette preserved */
+#app.dx-admin-view #product-form{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;width:100%;max-width:1120px;margin:0 auto;padding:clamp(16px,2.2vw,26px);border:1px solid rgba(145,187,212,.16);border-radius:20px;background:linear-gradient(155deg,rgba(13,28,42,.96),rgba(7,16,26,.98));box-shadow:0 22px 58px rgba(0,0,0,.25),inset 0 1px rgba(255,255,255,.025)}
+#app.dx-admin-view #product-form>h1,#app.dx-admin-view #product-form>h2,#app.dx-admin-view #product-form>h3{margin:0 0 2px}
+#app.dx-admin-view #product-form .form-group,#app.dx-admin-view #product-form .form-row,#app.dx-admin-view #product-form .field{display:grid;gap:8px;min-width:0;margin:0;padding:14px;border:1px solid rgba(145,187,212,.11);border-radius:13px;background:rgba(4,13,22,.42)}
+#app.dx-admin-view #product-form label{display:grid;gap:7px;color:#b8ccda;font-size:11px;font-weight:700;letter-spacing:.015em}
+#app.dx-admin-view #product-form label>small,#app.dx-admin-view #product-form .muted{color:#819bad;font-size:10px;line-height:1.55;font-weight:500}
+#app.dx-admin-view #product-form input:not([type=checkbox]):not([type=radio]),#app.dx-admin-view #product-form textarea,#app.dx-admin-view #product-form select{min-height:44px;border-color:rgba(145,187,212,.18);border-radius:10px;background:rgba(3,11,19,.82);color:#edf7fc}
+#app.dx-admin-view #product-form textarea{min-height:132px;line-height:1.7}
+#app.dx-admin-view #product-form input[type=file]{min-height:unset;padding:12px;border:1px dashed rgba(0,199,255,.34);border-radius:12px;background:rgba(0,199,255,.045);color:#a9c0cf;cursor:pointer}
+#app.dx-admin-view #product-form input[type=file]::file-selector-button{min-height:34px;margin:0 12px 0 0;padding:0 12px;border:1px solid rgba(0,199,255,.3);border-radius:8px;background:rgba(0,199,255,.12);color:#c9f4ff;font:700 11px Inter,"Segoe UI",sans-serif;cursor:pointer}
+#app.dx-admin-view #product-form input[type=file]::file-selector-button:hover{background:rgba(0,199,255,.2)}
+#app.dx-admin-view #product-form .form-grid{gap:12px;align-items:start}
+#app.dx-admin-view #product-form .form-card,#app.dx-admin-view #product-form .form-panel,#app.dx-admin-view #product-form .form-section{display:grid;gap:13px;padding:18px;border-color:rgba(145,187,212,.14);border-radius:15px;background:linear-gradient(145deg,rgba(11,25,38,.9),rgba(6,15,24,.88))}
+#app.dx-admin-view #product-form .dx-description-editor{gap:10px}
+#app.dx-admin-view #product-form .dx-description-tools{width:100%;padding:7px;border-color:rgba(145,187,212,.15);border-radius:10px;background:rgba(3,11,19,.55)}
+#app.dx-admin-view #product-form .dx-description-tool{width:34px;height:34px}
+#app.dx-admin-view #product-form .dx-description-input{min-height:150px}
+#app.dx-admin-view #product-form .dx-product-zip-preview{margin:0;padding:18px;border-color:rgba(0,199,255,.2);border-radius:15px;background:linear-gradient(145deg,rgba(0,199,255,.055),rgba(5,14,23,.9) 58%)}
+#app.dx-admin-view #product-form .dx-preview-files{max-height:300px}
+#app.dx-admin-view #product-form .dx-upload-file{border-color:rgba(145,187,212,.13);border-radius:10px;background:rgba(3,11,19,.48)}
+#app.dx-admin-view #product-form button[type=submit],#app.dx-admin-view #product-form input[type=submit]{min-height:45px;padding:0 19px;border-radius:10px;font-weight:750}
+#app.dx-admin-view #product-form :is(button[type=submit],input[type=submit]):focus-visible{outline:2px solid rgba(0,199,255,.8);outline-offset:3px}
+#app.dx-admin-view .admin-section,#app.dx-admin-view .admin-panel,#app.dx-admin-view .admin-card{padding:clamp(16px,2vw,22px);background:linear-gradient(155deg,rgba(13,27,40,.94),rgba(7,16,25,.96));box-shadow:0 12px 34px rgba(0,0,0,.16)}
+#app.dx-admin-view :is(.admin-section,.admin-panel,.admin-card)+:is(.admin-section,.admin-panel,.admin-card){margin-top:16px}
+#app.dx-admin-view :is(.admin-section,.admin-panel,.admin-card)>:first-child{margin-top:0}
+#app.dx-admin-view :is(.admin-section,.admin-panel,.admin-card)>:last-child{margin-bottom:0}
+#app.dx-admin-view table td{vertical-align:middle}
+#app.dx-admin-view table tbody tr:last-child td{border-bottom:0}
+@media(max-width:720px){#app.dx-admin-view #product-form{gap:12px;padding:12px;border-radius:15px}#app.dx-admin-view #product-form .form-grid{grid-template-columns:minmax(0,1fr)}#app.dx-admin-view #product-form .form-group,#app.dx-admin-view #product-form .form-row,#app.dx-admin-view #product-form .field{padding:11px}#app.dx-admin-view #product-form .form-card,#app.dx-admin-view #product-form .form-panel,#app.dx-admin-view #product-form .form-section{padding:13px}#app.dx-admin-view #product-form button[type=submit],#app.dx-admin-view #product-form input[type=submit]{width:100%}}
