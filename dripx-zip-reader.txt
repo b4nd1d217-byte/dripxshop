@@ -112,12 +112,15 @@
     const meta=zip.file('meta.xml');
     if(!meta)throw new Error('No se pudo reconstruir meta.xml en la raíz del resource.');
     const metaText=await meta.async('string');
-    if(/<!DOCTYPE/i.test(metaText))throw new Error('meta.xml contiene una declaración DOCTYPE no permitida.');
+    if(/<!DOCTYPE|<!ENTITY/i.test(metaText))throw new Error('meta.xml contiene declaraciones XML externas no permitidas.');
     const parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
-    const infoNode=parsed.querySelector('info'),infoText=Array.from(infoNode?.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=files.map(item=>item.path).join(' ');
+    const infoNode=parsed.querySelector('info'),infoText=Array.from(infoNode?.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=entries.map(entry=>entry.name).join(' ');
     const hasFiveMManifest=entries.some(entry=>/^(fxmanifest|__resource)\.lua$/i.test(entry.name.split('/').pop()||''));
     if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA con meta.xml y scripts compatibles.');
+    if(!infoNode)throw new Error('meta.xml no contiene el bloque <info>.');
+    const infoName=String(infoNode.getAttribute('name')||'').trim(),infoAuthor=String(infoNode.getAttribute('author')||'').trim(),infoVersion=String(infoNode.getAttribute('version')||'').trim(),infoType=String(infoNode.getAttribute('type')||'').trim().toLowerCase();
+    if(!infoName||!infoAuthor||!infoVersion||infoName.length>120||infoAuthor.length>120||infoVersion.length>40||infoType!=='script')throw new Error('La información de meta.xml está incompleta: se requiere info con name, author, version y type="script".');
     const normalizeScriptPath=value=>{
       let path=String(value||'').split(String.fromCharCode(92)).join('/');
       path=path.replace(/^(?:\.\/)+/,'');
@@ -132,10 +135,14 @@
       const src=normalizeScriptPath(originalSrc);
       const type=String(node.getAttribute('type')||'server').trim().toLowerCase();
       if(!['server','client','shared'].includes(type))throw new Error('meta.xml contiene un tipo de script no reconocido: '+type+'.');
+      if(!/\.lua$/i.test(src))throw new Error('meta.xml debe declarar archivos .lua originales. Se encontró '+src+'. Los .luac ya compilados no pueden volver a protegerse; importa el ZIP fuente.');
       if(scripts.some(script=>script.src.toLowerCase()===src.toLowerCase()))throw new Error('meta.xml declara el mismo script más de una vez: '+src);
       scripts.push({src,originalSrc,type});
     }
     if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
+    const sharedLua=scripts.filter(script=>script.type==='shared'&&/\.lua$/i.test(script.src));
+    if(sharedLua.length!==1)throw new Error('El resource debe declarar exactamente un único script shared Lua para insertar la licencia DRIPX.');
+    if(!scripts.some(script=>script.type==='server'))throw new Error('El resource debe declarar al menos un script Lua de servidor.');
     const available=new Set(entries.map(entry=>entry.name));
     const missing=scripts.filter(script=>!available.has(script.src));
     if(missing.length)throw new Error('meta.xml referencia archivos que no existen en el ZIP: '+missing.slice(0,8).map(item=>item.src).join(', '));
@@ -167,12 +174,12 @@
     const server=files.filter(item=>item.kind==='server_lua');
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
-      const type=scriptMap.get(entry.name),record=files.find(item=>item.path===entry.name);
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client')&&record?.kind!=='config';
+      const type=scriptMap.get(entry.name);
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
-    const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
-    const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
+    const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
+    const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
