@@ -346,11 +346,26 @@ async function downloadOwnedProduct(req: Request) {
 
   const meta = zip.file("meta.xml");
   if (!meta) return json(409, { error: "resource_meta_missing" });
+  const metaEntries = archiveFiles.filter(entry => entry.name.toLowerCase().split("/").pop() === "meta.xml");
+  if (metaEntries.length !== 1 || metaEntries[0].name !== "meta.xml") {
+    return json(409, { error: "resource_meta_root_invalid" });
+  }
   const metaBytes = await meta.async("uint8array");
   if (!metaBytes.length || metaBytes.byteLength > 2 * 1024 * 1024) {
     return json(413, { error: "resource_meta_size_invalid" });
   }
   const metaText = new TextDecoder("utf-8", { fatal: true }).decode(metaBytes);
+  const infoTag = metaText.match(/<info\b[^>]*>/i);
+  if (!infoTag) return json(409, { error: "resource_meta_info_missing" });
+  const infoName = xmlAttribute(infoTag[0], "name").trim();
+  const infoAuthor = xmlAttribute(infoTag[0], "author").trim();
+  const infoVersion = xmlAttribute(infoTag[0], "version").trim();
+  const infoType = xmlAttribute(infoTag[0], "type").trim().toLowerCase();
+  if (!infoName || !infoAuthor || !infoVersion || infoName.length > 120
+      || infoAuthor.length > 120 || infoVersion.length > 40 || infoType !== "script") {
+    return json(409, { error: "resource_meta_info_incomplete" });
+  }
+
   if (
     /<!DOCTYPE|<!ENTITY/i.test(metaText)
     || !/<meta(?:\s|>)/i.test(metaText)
