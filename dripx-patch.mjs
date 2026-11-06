@@ -191,7 +191,7 @@ export async function patchApp(source) {
       return refreshed.data.session.access_token;
     };
     let token=await getToken(false);
-    const working=await JSZip.loadAsync(await b.zip.generateAsync({type:'uint8array'}));
+    const working=b.zip;
     let meta=await working.file(b.metaName).async('string');
     const completed=new Set(b.compiledFiles||[]);
     const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -255,7 +255,7 @@ export async function patchApp(source) {
   }
   async function downloadProtectedZip(){
     const b=state.zipBuild;if(!b?.protected||!b.compiled||!b.licenseInjected)throw new Error('Completa protección y compilación.');
-    const blob=await b.zip.generateAsync({type:'blob',mimeType:'application/zip',compression:'DEFLATE',compressionOptions:{level:6}});if(!blob?.size)throw new Error('ZIP final vacío.');
+    const blob=await b.zip.generateAsync({type:'blob',mimeType:'application/zip',compression:'DEFLATE',compressionOptions:{level:6}});if(!blob?.size)throw new Error('ZIP final vacío.');b.finalBlobSize=blob.size;
     window.__DRIPX_PENDING_PRODUCT_ID=b.productId;
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='DRIPX-resource-protegido.zip';a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);return {bytes:blob.size};
   }
