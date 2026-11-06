@@ -846,12 +846,15 @@
       panel.dataset.loadedAt=String(Date.now());
     }catch(error){
       const message=String(error?.message||'No se pudieron cargar las categorías.');
-      if(/Solo administración|sesión expiró|inicia sesión|administrativa no está disponible/i.test(message)){
+      if(/Solo administración/i.test(message)){
         window.__DRIPX_CATEGORY_ADMIN_DENIED=true;
         window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
         window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
-        panel?.remove();
-        setLegacyCategoryManagerHidden(false);
+        panel=categoryPanel();
+        if(panel){
+          panel.dataset.loaded='error';
+          panel.innerHTML='<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('refresh')+' Volver a comprobar</button></div><p class="dx-cat-status error">Esta cuenta no tiene permisos administrativos para gestionar categorías. Comprueba tu acceso de Discord y vuelve a intentarlo.</p>';
+        }
       }else{
         panel=document.querySelector('#dx-category-manager');
         if(panel){
@@ -973,11 +976,15 @@
     if(control.matches('[data-admin-tab],[data-admin-route],[role="tab"],[data-tab],[data-route]'))return true;
     return !!control.closest('nav,[role="navigation"],[role="tablist"],aside,.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,.admin-nav-item,.admin-menu-item,.admin-tab-item,.admin-section-link,[data-admin-item],[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu,.admin-dashboard-nav,.admin-sections,.sidebar-nav,.sidebar,.sidebar-item,.nav-item,.menu-item');
   }
-  function syncCategoryRouteFromHash(clearOnOtherRoute=false){
+  function syncCategoryRouteFromHash(){
     const hash=String(location.hash||'').toLowerCase();
-    if(/^#admin\/categorias?(?:$|[/?])/.test(hash)||/(?:[?&])tab=categorias?(?:&|$)/.test(hash)){
+    const categoryRoute=/^#admin\/(?:categorias?|categories?)(?:$|[/?])/.test(hash)
+      ||/(?:[?&])tab=(?:categorias?|categories?)(?:&|$)/.test(hash);
+    if(categoryRoute){
       setCategoryTabActive(true);
-    }else if(clearOnOtherRoute||(hash&&hash!=='#admin')){
+    }else if(!/^#admin\/?$/.test(hash)){
+      // Keep the selected admin subview while the router normalizes to #admin.
+      // A different route clears it; a real admin-tab click also clears it.
       setCategoryTabActive(false);
     }
   }
@@ -1239,7 +1246,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{syncCategoryRouteFromHash(true);hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
+  window.addEventListener('hashchange',()=>{syncCategoryRouteFromHash();hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
