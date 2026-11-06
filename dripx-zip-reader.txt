@@ -141,9 +141,9 @@
     const lua=entries.filter(entry=>entry.name.toLowerCase().endsWith('.lua'));
     const server=files.filter(item=>item.kind==='server_lua');
     const client=files.filter(item=>item.kind==='client_lua');
-    const compileTargets=lua.filter(entry=>{
-      const item=files.find(record=>record.path===entry.name);
-      return item&&!['config','shared_lua'].includes(item.kind);
+    const compileTargets=entries.filter(entry=>{
+      const type=scriptMap.get(entry.name);
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
@@ -152,7 +152,7 @@
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
       compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
-      compiled:false,protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded
+      compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded
     };
     const configCount=files.filter(item=>item.kind==='config'||item.kind==='shared_lua').length;
     const shaderCount=files.filter(item=>item.kind==='shader').length;
