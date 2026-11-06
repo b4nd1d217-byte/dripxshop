@@ -71,6 +71,8 @@ const uploadChecks = [
   [appText.includes('El borrador se conservó'), 'draft preservation after upload errors'],
   [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
   [zipReader.includes("(type==='server'||type==='client')&&record?.kind!=='config'"), 'compile only declared executable Lua'],
+  [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
+  [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
   [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
   [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling']

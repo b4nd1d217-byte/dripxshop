@@ -1,4 +1,14 @@
   async function loadZipForProtection(file){
+    const ensureZipUiNode=(id,tag)=>{
+      let node=document.getElementById(id);
+      if(node?.isConnected)return node;
+      const host=document.querySelector('.dx-product-engine')||document.querySelector('#product-zip-preview');
+      if(!host)throw new Error('El panel del lector ZIP no está montado. Vuelve a seleccionar el archivo para iniciar el análisis.');
+      node=document.createElement(tag);
+      node.id=id;
+      host.append(node);
+      return node;
+    };
     const LIMITS={meta:2*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
@@ -132,7 +142,10 @@
       const configName=/^(config|settings|shared|language|locale)(?:[._-].*)?\.(lua|xml|json|ini|cfg|conf|ya?ml|toml)$/i.test(base);
       const isConfig=configExtensions.has(ext)||configFolder||configName;
       const isShader=['fx','hlsl','glsl'].includes(ext);
-      const kind=isConfig?'config':(isLua&&scriptType==='shared'?'shared_lua':(isLua&&scriptType==='server'?'server_lua':(isLua&&scriptType==='client'?'client_lua':(isLua?'lua_other':(isShader?'shader':'file')))));
+      // meta.xml is authoritative: an executable Lua script stays executable even inside a folder named config/shared.
+      const kind=isLua&&scriptType
+        ? (scriptType==='shared'?'shared_lua':(scriptType==='server'?'server_lua':'client_lua'))
+        : (isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file')));
       return {
         path,bytes:Number(entry._data?.uncompressedSize??entry._data?.length??0),
         kind,scriptType,declared:!!scriptType,extension:ext
@@ -167,15 +180,22 @@
       const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='shared_lua'?'Lua shared':item.kind==='config'?'Configuración':item.kind==='lua_other'?'Lua adicional':item.kind==='shader'?'Shader':'Archivo';
       return '<div class="zip-file dx-zip-entry dx-zip-static"><span class="dx-zip-name">'+esc(item.path)+'</span><small class="dx-zip-kind">'+label+' · '+bytes(item.bytes)+'</small></div>';
     }).join('');
-    $('#zip-analysis').innerHTML='<b>ZIP analizado</b> · '+files.length+' archivos · '+scriptCount+' Lua · '+server.length+' server · '+client.length+' client · '+shaderCount+' shaders · '+configCount+' config/shared · '+bytes(normalizedExpanded);
-    $('#zip-file-list').innerHTML='<div class="dx-zip-list-head"><strong>Archivos detectados</strong><span>'+files.length+'</span></div>'+rows;
-    $('#zip-protect').disabled=false;
-    $('#zip-protect').textContent='Proteger';
-    $('#zip-compile').disabled=true;
-    $('#zip-compile').textContent='Compilar';
-    $('#zip-download').disabled=true;
-    $('#zip-download').textContent='Preparar ZIP';
-    $('#zip-status').textContent='ZIP analizado.';
+    const analysisNode=ensureZipUiNode('zip-analysis','div');
+    const fileListNode=ensureZipUiNode('zip-file-list','div');
+    const protectButton=ensureZipUiNode('zip-protect','button');
+    const compileButton=ensureZipUiNode('zip-compile','button');
+    const downloadButton=ensureZipUiNode('zip-download','button');
+    const statusNode=ensureZipUiNode('zip-status','p');
+    for(const button of [protectButton,compileButton,downloadButton])button.type='button';
+    analysisNode.innerHTML='<b>ZIP analizado</b> · '+files.length+' archivos · '+scriptCount+' Lua · '+server.length+' server · '+client.length+' client · '+shaderCount+' shaders · '+configCount+' config/shared · '+bytes(normalizedExpanded);
+    fileListNode.innerHTML='<div class="dx-zip-list-head"><strong>Archivos detectados</strong><span>'+files.length+'</span></div>'+rows;
+    protectButton.disabled=false;
+    protectButton.textContent='Proteger';
+    compileButton.disabled=true;
+    compileButton.textContent='Compilar';
+    downloadButton.disabled=true;
+    downloadButton.textContent='Preparar ZIP';
+    statusNode.textContent='ZIP analizado.';
     const result={file,zip,entries,files,expanded:normalizedExpanded,metaPath:'meta.xml',rootPrefix,server:serverEntries,client:clientEntries,luaCount:lua.length};
     window.DRIPX_ZIP_SCAN_RESULT=result;
     window.DRIPX_ZIP_ROOT_PREFIX=rootPrefix;

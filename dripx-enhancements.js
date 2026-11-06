@@ -175,8 +175,16 @@
       try{
         if(!window.tus?.Upload)throw new Error('No se pudo cargar el módulo de subida reanudable. Recarga la página.');
         if(!projectRef)throw new Error('Configuración de Supabase inválida.');
-        const {data:{session},error}=await client.auth.getSession();if(error)throw error;
-        if(!session?.access_token)throw new Error('La sesión expiró antes de comenzar la subida.');
+        if(!client)throw new Error('No se pudo iniciar el cliente de Supabase.');
+        const current=await client.auth.getSession();if(current.error)throw current.error;
+        let session=current.data?.session||null;
+        const expires=Number(session?.expires_at||0)*1000;
+        if(!session?.access_token||(expires&&expires<Date.now()+90000)){
+          const refreshed=await client.auth.refreshSession();
+          if(refreshed.error)throw refreshed.error;
+          session=refreshed.data?.session||null;
+        }
+        if(!session?.access_token)throw new Error('La sesión expiró antes de comenzar la subida. Vuelve a iniciar sesión; el ZIP sigue seleccionado.');
         const upload=new window.tus.Upload(file,{
           endpoint:'https://'+projectRef+'.storage.supabase.co/storage/v1/upload/resumable',
           retryDelays:[0,3000,5000,10000,20000],
@@ -392,7 +400,7 @@
       if(!result||result.file!==file||!Array.isArray(result.files))throw new Error('El lector no devolvió un inventario válido.');
       const rows=result.files.map(item=>{
         const compile=['server_lua','client_lua','lua_other'].includes(item.kind);
-        const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='lua_other'?'Lua adicional':item.kind==='shared_lua'||item.kind==='config'?'Configuración / shared':'Archivo conservado';
+        const label=item.kind==='server_lua'?'Lua servidor':item.kind==='client_lua'?'Lua cliente':item.kind==='shared_lua'?'Lua shared':item.kind==='config'?'Configuración':item.kind==='lua_other'?'Lua adicional':'Archivo conservado';
         const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
         return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(item.path)+'</span><small>'+label+' · '+formatBytes(item.bytes)+'</small></div>';
       }).join('');
