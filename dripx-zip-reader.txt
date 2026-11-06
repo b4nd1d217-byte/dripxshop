@@ -146,8 +146,8 @@
       return item&&!['config','shared_lua'].includes(item.kind);
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
-    const serverEntries=entries.filter(entry=>server.some(item=>item.path===entry.name));
-    const clientEntries=entries.filter(entry=>client.some(item=>item.path===entry.name));
+    const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
+    const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
