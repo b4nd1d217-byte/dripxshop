@@ -26,12 +26,6 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
-    if old.name is distinct from new.name then
-      update public.dripx_products
-         set category = new.name, updated_at = now()
-       where lower(btrim(category)) = lower(btrim(old.name));
-    end if;
-
     if old.active is true and new.active is false and exists (
       select 1 from public.dripx_products p
       where lower(btrim(p.category)) = lower(btrim(old.name))
@@ -39,6 +33,12 @@ begin
     ) then
       raise exception using errcode='23514',
         message='No se puede desactivar una categoría que tiene productos publicados. Mueve o archiva primero esos productos.';
+    end if;
+
+    if old.name is distinct from new.name then
+      update public.dripx_products
+         set category = new.name, updated_at = now()
+       where lower(btrim(category)) = lower(btrim(old.name));
     end if;
     return new;
   end if;
