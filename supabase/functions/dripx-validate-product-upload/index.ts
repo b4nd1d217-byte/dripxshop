@@ -199,13 +199,14 @@ async function validateProduct(req: Request) {
   }
   const findByBase=(name:string)=>archiveFiles.filter(entry=>entry.name.split("/").pop()?.toLowerCase()===name.toLowerCase());
   const metas=findByBase("meta.xml");if(metas.length!==1||metas[0].name!=="meta.xml")return json(409,{error:"meta_root_invalid"});
-  const meta=await metas[0].async("string"),marker=meta.match(/DRIPX_PRODUCT_ID:\\s*([0-9a-f-]{36})/i);if(!marker||marker[1].toLowerCase()!==productId)return json(409,{error:"product_id_marker_invalid"});
-  const tags=meta.match(/<script\\b[^>]*>/gi)||[],scripts=tags.map(tag=>({src:attr(tag,"src").trim().replace(/^\\.\\//,""),type:(attr(tag,"type").trim().toLowerCase()||"server")}));
+  const meta=await metas[0].async("string"),marker=meta.match(/DRIPX_PRODUCT_ID: *([0-9a-f-]{36})/i);if(!marker||marker[1].toLowerCase()!==productId)return json(409,{error:"product_id_marker_invalid"});
+  const tags=meta.match(/<script\b[^>]*>/gi)||[],scripts=tags.map(tag=>{const raw=attr(tag,"src").trim(),type=attr(tag,"type").trim().toLowerCase()||"server";return {src:raw.startsWith("./")?raw.slice(2):raw,type};});
   const available=new Set(archiveFiles.map(e=>e.name)),refs=new Set<string>();let compiledCount=0,serverCompiledCount=0,sharedCount=0;
   for(const s of scripts){if(!safePath(s.src)||!available.has(s.src))return json(422,{error:"meta_script_path_invalid",path:s.src});const k=s.src.normalize("NFC").toLowerCase();if(refs.has(k))return json(422,{error:"meta_script_duplicate"});refs.add(k);
     if(s.type==="shared"&&s.src.toLowerCase().endsWith(".lua")){sharedCount++;const text=await zip.file(s.src)!.async("string");if(text.split("DRIPX_LICENSE_KEY_PLACEHOLDER").length!==2)return json(409,{error:"shared_license_placeholder_invalid"});}
-    if((s.type==="server"||s.type==="client")&&s.src.toLowerCase().endsWith(".lua")&&!/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.lua$/i.test(s.src))return json(409,{error:"uncompiled_lua_present",path:s.src});
-    if((s.type==="server"||s.type==="client")&&s.src.toLowerCase().endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;}
+    const lower=s.src.toLowerCase(),isConfig=lower.split("/").some(part=>["config","configs","settings","shared","language","languages","locale","locales"].some(name=>part===name||part.startsWith(name+".")||part.startsWith(name+"_")||part.startsWith(name+"-")));
+    if((s.type==="server"||s.type==="client")&&lower.endsWith(".lua")&&!isConfig)return json(409,{error:"uncompiled_lua_present",path:s.src});
+    if((s.type==="server"||s.type==="client")&&lower.endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;}
   }
   if(sharedCount!==1)return json(409,{error:"shared_license_file_invalid"});
   if(archiveFiles.some(e=>/(^|\\/)dripx_(license|guard_shared)\\.lua$/i.test(e.name)))return json(409,{error:"legacy_license_module_present"});
