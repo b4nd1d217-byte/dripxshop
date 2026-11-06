@@ -78,7 +78,7 @@ const uploadChecks = [
   [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
   [patchSource.includes("featured:fd.has('featured'),is_featured:fd.has('featured')"), 'product insert preserves both featured columns in live dripx_products schema'],
   [patchSource.includes("fd.set('file',stagedZip,stagedZip.name)") && patchSource.includes("file!==staged"), 'protected ZIP is the exact file sent in FormData'],
-  [patchSource.includes("setSaveState('03/4") && patchSource.includes("setSaveState('04/4") && patchSource.includes("verificando CRC, meta.xml y bytecode MTA"), 'visible product-save transaction stages'],
+  [patchSource.includes("setSaveState('03/4") && patchSource.includes("setSaveState('04/4") && patchSource.toLowerCase().includes("verificando crc, meta.xml y bytecode mta"), 'visible product-save transaction stages'],
   [uploadUi.includes('window.__DRIPX_PROCESSED_PRODUCT_FILE=processed') && !uploadUi.includes('new DataTransfer()'), 'mobile-safe protected file staging without input mutation'],
   [uploadUi.includes("original=input?.files?.[0]") && uploadUi.includes('processed.productId!==window.__DRIPX_PENDING_PRODUCT_ID'), 'submit guard validates original input and staged output'],
   [authBootstrap.includes('sharedSupabaseClient=client') && authBootstrap.includes('return sharedSupabaseClient;'), 'single authenticated Supabase client across app panels'],
@@ -109,6 +109,18 @@ const uploadChecks = [
   [uploadUi.includes("window.sessionStorage?.setItem('dripx.admin.tab','categorias')") && uploadUi.includes('function syncCategoryRouteFromHash(clearOnOtherRoute=false)'), 'category tab selection survives internal rerenders and browser refreshes'],
   [uploadUi.includes('currentPanel?.dataset.loaded===\'error\'') && uploadUi.includes('if(categoryManagerTimer&&!force)return;'), 'category errors do not trigger mutation-observer retry loops']
 ];
+const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
+const categoryRouteEnd = uploadUi.indexOf('\n  document.addEventListener', categoryRouteStart);
+if (categoryRouteStart < 0 || categoryRouteEnd < 0) throw new Error('DRIPX category route regression test could not locate the route handler.');
+const categoryRouteSource = uploadUi.slice(categoryRouteStart, categoryRouteEnd);
+const categoryChecks = [
+  [categoryRouteSource.includes("else if(!/^#admin\\/?$/.test(hash))"), 'category selection survives normalization to the base admin route'],
+  [categoryRouteSource.includes('categories?'), 'category routing supports Spanish and English route names'],
+  [uploadUi.includes('if(/Solo administración/i.test(message))'), 'category authorization denial is separated from session failures'],
+  [!uploadUi.includes('/Solo administración|sesión expiró|inicia sesión|administrativa no está disponible/i.test(message)'), 'transient session errors keep the category panel and retry action visible']
+];
+const failedCategoryChecks = categoryChecks.filter(([passed]) => !passed).map(([,name]) => name);
+if (failedCategoryChecks.length) throw new Error('DRIPX category regression checks failed: ' + failedCategoryChecks.join(', '));
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedUploadChecks.length) throw new Error('DRIPX upload pipeline checks failed: ' + failedUploadChecks.join(', '));
 const cssSource = Buffer.concat([css, extraCss]).toString('utf8') + await readFile('dist/dripx-visual-system.css', 'utf8');
