@@ -70,9 +70,17 @@ const uploadChecks = [
   [appText.includes('b.finalBlobSize=blob.size'), 'final archive identity check'],
   [appText.includes('El borrador se conservó'), 'draft preservation after upload errors'],
   [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
-  [zipReader.includes("(type==='server'||type==='client')&&record?.kind!=='config'"), 'compile only declared executable Lua'],
+  [zipReader.includes("return /\\.lua$/i.test(entry.name)&&(type==='server'||type==='client');") && !zipReader.includes("record?.kind!=='config'"), 'compile every executable Lua declaration consistently'],
   [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
+  [zipReader.includes('dripxZipCRC32(data)') && zipReader.includes('LIMITS.expanded'), 'ZIP CRC and expansion limits'],
+  [zipReader.includes("archiveNames=entries.map(entry=>entry.name)") && !zipReader.includes("archiveNames=files.map("), 'ZIP platform detection without temporal-dead-zone access'],
+  [zipReader.includes("exactamente un único script shared") && zipReader.includes('infoType!==\'script\''), 'MTA metadata and license shared-script integrity'],
+  [zipReader.includes('resource FiveM'), 'FiveM archive rejection with explicit guidance'],
+  [validator.result.content.includes('meta_info_incomplete') && validator.result.content.includes('meta_script_type_invalid'), 'server-side MTA metadata validation'],
+  [license.result.content.includes('resource_meta_info_incomplete') && license.result.content.includes('startsAt <= now'), 'download metadata and plan start-time validation'],
+  [profileMig.result.content.includes('grant update (leaderboard_public, updated_at)'), 'profile privilege allowlist migration'],
+  [buyerMig.result.content.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in']
   [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
   [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling']
