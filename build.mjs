@@ -68,6 +68,7 @@ const uploadValidator = await readFile('supabase/functions/dripx-validate-produc
 const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
 const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
 const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
+const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
@@ -94,7 +95,11 @@ const uploadChecks = [
   [privacyMigration.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in'],
   [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
-  [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling']
+  [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling'],
+  [uploadUi.includes('function categoryViewActive()') && uploadUi.includes('async function renderCategoryManager(force=false)') && uploadUi.includes('data-dx-category-action="delete"'), 'complete admin category manager with CRUD controls'],
+  [uploadUi.includes('const source=activeNames;') && uploadUi.includes('categorySyncAt=0'), 'new product selector uses active categories and refreshes after changes'],
+  [patchSource.includes("categoryRecord=await call(db.from('dripx_categories')") && patchSource.includes('category:categoryName,'), 'new products must reference an active Supabase category'],
+  [categoryMigration.includes('dripx_guard_category_references') && categoryMigration.includes('No se puede eliminar esta categoría'), 'database category rename/delete safeguards']
 ];
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedUploadChecks.length) throw new Error('DRIPX upload pipeline checks failed: ' + failedUploadChecks.join(', '));
