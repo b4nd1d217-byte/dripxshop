@@ -76,7 +76,7 @@ const uploadChecks = [
   [appText.includes('b.finalBlobSize=blob.size'), 'final archive identity check'],
   [appText.includes('El borrador se conservó'), 'draft preservation after upload errors'],
   [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
-  [!patchSource.includes(",featured:fd.has('featured')") && patchSource.includes("is_featured:fd.has('featured')"), 'product insert matches live dripx_products schema'],
+  [patchSource.includes("featured:fd.has('featured'),is_featured:fd.has('featured')"), 'product insert preserves both featured columns in live dripx_products schema'],
   [patchSource.includes("fd.set('file',stagedZip,stagedZip.name)") && patchSource.includes("file!==staged"), 'protected ZIP is the exact file sent in FormData'],
   [patchSource.includes('setSaveState(\'03/4') && patchSource.includes('verificando CRC, meta.xml y bytecode MTA'), 'visible product-save transaction stages'],
   [uploadUi.includes('window.__DRIPX_PROCESSED_PRODUCT_FILE=processed') && !uploadUi.includes('new DataTransfer()'), 'mobile-safe protected file staging without input mutation'],
