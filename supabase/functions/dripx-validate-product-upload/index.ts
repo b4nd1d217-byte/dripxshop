@@ -197,72 +197,20 @@ async function validateProduct(req: Request) {
       if (!Number.isSafeInteger(size) || size < 0 || size > 100 * 1024 * 1024) return json(413, { error: "zip_entry_size_invalid" });
     }
   }
-  const findByBase = (name: string) => archiveFiles.filter(entry => entry.name.split("/").pop()?.toLowerCase() === name.toLowerCase());
-  const metaEntries = findByBase("meta.xml");
-  const licenseEntries = findByBase("dripx_license.lua");
-  const sharedEntries = findByBase("dripx_guard_shared.lua");
-  if (metaEntries.length !== 1 || licenseEntries.length !== 1 || sharedEntries.length !== 1) {
-    return json(409, { error: "dripx_guard_files_missing", message: "El ZIP necesita un único meta.xml, dripx_license.lua y dripx_guard_shared.lua." });
+  const findByBase=(name:string)=>archiveFiles.filter(entry=>entry.name.split("/").pop()?.toLowerCase()===name.toLowerCase());
+  const metas=findByBase("meta.xml");if(metas.length!==1||metas[0].name!=="meta.xml")return json(409,{error:"meta_root_invalid"});
+  const meta=await metas[0].async("string"),marker=meta.match(/DRIPX_PRODUCT_ID:\\s*([0-9a-f-]{36})/i);if(!marker||marker[1].toLowerCase()!==productId)return json(409,{error:"product_id_marker_invalid"});
+  const tags=meta.match(/<script\\b[^>]*>/gi)||[],scripts=tags.map(tag=>({src:attr(tag,"src").trim().replace(/^\\.\\//,""),type:(attr(tag,"type").trim().toLowerCase()||"server")}));
+  const available=new Set(archiveFiles.map(e=>e.name)),refs=new Set<string>();let compiledCount=0,serverCompiledCount=0,sharedCount=0;
+  for(const s of scripts){if(!safePath(s.src)||!available.has(s.src))return json(422,{error:"meta_script_path_invalid",path:s.src});const k=s.src.normalize("NFC").toLowerCase();if(refs.has(k))return json(422,{error:"meta_script_duplicate"});refs.add(k);
+    if(s.type==="shared"&&s.src.toLowerCase().endsWith(".lua")){sharedCount++;const text=await zip.file(s.src)!.async("string");if(text.split("DRIPX_LICENSE_KEY_PLACEHOLDER").length!==2)return json(409,{error:"shared_license_placeholder_invalid"});}
+    if((s.type==="server"||s.type==="client")&&s.src.toLowerCase().endsWith(".lua")&&!/(^|\\/)(config|settings|shared|language|locale)[^/]*\\.lua$/i.test(s.src))return json(409,{error:"uncompiled_lua_present",path:s.src});
+    if((s.type==="server"||s.type==="client")&&s.src.toLowerCase().endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;}
   }
-  const metaEntry = metaEntries[0], licenseEntry = licenseEntries[0], sharedEntry = sharedEntries[0];
-  if (metaEntry.name !== "meta.xml" || licenseEntry.name !== "dripx_license.lua" || sharedEntry.name !== "dripx_guard_shared.lua") {
-    return json(409, { error: "dripx_guard_files_must_be_at_root" });
-  }
-  const [metaText, licenseText, sharedText] = await Promise.all([
-    metaEntry.async("string"), licenseEntry.async("string"), sharedEntry.async("string"),
-  ]);
-  const tokenMatch = licenseText.match(/local DRIPX_SHARED_GUARD_EXPECTED = "([a-f0-9]{48})"/);
-  if (!tokenMatch || !licenseText.includes("DRIPX_PRODUCT_ID_PLACEHOLDER")
-      || !licenseText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-      || !licenseText.includes("DRIPX_ACL_ACCOUNT_PLACEHOLDER")
-      || !licenseText.includes('addEvent("dripx:license:ready", false)')
-      || !licenseText.includes('triggerEvent("dripx:license:ready", resourceRoot)')) {
-    return json(409, { error: "dripx_license_template_invalid" });
-  }
-  if (!sharedText.includes('DRIPX_SHARED_LICENSE_GUARD = "' + tokenMatch[1] + '"')) {
-    return json(409, { error: "dripx_shared_guard_token_mismatch" });
-  }
-  const scriptTags = metaText.match(/<script\b[^>]*>/gi) || [];
-  const scripts = scriptTags.map(tag => ({
-    src: attr(tag, "src").trim().replace(/^\.\//, ""),
-    type: (attr(tag, "type").trim().toLowerCase() || "server"),
-  }));
-  if (!scripts.length) return json(422, { error: "meta_scripts_missing" });
-  const available = new Set(archiveFiles.map(entry => entry.name));
-  const refs = new Set<string>();
-  let compiledCount = 0, serverCompiledCount = 0;
-  for (const script of scripts) {
-    if (!safePath(script.src) || !available.has(script.src)) return json(422, { error: "meta_script_path_invalid", path: script.src });
-    const refKey = script.src.normalize("NFC").toLowerCase();
-    if (refs.has(refKey)) return json(422, { error: "meta_script_duplicate" });
-    refs.add(refKey);
-    const lower = script.src.toLowerCase();
-    const configLua = /(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(script.src);
-    if ((script.type === "server" || script.type === "client") && lower.endsWith(".lua") && !configLua && script.src !== "dripx_license.lua") {
-      return json(409, { error: "uncompiled_lua_present", path: script.src });
-    }
-    if ((script.type === "server" || script.type === "client") && lower.endsWith(".luac")) {
-      const entry = zip.file(script.src);
-      if (!entry) return json(422, { error: "compiled_script_missing", path: script.src });
-      const bytes = await entry.async("uint8array");
-      if (!bytecode(bytes)) return json(422, { error: "compiled_bytecode_invalid", path: script.src });
-      compiledCount++;
-      if (script.type === "server") serverCompiledCount++;
-    }
-  }
-  const sharedLuaSources = new Set(scripts.filter(script => script.type === "shared").map(script => script.src));
-  for (const entry of archiveFiles) {
-    if (!entry.name.toLowerCase().endsWith(".lua")) continue;
-    const configLua = /(^|\/)(config|settings|shared|language|locale)[^/]*\.lua$/i.test(entry.name);
-    if (configLua || entry.name === "dripx_license.lua" || sharedLuaSources.has(entry.name)) continue;
-    return json(409, { error: "uncompiled_lua_artifact", path: entry.name });
-  }
-  const sharedIndex = scripts.findIndex(script => script.src === "dripx_guard_shared.lua" && script.type === "shared");
-  const licenseIndex = scripts.findIndex(script => script.src === "dripx_license.lua" && script.type === "server");
-  if (sharedIndex < 0 || licenseIndex < 0 || sharedIndex >= licenseIndex) {
-    return json(409, { error: "dripx_license_meta_order_invalid" });
-  }
-  if (!serverCompiledCount || !compiledCount) return json(409, { error: "server_lua_not_compiled" });
+  if(sharedCount!==1)return json(409,{error:"shared_license_file_invalid"});
+  if(archiveFiles.some(e=>/(^|\\/)dripx_(license|guard_shared)\\.lua$/i.test(e.name)))return json(409,{error:"legacy_license_module_present"});
+  if(!compiledCount||!serverCompiledCount)return json(409,{error:"server_lua_not_compiled"});
+
   return json(200, {
     valid: true,
     product_id: productId,
