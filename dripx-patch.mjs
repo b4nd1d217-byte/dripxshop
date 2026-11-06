@@ -230,7 +230,16 @@ export async function patchApp(source) {
     window.__DRIPX_PENDING_PRODUCT_ID=b.productId;
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='DRIPX-resource-protegido.zip';a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);return {bytes:blob.size};
   }
-  window.DRIPX_PRODUCT_PROTECTION_ACTIONS={protect:protectZip,compile:compileZip,download:downloadProtectedZip};`;
+  async function resumeZip(){
+    const b=state.zipBuild;
+    if(!b?.zip)throw new Error('No hay un proceso ZIP que pueda reanudarse.');
+    if(!b.protected)await protectZip();
+    if(!b.compiled)await compileZip();
+    if(!b.licenseInjected&&typeof window.DRIPX_INJECT_LICENSE_GUARD==='function')await window.DRIPX_INJECT_LICENSE_GUARD();
+    if(!b.licenseInjected)throw new Error('No se pudo confirmar la integración de licencia.');
+    return downloadProtectedZip();
+  }
+  window.DRIPX_PRODUCT_PROTECTION_ACTIONS={protect:protectZip,compile:compileZip,download:downloadProtectedZip,resume:resumeZip};`;
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
 
