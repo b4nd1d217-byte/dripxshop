@@ -171,7 +171,8 @@ export async function patchApp(source) {
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
 
 
-  const protectionRequired = [\n    'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'dripx:license:clientReady',
+  const protectionRequired = [
+    'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'dripx:license:clientReady',
     "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
     "window.DRIPX_UPLOAD_FILE",
     "async function verifyResourceProductBeforePublish(productId)",
