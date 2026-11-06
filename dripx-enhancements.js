@@ -372,7 +372,7 @@
       node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';
       const anchor=input.closest('label')||input.parentElement||input;
       anchor.insertAdjacentElement('afterend',node);
-      const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';
+      const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
       node.insertAdjacentElement('afterend',status);
     }
     node.dataset.state='processing';
