@@ -63,45 +63,6 @@ async function readRows(path: string, key: string) {
   if (!response.ok) throw new Error("database_query_failed_" + response.status);
   return body ? JSON.parse(body) as Array<Record<string, unknown>> : [];
 }
-async function compileLicenseModule(source: string): Promise<Uint8Array> {
-  const isMtaBytecode = (bytes: Uint8Array) =>
-    bytes.length >= 4 && bytes[0] === 0x1c && bytes[1] === 0x4d
-      && bytes[2] === 0x76 && bytes[3] === 0x62;
-  let lastError = "mta_compiler_unavailable";
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const form = new FormData();
-      form.set("compile", "1");
-      form.set("debug", "0");
-      form.set("obfuscate", "3");
-      form.set("Submit", "Submit");
-      form.set("luasource", new Blob([source], { type: "text/plain" }), "dripx_license.lua");
-      const response = await fetch("https://luac.mtasa.com/index.php", {
-        method: "POST",
-        body: form,
-        headers: { "user-agent": "DRIP-X-SHOP-License-Compiler/2.0" },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok) {
-        lastError = "mta_compiler_http_" + response.status;
-        if (![429,500,502,503,504].includes(response.status) || attempt === 3) break;
-      } else {
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        if (bytes.length > 8 * 1024 * 1024) throw new Error("compiled_output_too_large");
-        const head = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 240))).trim();
-        if (head.startsWith("ERROR")) throw new Error("mta_compiler_rejected_license_module");
-        if (isMtaBytecode(bytes)) return bytes;
-        lastError = bytes.length ? "mta_bytecode_signature_invalid" : "empty_compiler_response";
-        if (attempt === 3) break;
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error.message.slice(0,120) : "mta_compiler_network_error";
-      if (attempt === 3) break;
-    }
-    await new Promise(resolve => setTimeout(resolve, 450 * attempt));
-  }
-  throw new Error(lastError);
-}
 
 async function downloadOwnedProduct(req: Request) {
   const base = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "");
@@ -265,63 +226,16 @@ async function downloadOwnedProduct(req: Request) {
     }
   }
 
-  const findByBasename = (name: string) => Object.values(zip.files).filter(entry =>
-    !entry.dir && entry.name.split("/").pop()?.toLowerCase() === name.toLowerCase()
-  );
-  const licenseEntries = findByBasename("dripx_license.lua");
-  const sharedEntries = findByBasename("dripx_guard_shared.lua");
-  const metaEntries = findByBasename("meta.xml");
-  if (licenseEntries.length !== 1 || sharedEntries.length !== 1 || metaEntries.length !== 1) {
-    return json(409, { error: "license_guard_files_incomplete", message: "El ZIP no incluye de forma única el módulo de licencia, la marca shared y meta.xml. Vuelve a proteger el producto." });
-  }
-  const licenseEntry = licenseEntries[0], sharedEntry = sharedEntries[0], metaEntry = metaEntries[0];
-  const rootOf = (name: string) => name.includes("/") ? name.slice(0, name.lastIndexOf("/") + 1) : "";
-  if (new Set([licenseEntry.name, sharedEntry.name, metaEntry.name].map(rootOf)).size !== 1) {
-    return json(409, { error: "license_guard_files_root_mismatch" });
-  }
-  const entrySize = (entry: typeof licenseEntry) =>
-    Number((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize || 0);
-  if (entrySize(licenseEntry) > 2 * 1024 * 1024
-      || entrySize(sharedEntry) > 512 * 1024
-      || entrySize(metaEntry) > 2 * 1024 * 1024) {
-    return json(413, { error: "license_guard_metadata_too_large" });
-  }
-  const template = await licenseEntry.async("string");
-  const sharedSource = await sharedEntry.async("string");
-  const metaText = await metaEntry.async("string");
-  const tokenMatch = template.match(/local DRIPX_SHARED_GUARD_EXPECTED = "([a-f0-9]{48})"/);
-  if (!tokenMatch) return json(409, { error: "license_guard_token_missing" });
-  const token = tokenMatch[1];
-  const sharedMarker = 'DRIPX_SHARED_LICENSE_GUARD = "' + token + '"';
-  const metaHasShared = /<script\b(?=[^>]*\bsrc\s*=\s*["'][^"']*dripx_guard_shared\.lua["'])(?=[^>]*\btype\s*=\s*["']shared["'])[^>]*>/i.test(metaText);
-  const metaHasLicense = /<script\b(?=[^>]*\bsrc\s*=\s*["'][^"']*dripx_license\.lua["'])(?=[^>]*\btype\s*=\s*["']server["'])[^>]*>/i.test(metaText);
-  if (!sharedSource.includes(sharedMarker)
-      || !template.includes("DRIPX_PRODUCT_ID_PLACEHOLDER")
-      || !template.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-      || !template.includes("DRIPX_ACL_ACCOUNT_PLACEHOLDER")
-      || !template.includes('addEvent("dripx:license:ready", false)')
-      || !template.includes('triggerEvent("dripx:license:ready", resourceRoot)')
-      || !metaHasShared || !metaHasLicense
-      || metaText.indexOf("dripx_guard_shared.lua") > metaText.indexOf("dripx_license.lua")) {
-    return json(409, { error: "license_guard_template_invalid", message: "No se pudo verificar la relación entre el guardián shared y el módulo de licencia." });
-  }
-
-  const luaQuote = (value: string) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]/g, "");
-  const personalized = template
-    .replaceAll("DRIPX_PRODUCT_ID_PLACEHOLDER", productId)
-    .replaceAll("DRIPX_LICENSE_KEY_PLACEHOLDER", luaQuote(licenseKey))
-    .replaceAll("DRIPX_ACL_ACCOUNT_PLACEHOLDER", luaQuote(aclAccount));
-  const compiledLicense = await compileLicenseModule(personalized);
-  zip.remove(licenseEntry.name);
-  const compiledPath = licenseEntry.name.replace(/\.lua$/i, ".luac");
-  zip.file(compiledPath, compiledLicense);
-  const updatedMeta = metaText.replace(
-    /(<script\b[^>]*\bsrc\s*=\s*["'][^"']*?)dripx_license\.lua(["'][^>]*>)/i,
-    "$1dripx_license.luac$2",
-  );
-  if (updatedMeta === metaText) return json(409, { error: "license_meta_rewrite_failed" });
-  zip.file(metaEntry.name, updatedMeta);
-
+  const findByBasename=(name:string)=>Object.values(zip.files).filter(entry=>!entry.dir&&entry.name.split("/").pop()?.toLowerCase()===name.toLowerCase());
+  const metaEntries=findByBasename("meta.xml");if(metaEntries.length!==1||metaEntries[0].name!=="meta.xml")return json(409,{error:"resource_meta_invalid"});
+  const metaText=await metaEntries[0].async("string"),marker=metaText.match(/DRIPX_PRODUCT_ID:\\s*([0-9a-f-]{36})/i);
+  if(!marker||marker[1].toLowerCase()!==productId.toLowerCase())return json(409,{error:"resource_product_id_mismatch"});
+  const tags=metaText.match(/<script\\b[^>]*>/gi)||[],shared=tags.filter(tag=>/\\btype\\s*=\\s*["']shared["']/i.test(tag)).map(tag=>tag.match(/\\bsrc\\s*=\\s*["']([^"']+)["']/i)?.[1]?.replace(/^\\.\\//,"")).filter(Boolean);
+  if(shared.length!==1||!zip.file(shared[0]))return json(409,{error:"resource_shared_license_missing"});
+  const sharedText=await zip.file(shared[0]).async("string"),placeholder="DRIPX_LICENSE_KEY_PLACEHOLDER";
+  if(sharedText.split(placeholder).length!==2)return json(409,{error:"resource_license_placeholder_invalid"});
+  const luaQuote=(value:string)=>value.replace(/\\\\/g,"\\\\\\\\").replace(/"/g,'\\\\"').replace(/[\\r\\n]/g,"");
+  zip.file(shared[0],sharedText.replace(placeholder,luaQuote(licenseKey)));
   const output = await zip.generateAsync({
     type: "uint8array",
     compression: "DEFLATE",
