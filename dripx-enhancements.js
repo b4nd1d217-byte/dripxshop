@@ -977,7 +977,7 @@
     const hash=String(location.hash||'').toLowerCase();
     if(/^#admin\/categorias?(?:$|[/?])/.test(hash)||/(?:[?&])tab=categorias?(?:&|$)/.test(hash)){
       setCategoryTabActive(true);
-    }else if(clearOnOtherRoute&&hash){
+    }else if(clearOnOtherRoute||(hash&&hash!=='#admin')){
       setCategoryTabActive(false);
     }
   }
