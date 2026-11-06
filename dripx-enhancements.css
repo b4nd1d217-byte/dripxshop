@@ -147,3 +147,7 @@
 /* Keep modal surfaces above the sticky header (visual-system sets header z-index: 1000). */
 #overlay,.overlay{z-index:1100!important}
 #cart,.cart{z-index:1200!important}
+
+/* Hidden internal ZIP motor: actions remain callable by the automatic upload pipeline. */
+.dx-product-engine[hidden]{display:none!important}
+.dx-product-protection-intro{display:none!important}
