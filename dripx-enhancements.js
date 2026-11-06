@@ -319,15 +319,15 @@
     URL.createObjectURL=function(object){
       const url=native(object);
       if(!captured&&object instanceof Blob&&object.size>0&&/zip/i.test(String(object.type||''))){
-        captured=true;
         try{
           const source=input.files?.[0],sourceName=source?.name||'resource.zip',name=(sourceName.toLowerCase().endsWith('.zip')?sourceName.slice(0,-4):sourceName)+'-DRIPX-protegido.zip';
           const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
           const transfer=new DataTransfer();transfer.items.add(processed);input.files=transfer.files;
-          setProductZipStatus('ZIP protegido listo. Al guardar el producto se subirá este archivo final a product-files.','success');
           window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,productId:window.__DRIPX_PENDING_PRODUCT_ID||'',resourceName:window.__DRIPX_RESOURCE_NAME||'',at:Date.now()};
+          captured=true;
+          setProductZipStatus('ZIP protegido listo. Al guardar el producto se subirá este archivo final a product-files.','success');
           URL.createObjectURL=native;
-        }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP protegido al producto:',error);}
+        }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP protegido al producto; se permitirá reintentar:',error);}
       }
       return url;
     };
