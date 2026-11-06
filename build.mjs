@@ -54,8 +54,8 @@ const requiredFeatures = [
   'DRIPX_UPLOAD_FILE',
   'dripx-license/download',
   'dripx-discord-logs',
-  'dripx-account-panel',
-  'dripx-reviews'
+  'customer_get_or_issue_account_license',
+  'dripx_reviews'
 ];
 const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
