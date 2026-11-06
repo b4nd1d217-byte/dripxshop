@@ -209,7 +209,7 @@ async function validateProduct(req: Request) {
     if((s.type==="server"||s.type==="client")&&lower.endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;}
   }
   if(sharedCount!==1)return json(409,{error:"shared_license_file_invalid"});
-  if(archiveFiles.some(e=>/(^|\\/)dripx_(license|guard_shared)\\.lua$/i.test(e.name)))return json(409,{error:"legacy_license_module_present"});
+  if(archiveFiles.some(e=>["dripx_license.lua","dripx_guard_shared.lua"].includes(e.name.split("/").pop()?.toLowerCase()||"")))return json(409,{error:"legacy_license_module_present"});
   if(!compiledCount||!serverCompiledCount)return json(409,{error:"server_lua_not_compiled"});
 
   return json(200, {
