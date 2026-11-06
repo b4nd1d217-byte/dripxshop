@@ -199,13 +199,25 @@ async function validateProduct(req: Request) {
   }
   const findByBase=(name:string)=>archiveFiles.filter(entry=>entry.name.split("/").pop()?.toLowerCase()===name.toLowerCase());
   const metas=findByBase("meta.xml");if(metas.length!==1||metas[0].name!=="meta.xml")return json(409,{error:"meta_root_invalid"});
-  const meta=await metas[0].async("string"),marker=meta.match(/DRIPX_PRODUCT_ID: *([0-9a-f-]{36})/i);if(!marker||marker[1].toLowerCase()!==productId)return json(409,{error:"product_id_marker_invalid"});
+  const meta=await metas[0].async("string");
+  const infoTag = meta.match(/<info\b[^>]*>/i);
+  if (!infoTag) return json(409, { error: "meta_info_missing" });
+  const infoName = attr(infoTag[0], "name").trim();
+  const infoAuthor = attr(infoTag[0], "author").trim();
+  const infoVersion = attr(infoTag[0], "version").trim();
+  const infoType = attr(infoTag[0], "type").trim().toLowerCase();
+  if (!infoName || !infoAuthor || !infoVersion || infoName.length > 120
+      || infoAuthor.length > 120 || infoVersion.length > 40 || infoType !== "script") {
+    return json(409, { error: "meta_info_incomplete" });
+  }
+  const marker=meta.match(/DRIPX_PRODUCT_ID: *([0-9a-f-]{36})/i);if(!marker||marker[1].toLowerCase()!==productId)return json(409,{error:"product_id_marker_invalid"});
   const tags=meta.match(/<script\b[^>]*>/gi)||[],scripts=tags.map(tag=>{const raw=attr(tag,"src").trim(),type=attr(tag,"type").trim().toLowerCase()||"server";return {src:raw.startsWith("./")?raw.slice(2):raw,type};});
   const available=new Set(archiveFiles.map(e=>e.name)),refs=new Set<string>();let compiledCount=0,serverCompiledCount=0,sharedCount=0;
-  for(const s of scripts){if(!safePath(s.src)||!available.has(s.src))return json(422,{error:"meta_script_path_invalid",path:s.src});const k=s.src.normalize("NFC").toLowerCase();if(refs.has(k))return json(422,{error:"meta_script_duplicate"});refs.add(k);
+  for(const s of scripts){if(!["server","client","shared"].includes(s.type))return json(422,{error:"meta_script_type_invalid",path:s.src});if(!safePath(s.src)||!available.has(s.src))return json(422,{error:"meta_script_path_invalid",path:s.src});const k=s.src.normalize("NFC").toLowerCase();if(refs.has(k))return json(422,{error:"meta_script_duplicate"});refs.add(k);
     if(s.type==="shared"&&s.src.toLowerCase().endsWith(".lua")){sharedCount++;const text=await zip.file(s.src)!.async("string");if(text.split("DRIPX_LICENSE_KEY_PLACEHOLDER").length!==2)return json(409,{error:"shared_license_placeholder_invalid"});}
-    const lower=s.src.toLowerCase(),isConfig=lower.split("/").some(part=>["config","configs","settings","shared","language","languages","locale","locales"].some(name=>part===name||part.startsWith(name+".")||part.startsWith(name+"_")||part.startsWith(name+"-")));
-    if((s.type==="server"||s.type==="client")&&lower.endsWith(".lua")&&!isConfig)return json(409,{error:"uncompiled_lua_present",path:s.src});
+    const lower=s.src.toLowerCase();
+    // meta.xml is authoritative. Folder names must never exempt a declared server/client Lua script from compilation.
+    if((s.type==="server"||s.type==="client")&&lower.endsWith(".lua"))return json(409,{error:"uncompiled_lua_present",path:s.src});
     if((s.type==="server"||s.type==="client")&&lower.endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;}
   }
   if(sharedCount!==1)return json(409,{error:"shared_license_file_invalid"});
