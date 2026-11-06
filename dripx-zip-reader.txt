@@ -142,8 +142,8 @@
     const server=files.filter(item=>item.kind==='server_lua');
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
-      const type=scriptMap.get(entry.name);
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
+      const type=scriptMap.get(entry.name),record=files.find(item=>item.path===entry.name);
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client')&&record?.kind!=='config';
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
