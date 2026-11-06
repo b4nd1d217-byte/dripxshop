@@ -645,7 +645,7 @@
       for(const select of selects){
         if(!select.isConnected||select.multiple)continue;
         const inProductForm=!!select.closest('#product-form');
-        const source=inProductForm?allNames:activeNames;
+        const source=activeNames;
         const current=select.value;
         const first=select.options[0];
         const firstText=String(first?.textContent||'').trim();
@@ -670,6 +670,280 @@
     })();
     try{await categorySyncPromise;}catch(error){console.warn('[DRIPX] No se pudieron sincronizar las categorías:',error);}
     finally{categorySyncPromise=null;}
+  }
+
+
+  const DRIPX_CATEGORY_ICONS=['package','code-2','shield-check','layers-3','star','box','gamepad-2','wrench','zap','file-code-2'];
+  let categoryManagerLoading=false;
+  let categoryManagerTimer=0;
+  function categorySlug(value){
+    return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+      .replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+  }
+  function categoryText(value){
+    return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+  }
+  function categoryViewActive(){
+    const hash=String(location.hash||'').toLowerCase();
+    return /^#admin\/categorias?(?:$|[/?])/.test(hash)
+      || /(?:[?&])tab=categorias?(?:&|$)/.test(hash)
+      || window.__DRIPX_CATEGORY_TAB_ACTIVE===true;
+  }
+  function categoryIconMarkup(value){
+    const key=String(value||'package').toLowerCase();
+    const aliases={'code-2':'code','shield-check':'shield','layers-3':'grid','gamepad-2':'gamepad','file-code-2':'file'};
+    return iconMarkup(aliases[key]||key);
+  }
+  function installCategoryManagerStyles(){
+    if(document.querySelector('#dx-category-manager-style'))return;
+    const style=document.createElement('style');style.id='dx-category-manager-style';
+    style.textContent=[
+      '#dx-category-manager{margin:18px 0 24px;padding:clamp(16px,2.5vw,24px);border:1px solid rgba(120,145,170,.18);border-radius:18px;background:linear-gradient(145deg,rgba(15,24,36,.98),rgba(9,15,24,.98));color:#eaf2fa;box-shadow:0 16px 42px rgba(0,0,0,.18)}',
+      '#dx-category-manager *{box-sizing:border-box}',
+      '#dx-category-manager .dx-cat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}',
+      '#dx-category-manager .dx-cat-kicker{display:block;color:#00c7ff;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:7px}',
+      '#dx-category-manager h2{margin:0;color:#f6fbff;font-size:clamp(19px,2.2vw,25px);font-weight:750;letter-spacing:-.025em}',
+      '#dx-category-manager .dx-cat-sub{margin:7px 0 0;color:#91a4b8;font-size:13px;line-height:1.55;max-width:640px}',
+      '#dx-category-manager .dx-cat-layout{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(0,1.4fr);gap:14px;align-items:start}',
+      '#dx-category-manager .dx-cat-formbox,#dx-category-manager .dx-cat-listbox{border:1px solid rgba(130,155,180,.15);border-radius:14px;background:rgba(255,255,255,.025);padding:15px;min-width:0}',
+      '#dx-category-manager .dx-cat-section-title{margin:0 0 13px;color:#dce8f3;font-size:13px;font-weight:750}',
+      '#dx-category-manager .dx-cat-fields{display:grid;grid-template-columns:1fr 1fr;gap:11px}',
+      '#dx-category-manager .dx-cat-field{display:grid;gap:6px;min-width:0}',
+      '#dx-category-manager .dx-cat-field.full{grid-column:1/-1}',
+      '#dx-category-manager .dx-cat-field label{font-size:11px;font-weight:700;color:#aebfd0}',
+      '#dx-category-manager .dx-cat-field input,#dx-category-manager .dx-cat-field select{width:100%;min-width:0;height:40px;border:1px solid rgba(145,170,195,.22);border-radius:9px;background:#0b1420;color:#edf6ff;padding:0 11px;font:inherit;font-size:13px;outline:none}',
+      '#dx-category-manager .dx-cat-field input:focus,#dx-category-manager .dx-cat-field select:focus{border-color:#00c7ff;box-shadow:0 0 0 3px rgba(0,199,255,.12)}',
+      '#dx-category-manager .dx-cat-check{display:flex;align-items:center;gap:9px;color:#c5d3df;font-size:12px;min-height:40px}',
+      '#dx-category-manager .dx-cat-check input{accent-color:#00c7ff;width:16px;height:16px}',
+      '#dx-category-manager .dx-cat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}',
+      '#dx-category-manager button{cursor:pointer;font:inherit}',
+      '#dx-category-manager .dx-cat-btn{min-height:38px;padding:0 12px;border:1px solid rgba(135,160,185,.22);border-radius:9px;background:#142233;color:#dceaf6;font-size:12px;font-weight:750;display:inline-flex;align-items:center;justify-content:center;gap:7px}',
+      '#dx-category-manager .dx-cat-btn.primary{background:#00aeda;border-color:#00c7ff;color:#06131b}',
+      '#dx-category-manager .dx-cat-btn.danger{color:#ffb3b3;border-color:rgba(255,110,110,.3);background:rgba(115,26,35,.18)}',
+      '#dx-category-manager .dx-cat-btn:disabled{opacity:.5;cursor:not-allowed}',
+      '#dx-category-manager .dx-cat-list{display:grid;gap:8px}',
+      '#dx-category-manager .dx-cat-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid rgba(135,160,185,.13);border-radius:11px;background:rgba(7,13,21,.55)}',
+      '#dx-category-manager .dx-cat-identity{display:flex;align-items:center;gap:11px;min-width:0}',
+      '#dx-category-manager .dx-cat-icon{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border-radius:10px;background:rgba(0,199,255,.1);color:#57d8ff}',
+      '#dx-category-manager .dx-cat-icon svg{width:18px;height:18px}',
+      '#dx-category-manager .dx-cat-name{display:block;color:#f1f7fc;font-size:13px;font-weight:750;overflow-wrap:anywhere}',
+      '#dx-category-manager .dx-cat-meta{display:block;margin-top:4px;color:#8195a9;font-size:10px}',
+      '#dx-category-manager .dx-cat-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}',
+      '#dx-category-manager .dx-cat-tag{padding:3px 7px;border-radius:20px;background:rgba(130,155,180,.1);color:#aebed0;font-size:10px}',
+      '#dx-category-manager .dx-cat-tag.active{background:rgba(46,190,130,.12);color:#83e2b6}',
+      '#dx-category-manager .dx-cat-tag.inactive{background:rgba(240,165,70,.12);color:#ffd08c}',
+      '#dx-category-manager .dx-cat-row-actions{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}',
+      '#dx-category-manager .dx-cat-icon-btn{width:34px;height:34px;border:1px solid rgba(135,160,185,.2);border-radius:8px;background:#132131;color:#d3e0ec;display:grid;place-items:center}',
+      '#dx-category-manager .dx-cat-icon-btn svg{width:15px;height:15px}',
+      '#dx-category-manager .dx-cat-status{min-height:18px;margin:11px 0 0;color:#93a8bb;font-size:12px;line-height:1.5}',
+      '#dx-category-manager .dx-cat-status.error{color:#ff9b9b}',
+      '#dx-category-manager .dx-cat-status.success{color:#82e1b3}',
+      '#dx-category-manager .dx-cat-empty{padding:22px 12px;text-align:center;color:#90a4b8;font-size:12px;border:1px dashed rgba(140,165,190,.2);border-radius:10px}',
+      '@media(max-width:760px){#dx-category-manager .dx-cat-layout{grid-template-columns:1fr}#dx-category-manager .dx-cat-row{align-items:flex-start}#dx-category-manager .dx-cat-row-actions{max-width:120px}}',
+      '@media(max-width:430px){#dx-category-manager .dx-cat-fields{grid-template-columns:1fr}#dx-category-manager .dx-cat-field.full{grid-column:auto}#dx-category-manager .dx-cat-row{flex-wrap:wrap}#dx-category-manager .dx-cat-row-actions{max-width:none;width:100%;justify-content:flex-start}}'
+    ].join('\n');
+    document.head.append(style);
+  }
+  function setLegacyCategoryManagerHidden(hidden){
+    const app=document.querySelector('#app');if(!app)return;
+    app.querySelectorAll('.category-manager,.admin-category-list,[data-admin-category]').forEach(el=>{
+      if(el.id==='dx-category-manager'||el.closest('#dx-category-manager'))return;
+      if(hidden){if(!el.dataset.dxLegacyCategoryWasHidden)el.dataset.dxLegacyCategoryWasHidden=el.hidden?'1':'0';el.hidden=true;}
+      else if(el.dataset.dxLegacyCategoryWasHidden!==undefined){el.hidden=el.dataset.dxLegacyCategoryWasHidden==='1';delete el.dataset.dxLegacyCategoryWasHidden;}
+    });
+  }
+  function categoryPanel(){
+    const app=document.querySelector('#app');if(!app)return null;
+    let panel=document.querySelector('#dx-category-manager');
+    if(!panel){panel=document.createElement('section');panel.id='dx-category-manager';panel.className='dx-category-manager';}
+    const overview=document.querySelector('#dx-admin-overview');
+    if(!panel.isConnected){
+      if(overview?.parentElement)overview.after(panel);
+      else app.prepend(panel);
+    }
+    return panel;
+  }
+  function categoryStatus(message,state){
+    const node=document.querySelector('#dx-category-status');if(!node)return;
+    node.textContent=String(message||'');node.className='dx-cat-status'+(state?' '+state:'');
+  }
+  function categoryFormReset(){
+    const form=document.querySelector('#dx-category-form');if(!form)return;
+    form.reset();
+    form.querySelector('[name="id"]').value='';
+    form.querySelector('[name="slug"]').dataset.manual='';
+    form.querySelector('[name="active"]').checked=true;
+    form.querySelector('[name="sort_order"]').value='100';
+    const title=document.querySelector('#dx-category-form-title');if(title)title.textContent='Crear categoría';
+    const save=document.querySelector('#dx-category-save');if(save)save.innerHTML=iconMarkup('plus')+' Crear categoría';
+    categoryStatus('Los cambios se guardan directamente en Supabase.','');
+  }
+  async function renderCategoryManager(force=false){
+    let panel=document.querySelector('#dx-category-manager');
+    if(!categoryViewActive()||!client||window.DRIPX_IS_ADMIN!==true){
+      panel?.remove();setLegacyCategoryManagerHidden(false);return;
+    }
+    if(categoryManagerLoading||(!force&&panel?.dataset.loaded==='1'))return;
+    categoryManagerLoading=true;
+    installCategoryManagerStyles();
+    panel=categoryPanel();if(!panel){categoryManagerLoading=false;return;}
+    panel.dataset.loaded='loading';
+    panel.innerHTML='<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2><p class="dx-cat-sub">Crea, organiza, edita, activa o desactiva categorías. Los productos asociados se conservan al cambiar un nombre.</p></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('arrow')+' Actualizar</button></div><div class="dx-cat-empty">Cargando categorías desde Supabase…</div>';
+    setLegacyCategoryManagerHidden(true);
+    try{
+      await getAdminSession();
+      const [catResult,productResult]=await Promise.all([
+        client.from('dripx_categories').select('id,name,slug,active,sort_order,icon').order('sort_order',{ascending:true}).order('name',{ascending:true}),
+        client.from('dripx_products').select('id,category,status')
+      ]);
+      if(catResult.error)throw catResult.error;
+      if(productResult.error)throw productResult.error;
+      const categories=catResult.data||[],products=productResult.data||[];
+      const norm=value=>categoryText(value);
+      const rows=categories.map(category=>{
+        const linked=products.filter(product=>norm(product.category)===norm(category.name));
+        const published=linked.filter(product=>String(product.status).toLowerCase()==='published').length;
+        const icon=DRIPX_CATEGORY_ICONS.includes(category.icon)?category.icon:'package';
+        const state=category.active?'Activa':'Inactiva';
+        return '<article class="dx-cat-row" data-dx-category-row="'+escapeHtml(category.id)+'" data-name="'+escapeHtml(category.name)+'" data-slug="'+escapeHtml(category.slug)+'" data-icon="'+escapeHtml(icon)+'" data-order="'+Number(category.sort_order||100)+'" data-active="'+(category.active?'true':'false')+'" data-count="'+linked.length+'" data-published="'+published+'">'+
+          '<div class="dx-cat-identity"><span class="dx-cat-icon">'+categoryIconMarkup(icon)+'</span><div><strong class="dx-cat-name">'+escapeHtml(category.name)+'</strong><span class="dx-cat-meta">'+escapeHtml(category.slug)+' · Orden '+Number(category.sort_order||100)+'</span><div class="dx-cat-tags"><span class="dx-cat-tag '+(category.active?'active':'inactive')+'">'+state+'</span><span class="dx-cat-tag">'+linked.length+' producto(s)</span></div></div></div>'+
+          '<div class="dx-cat-row-actions"><button type="button" class="dx-cat-icon-btn" title="Editar" aria-label="Editar categoría" data-dx-category-action="edit" data-id="'+escapeHtml(category.id)+'">'+iconMarkup('edit')+'</button>'+
+          '<button type="button" class="dx-cat-icon-btn" title="'+(category.active?'Desactivar':'Activar')+'" aria-label="'+(category.active?'Desactivar':'Activar')+' categoría" data-dx-category-action="toggle" data-id="'+escapeHtml(category.id)+'">'+iconMarkup(category.active?'pause':'check')+'</button>'+
+          '<button type="button" class="dx-cat-icon-btn" title="Eliminar" aria-label="Eliminar categoría" data-dx-category-action="delete" data-id="'+escapeHtml(category.id)+'" '+(linked.length?'disabled':'')+'>'+iconMarkup('trash')+'</button></div></article>';
+      }).join('');
+      panel.innerHTML=
+        '<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2><p class="dx-cat-sub">Controla el nombre, slug, icono, orden y visibilidad. La base de datos protege las categorías vinculadas a productos.</p></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('arrow')+' Actualizar</button></div>'+
+        '<div class="dx-cat-layout"><section class="dx-cat-formbox"><h3 class="dx-cat-section-title" id="dx-category-form-title">Crear categoría</h3>'+
+          '<form id="dx-category-form"><input type="hidden" name="id" value=""><div class="dx-cat-fields">'+
+          '<div class="dx-cat-field full"><label for="dx-category-name">Nombre</label><input id="dx-category-name" name="name" maxlength="40" minlength="2" required placeholder="Ej. Recursos MTA"></div>'+
+          '<div class="dx-cat-field full"><label for="dx-category-slug">Identificador (slug)</label><input id="dx-category-slug" name="slug" maxlength="40" minlength="2" pattern="[a-z0-9][a-z0-9_-]{1,39}" required placeholder="recursos-mta"></div>'+
+          '<div class="dx-cat-field"><label for="dx-category-icon">Icono</label><input id="dx-category-icon" name="icon" list="dx-category-icon-options" maxlength="48" value="package" required><datalist id="dx-category-icon-options">'+DRIPX_CATEGORY_ICONS.map(icon=>'<option value="'+icon+'">').join('')+'</datalist></div>'+
+          '<div class="dx-cat-field"><label for="dx-category-order">Orden</label><input id="dx-category-order" name="sort_order" type="number" min="1" max="999" step="1" value="100" required></div>'+
+          '<div class="dx-cat-field full"><label class="dx-cat-check"><input type="checkbox" name="active" checked> Categoría visible en la tienda</label></div>'+
+          '</div><div class="dx-cat-actions"><button class="dx-cat-btn primary" id="dx-category-save" type="submit">'+iconMarkup('plus')+' Crear categoría</button><button class="dx-cat-btn" id="dx-category-cancel" type="button" data-dx-category-action="cancel">Limpiar</button></div><p class="dx-cat-status" id="dx-category-status" role="status">Los cambios se guardan directamente en Supabase.</p></form></section>'+
+          '<section class="dx-cat-listbox"><h3 class="dx-cat-section-title">Categorías registradas <span class="dx-cat-tag">'+categories.length+'</span></h3><div class="dx-cat-list">'+(rows||'<div class="dx-cat-empty">Todavía no hay categorías. Crea la primera desde el formulario.</div>')+'</div></section></div>';
+      panel.dataset.loaded='1';
+      panel.dataset.loadedAt=String(Date.now());
+    }catch(error){
+      panel.dataset.loaded='error';
+      panel.innerHTML='<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('refresh')+' Reintentar</button></div><p class="dx-cat-status error">'+escapeHtml(error?.message||'No se pudieron cargar las categorías.')+'</p>';
+    }finally{categoryManagerLoading=false;}
+  }
+  function scheduleCategoryManager(force=false){
+    clearTimeout(categoryManagerTimer);
+    if(!categoryViewActive()||window.DRIPX_IS_ADMIN!==true){
+      document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
+    }
+    categoryManagerTimer=setTimeout(()=>{void renderCategoryManager(force);},120);
+  }
+  async function saveCategoryForm(form){
+    const button=form.querySelector('#dx-category-save');
+    const id=String(form.elements.id.value||'').trim();
+    const name=String(form.elements.name.value||'').trim();
+    const slug=String(form.elements.slug.value||'').trim().toLowerCase();
+    const icon=String(form.elements.icon.value||'package').trim().toLowerCase();
+    const sortOrder=Number(form.elements.sort_order.value);
+    const active=!!form.elements.active.checked;
+    if(name.length<2||name.length>40)throw new Error('El nombre debe tener entre 2 y 40 caracteres.');
+    if(!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(slug))throw new Error('El slug debe tener 2–40 caracteres y comenzar con letra o número.');
+    if(!/^[a-z0-9-]{2,48}$/.test(icon))throw new Error('El icono solo puede contener letras, números y guiones.');
+    if(!Number.isInteger(sortOrder)||sortOrder<1||sortOrder>999)throw new Error('El orden debe ser un número entero entre 1 y 999.');
+    if(!button)throw new Error('No se encontró el botón de guardado.');
+    button.disabled=true;categoryStatus(id?'Guardando cambios…':'Creando categoría…','');
+    try{
+      await getAdminSession();
+      const payload={name,slug,icon,sort_order:sortOrder,active};
+      const result=id
+        ? await client.from('dripx_categories').update(payload).eq('id',id).select('id').single()
+        : await client.from('dripx_categories').insert(payload).select('id').single();
+      if(result.error)throw result.error;
+      categorySyncAt=0;
+      await syncCategoryOptions(true);
+      categoryManagerLoading=false;
+      await renderCategoryManager(true);
+      await refreshAdminOverview(true);
+      toast(id?'Categoría actualizada.':'Categoría creada.');
+    }finally{button.disabled=false;}
+  }
+  async function handleCategoryAction(button){
+    const action=button.dataset.dxCategoryAction||'';
+    if(action==='cancel'){categoryFormReset();return;}
+    if(action==='edit'){
+      const row=button.closest('[data-dx-category-row]');if(!row)return;
+      const form=document.querySelector('#dx-category-form');if(!form)return;
+      form.elements.id.value=row.dataset.dxCategoryRow||'';
+      form.elements.name.value=row.dataset.name||'';
+      form.elements.slug.value=row.dataset.slug||'';
+      form.elements.slug.dataset.manual='true';
+      form.elements.icon.value=row.dataset.icon||'package';
+      form.elements.sort_order.value=row.dataset.order||'100';
+      form.elements.active.checked=row.dataset.active==='true';
+      const title=document.querySelector('#dx-category-form-title');if(title)title.textContent='Editar categoría';
+      const save=document.querySelector('#dx-category-save');if(save)save.innerHTML=iconMarkup('save')+' Guardar cambios';
+      categoryStatus('Al cambiar el nombre, Supabase actualizará las referencias de sus productos.','');
+      form.scrollIntoView({behavior:'smooth',block:'start'});return;
+    }
+    const id=String(button.dataset.id||'').trim();
+    const row=document.querySelector('[data-dx-category-row="'+CSS.escape(id)+'"]');
+    if(!row||!id)return;
+    button.disabled=true;
+    try{
+      await getAdminSession();
+      if(action==='toggle'){
+        const active=row.dataset.active!=='true';
+        if(!active&&Number(row.dataset.published||0)>0)throw new Error('No se puede desactivar: esta categoría tiene productos publicados. Archívalos o muévelos primero.');
+        const result=await client.from('dripx_categories').update({active}).eq('id',id);
+        if(result.error)throw result.error;
+        categorySyncAt=0;await syncCategoryOptions(true);categoryManagerLoading=false;await renderCategoryManager(true);await refreshAdminOverview(true);
+        toast(active?'Categoría activada.':'Categoría desactivada.');return;
+      }
+      if(action==='delete'){
+        const count=Number(row.dataset.count||0);
+        if(count>0)throw new Error('No se puede eliminar: todavía hay productos asociados. Cambia sus categorías primero.');
+        const name=row.dataset.name||'esta categoría';
+        if(!window.confirm('¿Eliminar definitivamente la categoría "'+name+'"? Esta acción no se puede deshacer.'))return;
+        const result=await client.from('dripx_categories').delete().eq('id',id);
+        if(result.error)throw result.error;
+        categorySyncAt=0;await syncCategoryOptions(true);categoryManagerLoading=false;await renderCategoryManager(true);await refreshAdminOverview(true);
+        toast('Categoría eliminada.');return;
+      }
+    }catch(error){categoryStatus(error?.message||'No se pudo completar la acción.','error');toast(error?.message||'Error de categorías.');}
+    finally{button.disabled=false;}
+  }
+  document.addEventListener('input',event=>{
+    if(event.target?.id==='dx-category-name'){
+      const form=event.target.closest('#dx-category-form'),slug=form?.elements.slug;
+      if(slug&&!slug.dataset.manual)slug.value=categorySlug(event.target.value);
+    }
+    if(event.target?.id==='dx-category-slug')event.target.dataset.manual='true';
+  },true);
+  document.addEventListener('submit',async event=>{
+    const form=event.target;if(!form||form.id!=='dx-category-form')return;
+    event.preventDefault();event.stopImmediatePropagation();
+    try{await saveCategoryForm(form);}catch(error){categoryStatus(error?.message||'No se pudo guardar la categoría.','error');toast(error?.message||'No se pudo guardar la categoría.');}
+  },true);
+  document.addEventListener('click',async event=>{
+    const refresh=event.target.closest('[data-dx-category-refresh]');
+    if(refresh){event.preventDefault();event.stopImmediatePropagation();categoryManagerLoading=false;await renderCategoryManager(true);return;}
+    const action=event.target.closest('[data-dx-category-action]');
+    if(action){event.preventDefault();event.stopImmediatePropagation();await handleCategoryAction(action);}
+  },true);
+  document.addEventListener('click',event=>{
+    const control=event.target.closest('#app button,#app a,#app [role="tab"]');
+    if(!control||control.closest('#dx-category-manager'))return;
+    const label=categoryText(control.getAttribute('data-admin-tab')||control.getAttribute('data-admin-route')||control.getAttribute('aria-label')||control.textContent||control.getAttribute('href'));
+    if(!isAdminRoute())return;
+    if(/categorias?|categories?/.test(label)){
+      window.__DRIPX_CATEGORY_TAB_ACTIVE=true;scheduleCategoryManager(true);
+    }else if(/productos?|pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label)){
+      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);
+    }
+  },true);
+  function syncCategoryManagerVisibility(){
+    if(!categoryViewActive()||window.DRIPX_IS_ADMIN!==true){
+      document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
+    }
+    scheduleCategoryManager(false);
   }
 
   function isAdminProductsRoute(){
@@ -886,7 +1160,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();});
+  window.addEventListener('hashchange',()=>{hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
@@ -910,7 +1184,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();
+    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();syncCategoryManagerVisibility();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
@@ -1079,7 +1353,7 @@
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();
+    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();syncCategoryManagerVisibility();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
