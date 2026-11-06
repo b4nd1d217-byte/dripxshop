@@ -6,7 +6,7 @@
 create or replace function public.dripx_guard_category_references()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 begin
