@@ -1,3 +1,5 @@
+  const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
+  function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
   async function loadZipForProtection(file){
     const ensureZipUiNode=(id,tag)=>{
       let node=document.getElementById(id);
@@ -9,13 +11,16 @@
       host.append(node);
       return node;
     };
-    const LIMITS={meta:2*1024*1024};
+    const LIMITS={meta:2*1024*1024,compressed:100*1024*1024,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
+    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP comprimido supera 100 MB. Optimiza el resource o divídelo en módulos; el límite protege la memoria de procesamiento.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
-    const archive=await JSZip.loadAsync(file,{checkCRC32:true,createFolders:false});
+    const archive=await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
     const allEntries=Object.values(archive.files||{});
     if(!allEntries.length)throw new Error('El ZIP no contiene entradas.');
+    if(allEntries.length>LIMITS.entries)throw new Error('El ZIP contiene demasiadas entradas, incluidas carpetas.');
+    if(allEntries.filter(entry=>!entry.dir).length>LIMITS.files)throw new Error('El ZIP supera el límite de 3.000 archivos.');
     const normalizePath=(entry)=>{
       const original=String(entry.unsafeOriginalName??entry.name??'');
       if(!original||original.length>1024)throw new Error('El ZIP contiene una ruta vacía o demasiado larga.');
@@ -42,6 +47,7 @@
       if(isNoise(path))continue;
       const size=Number(entry._data?.uncompressedSize??entry._data?.length??0);
       if(!Number.isSafeInteger(size)||size<0)throw new Error('El ZIP declara un tamaño de archivo inválido.');
+      if(size>LIMITS.entry)throw new Error('El archivo '+path+' supera 100 MB descomprimidos.');
       const rawMode=entry.unixPermissions;
       const mode=typeof rawMode==='string'?parseInt(rawMode,8):Number(rawMode||0);
       if(Number.isFinite(mode)&&(mode&0o170000)===0o120000)throw new Error('El ZIP contiene un enlace simbólico y no puede procesarse.');
@@ -51,6 +57,7 @@
     if(!records.length)throw new Error('El ZIP no contiene archivos utilizables.');
     const totalExpanded=records.reduce((sum,item)=>sum+item.size,0);
     if(!Number.isSafeInteger(totalExpanded))throw new Error('El tamaño total descomprimido no es válido.');
+    if(totalExpanded>LIMITS.expanded)throw new Error('El ZIP supera 200 MB descomprimidos y no puede procesarse con seguridad.');
     const originalNames=new Set();
     for(const item of records){
       const key=item.path.toLowerCase();
@@ -92,6 +99,8 @@
     for(const item of normalizedRecords){
       const data=await item.entry.async('uint8array');
       if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
+      const expectedCrc=Number(item.entry._data?.crc32);
+      if(!Number.isFinite(expectedCrc)||expectedCrc<0||expectedCrc>0xffffffff||dripxZipCRC32(data)!==(expectedCrc>>>0))throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,
@@ -103,9 +112,15 @@
     const meta=zip.file('meta.xml');
     if(!meta)throw new Error('No se pudo reconstruir meta.xml en la raíz del resource.');
     const metaText=await meta.async('string');
-    if(/<!DOCTYPE/i.test(metaText))throw new Error('meta.xml contiene una declaración DOCTYPE no permitida.');
+    if(/<!DOCTYPE|<!ENTITY/i.test(metaText))throw new Error('meta.xml contiene declaraciones XML externas no permitidas.');
     const parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
+    const infoNode=parsed.querySelector('info'),infoText=Array.from(infoNode?.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=entries.map(entry=>entry.name).join(' ');
+    const hasFiveMManifest=entries.some(entry=>/^(fxmanifest|__resource)\.lua$/i.test(entry.name.split('/').pop()||''));
+    if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA con meta.xml y scripts compatibles.');
+    if(!infoNode)throw new Error('meta.xml no contiene el bloque <info>.');
+    const infoName=String(infoNode.getAttribute('name')||'').trim(),infoAuthor=String(infoNode.getAttribute('author')||'').trim(),infoVersion=String(infoNode.getAttribute('version')||'').trim(),infoType=String(infoNode.getAttribute('type')||'').trim().toLowerCase();
+    if(!infoName||!infoAuthor||!infoVersion||infoName.length>120||infoAuthor.length>120||infoVersion.length>40||infoType!=='script')throw new Error('La información de meta.xml está incompleta: se requiere info con name, author, version y type="script".');
     const normalizeScriptPath=value=>{
       let path=String(value||'').split(String.fromCharCode(92)).join('/');
       path=path.replace(/^(?:\.\/)+/,'');
@@ -120,10 +135,14 @@
       const src=normalizeScriptPath(originalSrc);
       const type=String(node.getAttribute('type')||'server').trim().toLowerCase();
       if(!['server','client','shared'].includes(type))throw new Error('meta.xml contiene un tipo de script no reconocido: '+type+'.');
+      if(!/\.lua$/i.test(src))throw new Error('meta.xml debe declarar archivos .lua originales. Se encontró '+src+'. Los .luac ya compilados no pueden volver a protegerse; importa el ZIP fuente.');
       if(scripts.some(script=>script.src.toLowerCase()===src.toLowerCase()))throw new Error('meta.xml declara el mismo script más de una vez: '+src);
       scripts.push({src,originalSrc,type});
     }
     if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
+    const sharedLua=scripts.filter(script=>script.type==='shared'&&/\.lua$/i.test(script.src));
+    if(sharedLua.length!==1)throw new Error('El resource debe declarar exactamente un único script shared Lua para insertar la licencia DRIPX.');
+    if(!scripts.some(script=>script.type==='server'))throw new Error('El resource debe declarar al menos un script Lua de servidor.');
     const available=new Set(entries.map(entry=>entry.name));
     const missing=scripts.filter(script=>!available.has(script.src));
     if(missing.length)throw new Error('meta.xml referencia archivos que no existen en el ZIP: '+missing.slice(0,8).map(item=>item.src).join(', '));
@@ -155,12 +174,12 @@
     const server=files.filter(item=>item.kind==='server_lua');
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
-      const type=scriptMap.get(entry.name),record=files.find(item=>item.path===entry.name);
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client')&&record?.kind!=='config';
+      const type=scriptMap.get(entry.name);
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
-    const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
-    const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client').map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
+    const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
+    const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
