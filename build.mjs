@@ -67,6 +67,10 @@ const uploadValidator = await readFile('supabase/functions/dripx-validate-produc
 const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
 const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
 const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
+const uploadValidator = await readFile('supabase/functions/dripx-validate-product-upload/index.ts', 'utf8');
+const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
+const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
+const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
