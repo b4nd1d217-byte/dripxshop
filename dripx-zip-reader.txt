@@ -1,8 +1,7 @@
   async function loadZipForProtection(file){
-    const LIMITS={archive:100*1024*1024,files:3000,total:200*1024*1024,entry:100*1024*1024,meta:2*1024*1024};
+    const LIMITS={meta:2*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
-    if(file.size>LIMITS.archive)throw new Error('El ZIP supera el límite de 100 MB.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
     const archive=await JSZip.loadAsync(file,{checkCRC32:true,createFolders:false});
     const allEntries=Object.values(archive.files||{});
@@ -32,16 +31,16 @@
       if(entry.dir)continue;
       if(isNoise(path))continue;
       const size=Number(entry._data?.uncompressedSize??entry._data?.length??0);
-      if(!Number.isSafeInteger(size)||size<0||size>LIMITS.entry)throw new Error('Un archivo supera el límite individual permitido de 100 MB.');
+      if(!Number.isSafeInteger(size)||size<0)throw new Error('El ZIP declara un tamaño de archivo inválido.');
       const rawMode=entry.unixPermissions;
       const mode=typeof rawMode==='string'?parseInt(rawMode,8):Number(rawMode||0);
       if(Number.isFinite(mode)&&(mode&0o170000)===0o120000)throw new Error('El ZIP contiene un enlace simbólico y no puede procesarse.');
       records.push({entry,path,size});
-      if(records.length>LIMITS.files)throw new Error('El ZIP supera el límite de 3.000 archivos.');
+
     }
     if(!records.length)throw new Error('El ZIP no contiene archivos utilizables.');
     const totalExpanded=records.reduce((sum,item)=>sum+item.size,0);
-    if(!Number.isSafeInteger(totalExpanded)||totalExpanded>LIMITS.total)throw new Error('El contenido descomprimido supera el límite de 200 MB.');
+    if(!Number.isSafeInteger(totalExpanded))throw new Error('El tamaño total descomprimido no es válido.');
     const originalNames=new Set();
     for(const item of records){
       const key=item.path.toLowerCase();
