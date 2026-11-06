@@ -689,11 +689,21 @@
   function categoryText(value){
     return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
   }
+  function setCategoryTabActive(active){
+    window.__DRIPX_CATEGORY_TAB_ACTIVE=!!active;
+    try{
+      if(active)window.sessionStorage?.setItem('dripx.admin.tab','categorias');
+      else window.sessionStorage?.removeItem('dripx.admin.tab');
+    }catch{}
+  }
   function categoryViewActive(){
     const hash=String(location.hash||'').toLowerCase();
+    let saved=false;
+    try{saved=window.sessionStorage?.getItem('dripx.admin.tab')==='categorias';}catch{}
     return /^#admin\/categorias?(?:$|[/?])/.test(hash)
       || /(?:[?&])tab=categorias?(?:&|$)/.test(hash)
-      || window.__DRIPX_CATEGORY_TAB_ACTIVE===true;
+      || window.__DRIPX_CATEGORY_TAB_ACTIVE===true
+      || saved;
   }
   function categoryIconMarkup(value){
     const key=String(value||'package').toLowerCase();
@@ -790,7 +800,8 @@
       panel?.remove();setLegacyCategoryManagerHidden(false);return;
     }
     if(!client)return;
-    if(categoryManagerLoading||(!force&&panel?.dataset.loaded==='1'))return;
+    if(categoryManagerLoading||(!force&&(panel?.dataset.loaded==='1'||panel?.dataset.loaded==='error')))return;
+    if(window.__DRIPX_CATEGORY_ADMIN_DENIED===true&&!force)return;
     categoryManagerLoading=true;
     installCategoryManagerStyles();
     panel=categoryPanel();if(!panel){categoryManagerLoading=false;return;}
@@ -806,6 +817,8 @@
       if(catResult.error)throw catResult.error;
       if(productResult.error)throw productResult.error;
       const categories=catResult.data||[],products=productResult.data||[];
+      panel=categoryPanel();
+      if(!panel)throw new Error('La vista administrativa se actualizó; vuelve a intentar abrir Categorías.');
       const norm=value=>categoryText(value);
       const rows=categories.map(category=>{
         const linked=products.filter(product=>norm(product.category)===norm(category.name));
@@ -834,6 +847,7 @@
     }catch(error){
       const message=String(error?.message||'No se pudieron cargar las categorías.');
       if(/Solo administración|sesión expiró|inicia sesión|administrativa no está disponible/i.test(message)){
+        window.__DRIPX_CATEGORY_ADMIN_DENIED=true;
         window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
         window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
         panel?.remove();
@@ -852,7 +866,9 @@
       clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
       document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
     }
-    if(!client)return;
+    if(!client||window.__DRIPX_CATEGORY_ADMIN_DENIED===true)return;
+    const currentPanel=document.querySelector('#dx-category-manager');
+    if(!force&&(currentPanel?.dataset.loaded==='1'||currentPanel?.dataset.loaded==='error'))return;
     if(categoryManagerTimer&&!force)return;
     if(force){clearTimeout(categoryManagerTimer);categoryManagerTimer=0;}
     categoryManagerTimer=setTimeout(()=>{
@@ -960,9 +976,9 @@
   function syncCategoryRouteFromHash(){
     const hash=String(location.hash||'').toLowerCase();
     if(/^#admin\/categorias?(?:$|[/?])/.test(hash)||/(?:[?&])tab=categorias?(?:&|$)/.test(hash)){
-      window.__DRIPX_CATEGORY_TAB_ACTIVE=true;
+      setCategoryTabActive(true);
     }else if(/^#admin(?:$|[/?])/.test(hash)){
-      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+      setCategoryTabActive(false);
     }
   }
   document.addEventListener('click',event=>{
@@ -970,9 +986,9 @@
     if(!control||control.closest('#dx-category-manager')||!isAdminRoute()||!isAdminNavigationControl(control))return;
     const label=categoryText(control.getAttribute('data-admin-tab')||control.getAttribute('data-admin-route')||control.getAttribute('data-tab')||control.getAttribute('data-route')||control.getAttribute('aria-label')||control.textContent||control.getAttribute('href'));
     if(/categorias?|categories?/.test(label)){
-      window.__DRIPX_CATEGORY_TAB_ACTIVE=true;scheduleCategoryManager(true);
+      setCategoryTabActive(true);window.__DRIPX_CATEGORY_ADMIN_DENIED=false;scheduleCategoryManager(true);
     }else if(/productos?|pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label)){
-      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+      setCategoryTabActive(false);
       clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
       document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);
     }
@@ -985,15 +1001,18 @@
       const verifiedUser=String(window.__DRIPX_ADMIN_VERIFIED_USER_ID||'');
       const nextUser=String(session?.user?.id||'');
       if(event==='SIGNED_OUT'||(verifiedUser&&nextUser&&verifiedUser!==nextUser)){
+        window.__DRIPX_CATEGORY_ADMIN_DENIED=event==='SIGNED_OUT';
         window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
         window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
-        window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+        setCategoryTabActive(false);
         clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
         document.querySelector('#dx-category-manager')?.remove();
         setLegacyCategoryManagerHidden(false);
       }else if(event==='SIGNED_IN'&&nextUser){
+        window.__DRIPX_CATEGORY_ADMIN_DENIED=false;
         window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
         window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
+        if(categoryViewActive())scheduleCategoryManager(true);
       }
     });
   }
@@ -1002,6 +1021,7 @@
       clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
       document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
     }
+    if(window.__DRIPX_CATEGORY_ADMIN_DENIED===true)return;
     scheduleCategoryManager(false);
   }
 
