@@ -63,6 +63,7 @@ const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
 const uploadUi = await readFile('dripx-enhancements.js', 'utf8');
 const uploadCss = await readFile('dripx-enhancements.css', 'utf8');
+const authBootstrap = await readFile('auth-bootstrap.js', 'utf8');
 const uploadValidator = await readFile('supabase/functions/dripx-validate-product-upload/index.ts', 'utf8');
 const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
 const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
@@ -74,6 +75,12 @@ const uploadChecks = [
   [appText.includes('b.finalBlobSize=blob.size'), 'final archive identity check'],
   [appText.includes('El borrador se conservó'), 'draft preservation after upload errors'],
   [!patchSource.includes("dripx_products').delete().eq('id',product.id)"), 'no destructive draft cleanup'],
+  [!patchSource.includes(",featured:fd.has('featured')") && patchSource.includes("is_featured:fd.has('featured')"), 'product insert matches live dripx_products schema'],
+  [patchSource.includes("fd.set('file',stagedZip,stagedZip.name)") && patchSource.includes("file!==staged"), 'protected ZIP is the exact file sent in FormData'],
+  [patchSource.includes('setSaveState(\'03/4') && patchSource.includes('verificando CRC, meta.xml y bytecode MTA'), 'visible product-save transaction stages'],
+  [uploadUi.includes('window.__DRIPX_PROCESSED_PRODUCT_FILE=processed') && !uploadUi.includes('new DataTransfer()'), 'mobile-safe protected file staging without input mutation'],
+  [uploadUi.includes("original=input?.files?.[0]") && uploadUi.includes('processed.productId!==window.__DRIPX_PENDING_PRODUCT_ID'), 'submit guard validates original input and staged output'],
+  [authBootstrap.includes('sharedSupabaseClient=client') && authBootstrap.includes('return sharedSupabaseClient;'), 'single authenticated Supabase client across app panels'],
   [zipReader.includes("return /\\.lua$/i.test(entry.name)&&(type==='server'||type==='client');") && !zipReader.includes("record?.kind!=='config'"), 'compile every executable Lua declaration consistently'],
   [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
