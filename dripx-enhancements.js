@@ -971,13 +971,13 @@
   function isAdminNavigationControl(control){
     if(!control)return false;
     if(control.matches('[data-admin-tab],[data-admin-route],[role="tab"],[data-tab],[data-route]'))return true;
-    return !!control.closest('nav,[role="navigation"],[role="tablist"],.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu,.admin-dashboard-nav,.admin-sections,.sidebar-nav,.sidebar');
+    return !!control.closest('nav,[role="navigation"],[role="tablist"],aside,.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,.admin-nav-item,.admin-menu-item,.admin-tab-item,.admin-section-link,[data-admin-item],[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu,.admin-dashboard-nav,.admin-sections,.sidebar-nav,.sidebar,.sidebar-item,.nav-item,.menu-item');
   }
-  function syncCategoryRouteFromHash(){
+  function syncCategoryRouteFromHash(clearOnOtherRoute=false){
     const hash=String(location.hash||'').toLowerCase();
     if(/^#admin\/categorias?(?:$|[/?])/.test(hash)||/(?:[?&])tab=categorias?(?:&|$)/.test(hash)){
       setCategoryTabActive(true);
-    }else if(/^#admin(?:$|[/?])/.test(hash)){
+    }else if(clearOnOtherRoute&&hash){
       setCategoryTabActive(false);
     }
   }
@@ -1239,7 +1239,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{syncCategoryRouteFromHash();hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
+  window.addEventListener('hashchange',()=>{syncCategoryRouteFromHash(true);hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
