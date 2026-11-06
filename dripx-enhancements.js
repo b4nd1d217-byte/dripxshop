@@ -167,7 +167,13 @@
     }
     if(!session?.user?.id||!session.access_token)throw new Error('Tu sesión expiró. Inicia sesión con Discord de nuevo; el ZIP seleccionado se conservará.');
     const {data:admin,error:adminError}=await client.rpc('dripx_is_admin');if(adminError)throw adminError;
-    if(admin!==true)throw new Error('Solo administración puede proteger recursos desde Productos.');
+    if(admin!==true){
+      window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
+      window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
+      throw new Error('Solo administración puede proteger recursos desde Productos.');
+    }
+    window.__DRIPX_ADMIN_SESSION_VERIFIED=true;
+    window.__DRIPX_ADMIN_VERIFIED_USER_ID=String(session.user.id);
     return session;
   }
   function tusUpload(bucket,path,file,onProgress){
@@ -780,9 +786,10 @@
   }
   async function renderCategoryManager(force=false){
     let panel=document.querySelector('#dx-category-manager');
-    if(!categoryViewActive()||!client||window.DRIPX_IS_ADMIN!==true){
+    if(!categoryViewActive()){
       panel?.remove();setLegacyCategoryManagerHidden(false);return;
     }
+    if(!client)return;
     if(categoryManagerLoading||(!force&&panel?.dataset.loaded==='1'))return;
     categoryManagerLoading=true;
     installCategoryManagerStyles();
@@ -825,16 +832,33 @@
       panel.dataset.loaded='1';
       panel.dataset.loadedAt=String(Date.now());
     }catch(error){
-      panel.dataset.loaded='error';
-      panel.innerHTML='<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('refresh')+' Reintentar</button></div><p class="dx-cat-status error">'+escapeHtml(error?.message||'No se pudieron cargar las categorías.')+'</p>';
+      const message=String(error?.message||'No se pudieron cargar las categorías.');
+      if(/Solo administración|sesión expiró|inicia sesión|administrativa no está disponible/i.test(message)){
+        window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
+        window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
+        panel?.remove();
+        setLegacyCategoryManagerHidden(false);
+      }else{
+        panel=document.querySelector('#dx-category-manager');
+        if(panel){
+          panel.dataset.loaded='error';
+          panel.innerHTML='<div class="dx-cat-head"><div><span class="dx-cat-kicker">CATÁLOGO / ADMINISTRACIÓN</span><h2>Gestión de categorías</h2></div><button type="button" class="dx-cat-btn" data-dx-category-refresh>'+iconMarkup('refresh')+' Reintentar</button></div><p class="dx-cat-status error">'+escapeHtml(message)+'</p>';
+        }
+      }
     }finally{categoryManagerLoading=false;}
   }
   function scheduleCategoryManager(force=false){
-    clearTimeout(categoryManagerTimer);
-    if(!categoryViewActive()||window.DRIPX_IS_ADMIN!==true){
+    if(!categoryViewActive()){
+      clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
       document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
     }
-    categoryManagerTimer=setTimeout(()=>{void renderCategoryManager(force);},120);
+    if(!client)return;
+    if(categoryManagerTimer&&!force)return;
+    if(force){clearTimeout(categoryManagerTimer);categoryManagerTimer=0;}
+    categoryManagerTimer=setTimeout(()=>{
+      categoryManagerTimer=0;
+      void renderCategoryManager(force);
+    },100);
   }
   async function saveCategoryForm(form){
     const button=form.querySelector('#dx-category-save');
@@ -928,19 +952,54 @@
     const action=event.target.closest('[data-dx-category-action]');
     if(action){event.preventDefault();event.stopImmediatePropagation();await handleCategoryAction(action);}
   },true);
+  function isAdminNavigationControl(control){
+    if(!control)return false;
+    if(control.matches('[data-admin-tab],[data-admin-route],[role="tab"],[data-tab],[data-route]'))return true;
+    return !!control.closest('nav,[role="navigation"],[role="tablist"],.admin-sidebar,.admin-nav,.admin-menu,.admin-tabs,[data-admin-navigation],[data-admin-menu],#admin-nav,#admin-menu,.admin-dashboard-nav,.admin-sections,.sidebar-nav,.sidebar');
+  }
+  function syncCategoryRouteFromHash(){
+    const hash=String(location.hash||'').toLowerCase();
+    if(/^#admin\/categorias?(?:$|[/?])/.test(hash)||/(?:[?&])tab=categorias?(?:&|$)/.test(hash)){
+      window.__DRIPX_CATEGORY_TAB_ACTIVE=true;
+    }else if(/^#admin(?:$|[/?])/.test(hash)){
+      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+    }
+  }
   document.addEventListener('click',event=>{
     const control=event.target.closest('#app button,#app a,#app [role="tab"]');
-    if(!control||control.closest('#dx-category-manager'))return;
-    const label=categoryText(control.getAttribute('data-admin-tab')||control.getAttribute('data-admin-route')||control.getAttribute('aria-label')||control.textContent||control.getAttribute('href'));
-    if(!isAdminRoute())return;
+    if(!control||control.closest('#dx-category-manager')||!isAdminRoute()||!isAdminNavigationControl(control))return;
+    const label=categoryText(control.getAttribute('data-admin-tab')||control.getAttribute('data-admin-route')||control.getAttribute('data-tab')||control.getAttribute('data-route')||control.getAttribute('aria-label')||control.textContent||control.getAttribute('href'));
     if(/categorias?|categories?/.test(label)){
       window.__DRIPX_CATEGORY_TAB_ACTIVE=true;scheduleCategoryManager(true);
     }else if(/productos?|pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label)){
-      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);
+      window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+      clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
+      document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);
     }
   },true);
+  let categoryAuthSubscriptionInstalled=false;
+  function installCategoryAuthLifecycle(){
+    if(!client||categoryAuthSubscriptionInstalled||typeof client.auth?.onAuthStateChange!=='function')return;
+    categoryAuthSubscriptionInstalled=true;
+    client.auth.onAuthStateChange((event,session)=>{
+      const verifiedUser=String(window.__DRIPX_ADMIN_VERIFIED_USER_ID||'');
+      const nextUser=String(session?.user?.id||'');
+      if(event==='SIGNED_OUT'||(verifiedUser&&nextUser&&verifiedUser!==nextUser)){
+        window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
+        window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
+        window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+        clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
+        document.querySelector('#dx-category-manager')?.remove();
+        setLegacyCategoryManagerHidden(false);
+      }else if(event==='SIGNED_IN'&&nextUser){
+        window.__DRIPX_ADMIN_SESSION_VERIFIED=false;
+        window.__DRIPX_ADMIN_VERIFIED_USER_ID='';
+      }
+    });
+  }
   function syncCategoryManagerVisibility(){
-    if(!categoryViewActive()||window.DRIPX_IS_ADMIN!==true){
+    if(!categoryViewActive()){
+      clearTimeout(categoryManagerTimer);categoryManagerTimer=0;
       document.querySelector('#dx-category-manager')?.remove();setLegacyCategoryManagerHidden(false);return;
     }
     scheduleCategoryManager(false);
@@ -1160,7 +1219,7 @@
       document.querySelectorAll('[data-dx-log-toggle]').forEach(button=>button.setAttribute('aria-expanded','false'));
     }
   },true);
-  window.addEventListener('hashchange',()=>{hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
+  window.addEventListener('hashchange',()=>{syncCategoryRouteFromHash();hideTopCategoryStrip();syncRouteBackButton();markAdminView();syncCategoryOptions(true);syncCatalogOwnership(true);removeStandaloneProtectionAdminEntry();schedulePlanResourceManager();syncCategoryManagerVisibility();});
 
   function installProductZipProtectionGuard(){
     if(document.documentElement.dataset.dripxZipGuard==='1')return;
@@ -1184,7 +1243,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();syncCategoryManagerVisibility();
+    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();installCategoryAuthLifecycle();syncCategoryManagerVisibility();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
@@ -1353,7 +1412,7 @@
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();syncCategoryManagerVisibility();
+    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
