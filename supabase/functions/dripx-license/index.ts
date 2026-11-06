@@ -228,14 +228,14 @@ async function downloadOwnedProduct(req: Request) {
 
   const findByBasename=(name:string)=>Object.values(zip.files).filter(entry=>!entry.dir&&entry.name.split("/").pop()?.toLowerCase()===name.toLowerCase());
   const metaEntries=findByBasename("meta.xml");if(metaEntries.length!==1||metaEntries[0].name!=="meta.xml")return json(409,{error:"resource_meta_invalid"});
-  const metaText=await metaEntries[0].async("string"),marker=metaText.match(/DRIPX_PRODUCT_ID:\\s*([0-9a-f-]{36})/i);
+  const metaText=await metaEntries[0].async("string"),marker=metaText.match(/DRIPX_PRODUCT_ID: *([0-9a-f-]{36})/i);
   if(!marker||marker[1].toLowerCase()!==productId.toLowerCase())return json(409,{error:"resource_product_id_mismatch"});
-  const tags=metaText.match(/<script\\b[^>]*>/gi)||[],shared=tags.filter(tag=>/\\btype\\s*=\\s*["']shared["']/i.test(tag)).map(tag=>tag.match(/\\bsrc\\s*=\\s*["']([^"']+)["']/i)?.[1]?.replace(/^\\.\\//,"")).filter(Boolean);
+  const tags=metaText.match(/<script\b[^>]*>/gi)||[];
+  const shared=tags.map(tag=>{const type=tag.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();const src=tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];return type==="shared"&&src?(src.startsWith("./")?src.slice(2):src):null;}).filter((value):value is string=>!!value);
   if(shared.length!==1||!zip.file(shared[0]))return json(409,{error:"resource_shared_license_missing"});
   const sharedText=await zip.file(shared[0]).async("string"),placeholder="DRIPX_LICENSE_KEY_PLACEHOLDER";
   if(sharedText.split(placeholder).length!==2)return json(409,{error:"resource_license_placeholder_invalid"});
-  const luaQuote=(value:string)=>value.replace(/\\\\/g,"\\\\\\\\").replace(/"/g,'\\\\"').replace(/[\\r\\n]/g,"");
-  zip.file(shared[0],sharedText.replace(placeholder,luaQuote(licenseKey)));
+  zip.file(shared[0],sharedText.replace(placeholder,licenseKey));
   const output = await zip.generateAsync({
     type: "uint8array",
     compression: "DEFLATE",
