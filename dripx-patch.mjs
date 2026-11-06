@@ -146,12 +146,13 @@ export async function patchApp(source) {
   app = app.slice(0, compileBlockStart) + safeMetaRewrite + app.slice(compileBlockEndLine + 1);
 
 
-  once("    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", "    const sharedLuaSources = new Set(scripts.filter(x => x.type === \"shared\").map(x => x.src));\n    for (const entry of entries) {\n      if (!entry.name.toLowerCase().endsWith(\".lua\")) continue;\n      const base = entry.name.split(\"/\").pop().toLowerCase();\n      const config = /^(config|settings|shared|language|locale).*\\.lua$/.test(base);\n      if (config || entry.name === \"dripx_license.lua\" || sharedLuaSources.has(entry.name)) continue;\n      throw new Error(\"El ZIP conserva Lua fuente sin compilar: \" + entry.name);\n    }\n    const sharedIndex=scripts.findIndex(x=>x.src==='dripx_guard_shared.lua'&&x.type==='shared');", 'reject leftover Lua source before publication');
-
-
+      const parts = entry.name.toLowerCase().split("/");
+      const base = parts.pop() || "";
+      const config = parts.some(part => ["config","configs","settings","shared","language","languages","locale","locales"].includes(part)) || /^(config|settings|shared|language|locale)([._-].*)?\.lua$/.test(base);
+      if (config || base === "dripx_license.lua" || sharedLuaSources.has(entry.name)) continue;
   const protectionRequired = [
-    "Protección automática DRIPX",
     "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
+    "window.DRIPX_UPLOAD_FILE",
     "async function verifyResourceProductBeforePublish(productId)",
     "async function validateProtectedResourceZip(file)",
     "El ZIP no ha terminado el proceso automático de protección"
