@@ -319,7 +319,7 @@
           const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
           const transfer=new DataTransfer();transfer.items.add(processed);input.files=transfer.files;
           setProductZipStatus('ZIP protegido listo. Al guardar el producto se subirá este archivo final a product-files.','success');
-          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,resourceName:window.__DRIPX_RESOURCE_NAME||'',at:Date.now()};
+          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,productId:window.__DRIPX_PENDING_PRODUCT_ID||'',resourceName:window.__DRIPX_RESOURCE_NAME||'',at:Date.now()};
           URL.createObjectURL=native;
         }catch(error){console.warn('[DRIPX] No se pudo adjuntar el ZIP protegido al producto:',error);}
       }
