@@ -231,3 +231,30 @@
 #app.dx-admin-view table td{vertical-align:middle}
 #app.dx-admin-view table tbody tr:last-child td{border-bottom:0}
 @media(max-width:720px){#app.dx-admin-view #product-form{gap:12px;padding:12px;border-radius:15px}#app.dx-admin-view #product-form .form-grid{grid-template-columns:minmax(0,1fr)}#app.dx-admin-view #product-form .form-group,#app.dx-admin-view #product-form .form-row,#app.dx-admin-view #product-form .field{padding:11px}#app.dx-admin-view #product-form .form-card,#app.dx-admin-view #product-form .form-panel,#app.dx-admin-view #product-form .form-section{padding:13px}#app.dx-admin-view #product-form button[type=submit],#app.dx-admin-view #product-form input[type=submit]{width:100%}}
+
+
+/* DRIP X SHOP — ZIP intake, validation and publication states */
+#app.dx-admin-view #product-form .dx-product-zip-preview{position:relative;overflow:hidden;border:1px solid rgba(0,199,255,.25);border-radius:16px;background:linear-gradient(140deg,rgba(0,199,255,.075),rgba(6,14,23,.96) 62%);box-shadow:0 16px 36px rgba(0,0,0,.18)}
+#app.dx-admin-view #product-form .dx-product-zip-preview:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,rgba(0,199,255,.72),transparent);pointer-events:none}
+.dx-product-zip-preview .dx-preview-summary{gap:7px}
+.dx-product-zip-preview .dx-preview-summary strong{color:#edf8ff;font-size:13px;font-weight:700}
+.dx-product-zip-preview .dx-preview-summary span{font-size:11px;line-height:1.5}
+.dx-product-zip-preview .dx-preview-summary .ok{display:inline-flex;align-items:center;gap:6px;color:#72deb1}
+.dx-product-zip-preview .dx-preview-summary .warn{color:#ffc47a}
+.dx-product-zip-preview .dx-preview-summary .error{color:#ff9e9e}
+.dx-product-zip-preview .dx-preview-grid span{transition:border-color .18s,background .18s}
+.dx-product-zip-preview .dx-upload-file{transition:background .16s,border-color .16s}
+.dx-product-zip-preview .dx-upload-file:hover{background:rgba(0,199,255,.045);border-color:rgba(0,199,255,.2)}
+.dx-product-zip-preview .dx-upload-file.is-compile .dx-upload-file-icon{background:rgba(0,199,255,.1);color:#54d9ff}
+.dx-product-zip-preview .dx-upload-file-name{color:#dceaf3}
+.dx-product-zip-preview .dx-auto-step{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.12);padding:7px 10px}
+.dx-product-zip-preview .dx-auto-step:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.5}
+.dx-product-zip-preview .dx-auto-step.is-active{border-color:rgba(0,199,255,.3);background:rgba(0,199,255,.1);color:#bcefff}
+.dx-product-zip-preview .dx-auto-step.is-done{border-color:rgba(68,196,145,.22);background:rgba(68,196,145,.07);color:#7dddb3}
+.dx-product-zip-preview[data-state="error"] .dx-preview-summary{border-color:rgba(239,91,91,.22)}
+.dx-product-zip-preview[data-state="success"] .dx-preview-summary{border-color:rgba(68,196,145,.2)}
+.dx-product-zip-preview .dx-preview-files::-webkit-scrollbar{width:7px}
+.dx-product-zip-preview .dx-preview-files::-webkit-scrollbar-thumb{border-radius:8px;background:rgba(137,167,189,.25)}
+.dx-zip-retry{border-color:rgba(0,199,255,.3);background:rgba(0,199,255,.08);color:#d9f5ff}
+.dx-zip-retry:hover:not(:disabled){border-color:rgba(0,199,255,.55);background:rgba(0,199,255,.14)}
+@media(max-width:520px){.dx-product-zip-preview .dx-preview-summary{align-items:flex-start}.dx-product-zip-preview .dx-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-product-zip-preview .dx-auto-progress{gap:6px}.dx-product-zip-preview .dx-auto-step{font-size:10px;padding:6px 8px}}
