@@ -60,7 +60,7 @@ const requiredFeatures = [
 const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
 const cssSource = Buffer.concat([css, extraCss]).toString('utf8') + await readFile('dist/dripx-visual-system.css', 'utf8');
-if (!/@media\\s*\\(\\s*max-width\\s*:\\s*720px\\s*\\)/.test(cssSource) || !cssSource.includes(':focus-visible')) {
+if (!cssSource.includes('@media(max-width:720px)') || !cssSource.includes(':focus-visible')) {
   throw new Error('DRIPX responsive/accessibility styles are missing.');
 }
 console.log(`DRIP X SHOP build OK · static asset, client-secret, feature, responsive and accessibility smoke checks passed · app.js ${appText.length} bytes · CSS ${css.length + extraCss.length} bytes · free products + ZIP reader/staging + SVG icons enabled`);
