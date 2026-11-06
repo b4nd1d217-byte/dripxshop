@@ -228,16 +228,16 @@ export async function patchApp(source) {
       catch{throw new Error('El compilador devolvió datos dañados para '+name+'.');}
       if(bytes.length<4||bytes[0]!==0x1c||bytes[1]!==0x4d||bytes[2]!==0x76||bytes[3]!==0x62)throw new Error('La salida no es bytecode MTA válido: '+name);
       const output=name.slice(0,-4)+'.luac';
+      const original=b.scriptSrcByFile?.get(name);
+      if(!original)throw new Error('No existe una referencia meta.xml para el script '+name+'.');
+      const at=meta.indexOf(original);
+      if(at<0)throw new Error('meta.xml ya no contiene la referencia original de '+name+'.');
+      const compiledPath=original.slice(0,-4)+'.luac';
+      const nextMeta=meta.slice(0,at)+compiledPath+meta.slice(at+original.length);
       if(working.file(output))throw new Error('Ya existe el destino compilado '+output+'. No se sobrescribió ningún archivo.');
       working.file(output,bytes);
       working.remove(name);
-      const original=b.scriptSrcByFile?.get(name);
-      if(original){
-        const at=meta.indexOf(original);
-        if(at<0)throw new Error('meta.xml ya no contiene la referencia original de '+name+'.');
-        const compiledPath=original.slice(0,-4)+'.luac';
-        meta=meta.slice(0,at)+compiledPath+meta.slice(at+original.length);
-      }
+      meta=nextMeta;
       working.file(b.metaName,meta);
       completed.add(name);
       b.zip=working;
