@@ -97,7 +97,7 @@ const uploadChecks = [
   [zipReader.includes("type==='server'||type==='client'||type==='shared'") && zipReader.includes("'dripx_shared_license.lua'"), 'shared Lua scripts are compiled and the public bridge name is reserved'],
   [patchSource.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD') && patchSource.includes("working.file('dripx_shared_license.lua',sharedBridge)"), 'original shared code is gated and the separate public bridge is generated'],
   [patchSource.includes('const sharedScriptTags=originalScriptTags.filter') && patchSource.includes('const otherScriptTags=originalScriptTags.filter'), 'shared scripts are ordered before server/client startup'],
-  [patchSource.includes('ya está compilado o no es Lua') && zipReader.includes('compiledShared'), 'precompiled shared inputs are rejected and original shared bytecode is verified'],
+  [zipReader.includes("type==='shared'&&/\\.luac$/i.test(src)") && zipReader.includes('dripxZipMtaBytecode') && patchSource.includes('sharedFallbackFiles') && patchSource.includes('response?.status===422'), 'precompiled shared MTA bytecode is preserved and incompatible wrappers receive a compatibility compile'],
   [uploadValidator.includes('uncompiled_shared_lua_present') && uploadValidator.includes('shared_license_bridge_missing'), 'upload validator rejects uncompiled shared Lua and requires the bridge'],
   [downloadFunction.includes('resource_uncompiled_shared_lua_present') && downloadFunction.includes('resource_shared_license_bridge_missing'), 'buyer download rejects uncompiled shared Lua and requires the bridge'],
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
