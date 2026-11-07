@@ -72,7 +72,7 @@
     }
     const metaCandidates=records.filter(item=>item.path.toLowerCase()==='meta.xml'||item.path.toLowerCase().endsWith('/meta.xml'));
     const rootMetas=metaCandidates.filter(item=>item.path.toLowerCase()==='meta.xml');
-    if(rootMetas.length>1||(!rootMetas.length&&metaCandidates.length>1))throw new Error('El ZIP contiene más de un meta.xml y no se puede determinar con seguridad cuál pertenece al resource.');
+    if(metaCandidates.length>1)throw new Error('El ZIP contiene más de un meta.xml. Debe conservarse un único manifiesto MTA para evitar referencias ambiguas.');
     const metaRecord=rootMetas[0]||metaCandidates[0]||null;
     if(metaRecord&&metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
     let rootPrefix='';
@@ -114,8 +114,13 @@
     let metaText=meta?await meta.async('string'):'';
     const safeResourceName=String(file.name||'DRIPX-resource').replace(/\.zip$/i,'').replace(/[^A-Za-z0-9_-]+/g,'_').slice(0,64)||'DRIPX-resource';
     const xmlEscape=value=>String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const isLikelyConfigLua=entry=>{
+      const parts=entry.name.toLowerCase().split('/'),base=parts[parts.length-1];
+      return parts.slice(0,-1).some(part=>/^(config|configs|settings)$/.test(part))
+        || /^(config|settings|options)(?:[._-].*)?\.lua$/i.test(base);
+    };
     if(!meta){
-      const scriptFiles=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
+      const scriptFiles=entries.filter(entry=>(/\.lua$/i.test(entry.name)&&!isLikelyConfigLua(entry))||(/\.luac$/i.test(entry.name)&&/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
       const inferred=scriptFiles.map(entry=>{const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.(lua|luac)$/i.test(base)?'client':'server');return '<script src="'+xmlEscape(path)+'" type="'+type+'" />';}).join('\n');
       metaText='<meta>\n  <info name="'+xmlEscape(safeResourceName)+'" author="DRIP X SHOP" version="1.0.0" type="script" />\n  '+inferred+'\n</meta>';
       zip.file('meta.xml',metaText);meta=zip.file('meta.xml');entries=Object.values(zip.files).filter(entry=>!entry.dir);
@@ -159,7 +164,7 @@
       scripts.push({src,originalSrc,type});
     }
     if(!scripts.length){
-      const candidates=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&(/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name))));
+      const candidates=entries.filter(entry=>(/\.lua$/i.test(entry.name)&&!isLikelyConfigLua(entry))||(/\.luac$/i.test(entry.name)&&(/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name))));
       for(const entry of candidates){
         const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];
         const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.lua$/i.test(base)?'client':'server');
