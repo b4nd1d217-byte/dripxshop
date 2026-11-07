@@ -119,7 +119,8 @@ export async function patchApp(source) {
   const legacyGuardStart=app.indexOf("  function makeLicenseGuard(){");
   const protectStart=app.indexOf("  async function protectZip(){",legacyGuardStart);
   if(legacyGuardStart>=0&&protectStart>legacyGuardStart)app=app.slice(0,legacyGuardStart)+app.slice(protectStart);
-  const scriptTagPosition=app.indexOf("const scriptTag=");
+  const scriptTagMatch=/const\\s+scriptTag\\s*=/.exec(app);
+  const scriptTagPosition=scriptTagMatch?.index??-1;
   if(scriptTagPosition<0)throw new Error('DRIPX patch failed: server license script tag insertion point');
   const aclInjection=[
     "    const aclRights=['function.fetchRemote','function.stopResource'];",
