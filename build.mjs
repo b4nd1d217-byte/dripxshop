@@ -71,7 +71,7 @@ const privacyMigration = await readFile('supabase/migrations/20261106210000_drip
 const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
-  [appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,bridgeScriptTag") && appText.includes("type=\\'server\\'"), 'private license config is loaded before the server license guard'],
+  [appText.includes("const configScriptTag='<script src=\"'+configName+'\" type=\"server\" />';") && appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,bridgeScriptTag"), 'private license config is loaded before the server license guard'],
   [appText.includes('__DRIPX_PROCESSED_PRODUCT_FILE=file') && appText.includes('new File([blob],name,{type:\'application/zip\''), 'direct processed ZIP File handoff without URL capture'],
   [uploadUi.includes('download.click()') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()'), 'product UI no longer intercepts URL.createObjectURL for ZIP capture'],
   [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('server_license_config_missing') && uploadValidator.includes('DRIPX_CFG_PRODUCT_ID') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private cfg, guard and public shared bridge'],
