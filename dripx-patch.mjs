@@ -114,6 +114,10 @@ export async function patchApp(source) {
   replaceValidatorFragment("if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('La clave debe aparecer una sola vez en el shared.');","if(source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared debe contener solo el puente público; la clave nunca puede quedar en shared.');","shared secret separation");
   replaceValidatorFragment("if((s.type==='server'||s.type==='client')&&s.src.toLowerCase().endsWith('.lua'))throw new Error('Lua sin compilar: '+s.src+' · Todos los scripts declarados server/client deben compilarse con MTA. Los archivos config solo se conservan sin compilar cuando no están declarados como ejecutables.');","if(s.type==='server'&&s.src.toLowerCase()==='dripx_server_license.lua'){licenseGuard++;const source=await zip.file(s.src).async('string');if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('El guardián server de licencia no es válido.');}else if((s.type==='server'||s.type==='client')&&s.src.toLowerCase().endsWith('.lua'))throw new Error('Lua sin compilar: '+s.src+' · Solo el guardián temporal de licencia puede permanecer como fuente hasta la descarga personalizada.');","allow dedicated server license source");
   replaceValidatorFragment("if(shared!==1)throw new Error('Se requiere exactamente un archivo shared para la licencia.');","if(shared!==1)throw new Error('Se requiere exactamente un archivo shared para el puente público de licencia.');if(licenseGuard!==1)throw new Error('Se requiere exactamente un guardián server DRIPX para personalizar la descarga.');","require one server guard");
+  replaceValidatorFragment("let shared=0,compiled=0,server=0,licenseGuard=0;const refs=new Set();","let shared=0,compiled=0,server=0,licenseGuard=0,compiledShared=0;const refs=new Set();","track shared bytecode");
+  replaceValidatorFragment("if(s.type==='shared'&&s.src.toLowerCase().endsWith('.lua')){\n        shared++;const source=await zip.file(s.src).async('string');\n        if(source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared debe contener solo el puente público; la clave nunca puede quedar en shared.');\n      }","if(s.type==='shared'&&s.src.toLowerCase()==='dripx_shared_license.lua'){shared++;const source=await zip.file(s.src).async('string');if(source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El puente shared no es válido o contiene secretos.');}else if(s.type==='shared'&&s.src.toLowerCase().endsWith('.lua'))throw new Error('Lua shared sin compilar: '+s.src);","require dedicated shared bridge and compiled originals");
+  replaceValidatorFragment("if((s.type==='server'||s.type==='client')&&s.src.toLowerCase().endsWith('.luac')){\n        const bytes=await zip.file(s.src).async('uint8array');\n        if(bytes.length<4||bytes[0]!==0x1c||bytes[1]!==0x4d||bytes[2]!==0x76||bytes[3]!==0x62)throw new Error('Bytecode MTA inválido: '+s.src);\n        compiled++;if(s.type==='server')server++;\n      }","if((s.type==='server'||s.type==='client'||s.type==='shared')&&s.src.toLowerCase().endsWith('.luac')){const bytes=await zip.file(s.src).async('uint8array');if(bytes.length<4||bytes[0]!==0x1c||bytes[1]!==0x4d||bytes[2]!==0x76||bytes[3]!==0x62)throw new Error('Bytecode MTA inválido: '+s.src);compiled++;if(s.type==='server')server++;if(s.type==='shared')compiledShared++;}","validate shared bytecode");
+  replaceValidatorFragment("if(shared!==1)throw new Error('Se requiere exactamente un archivo shared para el puente público de licencia.');if(licenseGuard!==1)throw new Error('Se requiere exactamente un guardián server DRIPX para personalizar la descarga.');","if(shared!==1)throw new Error('Se requiere exactamente un puente shared público.');if(compiledShared!==(b.shared||[]).length)throw new Error('No se compilaron todos los scripts shared originales.');if(licenseGuard!==1)throw new Error('Se requiere exactamente un guardián server DRIPX para personalizar la descarga.');","require compiled shared originals");
   const newAddStart = app.indexOf("  async function addProduct(form){");
   const checkoutStart = app.indexOf("\n\n  async function checkout(){", newAddStart);
   if (newAddStart < 0 || checkoutStart < 0) throw new Error('DRIPX patch failed: product save boundaries');
@@ -134,24 +138,27 @@ export async function patchApp(source) {
     const b=state.zipBuild;
     if(!b?.zip)throw new Error('Selecciona el ZIP original.');
     if(b.protected)throw new Error('Este ZIP ya fue protegido.');
-    if(!b.shared?.length||b.shared.length!==1)throw new Error('El resource debe tener exactamente un archivo Lua type="shared".');
     if(!b.server?.length)throw new Error('Se requiere al menos un script Lua de servidor.');
     const working=b.zip,productId=b.productId||crypto.randomUUID(),nl=String.fromCharCode(10);
     const guardName='dripx_server_license.lua';
     if(working.file(guardName))throw new Error('El resource ya contiene el nombre reservado '+guardName+'.');
-    const shared=b.shared[0].name,sharedFile=working.file(shared);
-    if(!sharedFile||!shared.toLowerCase().endsWith('.lua'))throw new Error('El archivo shared debe ser un script Lua.');
-    const sharedText=await sharedFile.async('string');
-    if(sharedText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'))throw new Error('El ZIP contiene una marca de licencia antigua en shared. Retírala antes de continuar.');
-    if(sharedText.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared ya contiene el puente de licencia DRIPX.');
+    if(working.file('dripx_shared_license.lua'))throw new Error('El resource ya contiene el nombre reservado dripx_shared_license.lua.');
+    const sharedNames=(b.shared||[]).map(x=>x.name),sharedPayloads=[];
+    for(const name of sharedNames){
+      const file=working.file(name);if(!file)throw new Error('Falta el script shared: '+name);
+      const source=await file.async('string');
+      if(source.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD')||source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared '+name+' ya contiene marcas DRIPX o una clave antigua.');
+      const wrapped=['local DRIPX_SHARED_LICENSE_GATED_PAYLOAD=function(...)',source,'end','if type(triggerServerEvent)=="function" then','  addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_SHARED_LICENSE_GATED_PAYLOAD(...) end)','else','  addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_SHARED_LICENSE_GATED_PAYLOAD(...) end)','end'].join(nl);
+      sharedPayloads.push({name,source:wrapped});
+    }
     const serverNames=b.server.map(x=>x.name),clientNames=b.client.map(x=>x.name);
-    const serverPayloads=[],clientPayloads=[];
+    const serverPayloads=[],clientPayloads=[],sharedPayloads=[];
     for(let i=0;i<serverNames.length;i++){
       const name=serverNames[i],file=working.file(name);
       if(!file)throw new Error('Falta el script de servidor: '+name);
       const source=await file.async('string');
       if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
-      const prefix=i===0?'addEvent("dripx:license:ready",false)'+nl:'';
+      const prefix='';
       serverPayloads.push({name,source:prefix+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) end,true,"high")'+nl});
     }
     for(const name of clientNames){
@@ -160,6 +167,7 @@ export async function patchApp(source) {
       if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
       clientPayloads.push({name,source:'if not DRIPX_CLIENT_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:clientReady",true) DRIPX_CLIENT_LICENSE_EVENT_REGISTERED=true end'+nl+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) if not DRIPX_CLIENT_START_REPLAYED then DRIPX_CLIENT_START_REPLAYED=true setTimer(function() triggerEvent("onClientResourceStart",resourceRoot,getThisResource()) end,50,1) end end)'+nl});
     }
+    for(const item of sharedPayloads)working.file(item.name,item.source);
     const metaFile=working.file(b.metaName);if(!metaFile)throw new Error('No se encuentra meta.xml.');
     let meta=await metaFile.async('string');
     if(/DRIPX_PRODUCT_ID:/i.test(meta))throw new Error('meta.xml ya contiene un ID DRIPX.');
@@ -225,12 +233,13 @@ export async function patchApp(source) {
     const sharedBridge=[
       '-- DRIP X SHOP · puente público de licencia (sin secretos)',
       'DRIPX_LICENSE_EVENT_NAME = "dripx:license:clientReady"',
-      'if not DRIPX_LICENSE_EVENT_REGISTERED then',
-      '  addEvent(DRIPX_LICENSE_EVENT_NAME,type(triggerServerEvent)=="function")',
-      '  DRIPX_LICENSE_EVENT_REGISTERED = true',
+      'if type(triggerServerEvent)=="function" then',
+      '  if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent(DRIPX_LICENSE_EVENT_NAME,true) DRIPX_LICENSE_EVENT_REGISTERED=true end',
+      'else',
+      '  if not DRIPX_SERVER_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:ready",false) DRIPX_SERVER_LICENSE_EVENT_REGISTERED=true end',
       'end'
     ].join(nl);
-    working.file(shared,sharedText+nl+sharedBridge+nl);
+    working.file('dripx_shared_license.lua',sharedBridge);
     for(const item of serverPayloads)working.file(item.name,item.source);
     for(const item of clientPayloads)working.file(item.name,item.source);
     working.file(guardName,guardSource);
@@ -245,7 +254,7 @@ export async function patchApp(source) {
       if(!metaClose)throw new Error('meta.xml no tiene cierre para permisos ACL.');
       meta=meta.slice(0,metaClose.index)+'<aclrequest>'+nl+aclRights.map(right=>'  <right name="'+right+'" access="true" />').join(nl)+nl+'</aclrequest>'+nl+meta.slice(metaClose.index);
     }
-    const scriptTag='<script src="'+guardName+'" type="server" />'+nl;
+    const scriptTag='<script src="'+guardName+'" type="server" />'+nl+'<script src="dripx_shared_license.lua" type="shared" />'+nl;
     const firstScript=/<script\b/i.exec(meta);
     if(!firstScript)throw new Error('meta.xml no contiene scripts donde insertar el guardián.');
     meta=meta.slice(0,firstScript.index)+scriptTag+meta.slice(firstScript.index);
@@ -255,15 +264,15 @@ export async function patchApp(source) {
     b.zip=working;b.productId=productId;b.protected=true;b.compiled=false;b.compiledFiles=[];b.licenseInjected=true;b.finalBlobSize=0;
     const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
     if(protect)protect.disabled=true;if(compile)compile.disabled=false;if(download)download.disabled=true;
-    const status=document.querySelector('#zip-status');if(status)status.textContent='Protección real integrada · '+serverNames.length+' scripts server · '+clientNames.length+' client · clave reservada al servidor.';
-    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,serverLicenseTemplate:guardName};
+    const status=document.querySelector('#zip-status');if(status)status.textContent='Protección real integrada · '+serverNames.length+' server · '+clientNames.length+' client · '+sharedNames.length+' shared preparados para bytecode · clave reservada al servidor.';
+    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,protectedSharedFiles:sharedNames.length,serverLicenseTemplate:guardName};
   }
   async function compileZip(){
     const b=state.zipBuild;
     if(!b?.protected)throw new Error('Primero protege el resource.');
     if(b.compiled)throw new Error('Este ZIP ya está compilado.');
     const selected=[...new Set((b.compileTargets||[]).map(x=>x.name))];
-    if(!selected.length)throw new Error('No hay scripts client/server declarados que deban compilarse.');
+    if(!selected.length)throw new Error('No hay scripts server/client/shared declarados que deban compilarse.');
     const getToken=async(forceRefresh=false)=>{
       const current=await db.auth.getSession();
       if(current.error)throw current.error;
