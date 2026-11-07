@@ -1,5 +1,6 @@
   const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
   function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
+  function dripxZipMtaBytecode(bytes){return !!bytes&&bytes.length>=4&&bytes[0]===0x1c&&bytes[1]===0x4d&&bytes[2]===0x76&&bytes[3]===0x62;}
   async function loadZipForProtection(file){
     const ensureZipUiNode=(id,tag)=>{
       let node=document.getElementById(id);
@@ -14,7 +15,7 @@
     const LIMITS={meta:2*1024*1024,compressed:50*1000*1000,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
-    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP comprimido supera el límite actual de 50 MB de Supabase Free. Optimiza el resource o divídelo en módulos; el límite protege la memoria de procesamiento.');
+    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP completo supera los 50 MB permitidos por el almacenamiento Supabase Free. No es un límite por script Lua: cuenta también modelos, texturas, sonidos y demás recursos. Para subir ZIP mayores hay que ampliar el plan y el límite global de Storage.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
     const archive=await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
     const allEntries=Object.values(archive.files||{});
@@ -135,7 +136,9 @@
       const src=normalizeScriptPath(originalSrc);
       const type=String(node.getAttribute('type')||'server').trim().toLowerCase();
       if(!['server','client','shared'].includes(type))throw new Error('meta.xml contiene un tipo de script no reconocido: '+type+'.');
-      if(!/\.lua$/i.test(src))throw new Error('meta.xml debe declarar archivos .lua originales. Se encontró '+src+'. Los .luac ya compilados no pueden volver a protegerse; importa el ZIP fuente.');
+      const precompiledShared=type==='shared'&&/\.luac$/i.test(src);
+      if(!/\.lua$/i.test(src)&&!precompiledShared)throw new Error('El script '+src+' ya está compilado o no es Lua. Para server/client se necesita el .lua fuente para aplicar la licencia; los shared .luac se pueden conservar si son bytecode MTA válido.');
+      if(precompiledShared){const precompiled=zip.file(src);if(!precompiled)throw new Error('No se encuentra el shared compilado '+src+'.');const bytes=await precompiled.async('uint8array');if(!dripxZipMtaBytecode(bytes))throw new Error('El shared '+src+' no tiene una firma de bytecode MTA válida.');}
       if(scripts.some(script=>script.src.toLowerCase()===src.toLowerCase()))throw new Error('meta.xml declara el mismo script más de una vez: '+src);
       scripts.push({src,originalSrc,type});
     }
@@ -162,7 +165,7 @@
       // meta.xml is authoritative: an executable Lua script stays executable even inside a folder named config/shared.
       const kind=isLua&&scriptType
         ? (scriptType==='shared'?'shared_lua':(scriptType==='server'?'server_lua':'client_lua'))
-        : (isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file')));
+        : ((ext==='luac'&&scriptType)?(scriptType==='shared'?'shared_luac':(scriptType==='server'?'server_luac':'client_luac')):(isConfig?'config':(isLua?'lua_other':(isShader?'shader':'file'))));
       return {
         path,bytes:Number(entry._data?.uncompressedSize??entry._data?.length??0),
         kind,scriptType,declared:!!scriptType,extension:ext
@@ -186,7 +189,7 @@
     };
     const configCount=files.filter(item=>item.kind==='config'||item.kind==='shared_lua').length;
     const shaderCount=files.filter(item=>item.kind==='shader').length;
-    const scriptCount=files.filter(item=>item.kind.endsWith('_lua')||item.kind==='lua_other').length;
+    const scriptCount=files.filter(item=>item.kind.endsWith('_lua')||item.kind.endsWith('_luac')||item.kind==='lua_other').length;
     const bytes=n=>{
       n=Number(n)||0;
       if(n<1024)return n+' B';
