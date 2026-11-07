@@ -261,25 +261,45 @@
   }
   function mountProductZipPipeline(node,input,file){
     return (async()=>{
+      const runId=String(input?.dataset?.dripxZipRun||'');
+      let live=ensureLiveProductZipPreview(input,runId);
+      if(live){input=live.input;node=live.node;}
+      if(!node?.isConnected)throw new Error('El formulario de Productos se actualizó. Vuelve a seleccionar el ZIP para continuar.');
       let engine=node.querySelector('.dx-product-engine');
       if(!engine){
         engine=document.createElement('section');
         engine.className='dx-product-engine';
         engine.setAttribute('data-dripx-engine','embedded');
-        engine.innerHTML='';
         engine.hidden=true;
         engine.setAttribute('aria-hidden','true');
         node.append(engine);
       }
+      const resolveLiveEngine=()=>{
+        const current=ensureLiveProductZipPreview(input,runId);
+        if(!current)return engine?.isConnected?engine:null;
+        let currentEngine=current.node.querySelector('.dx-product-engine');
+        if(!currentEngine){
+          currentEngine=document.createElement('section');
+          currentEngine.className='dx-product-engine';
+          currentEngine.setAttribute('data-dripx-engine','embedded');
+          currentEngine.hidden=true;
+          currentEngine.setAttribute('aria-hidden','true');
+          current.node.append(currentEngine);
+        }
+        return currentEngine.isConnected?currentEngine:null;
+      };
+      if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor DRIPX no está cargado. Recarga la página.');
+      const loaded=await window.DRIPX_LOAD_ZIP(file,resolveLiveEngine);
+      engine=resolveLiveEngine()||engine;
+      if(!engine?.isConnected)throw new Error('El panel del lector ZIP se desconectó durante el análisis. Vuelve a seleccionar el archivo.');
       const ensure=(id,tag,cls,label)=>{
-        let el=engine.querySelector('[id="'+id+'"]')||document.getElementById(id);
-        if(el&&!engine.contains(el))engine.append(el);
+        let el=engine.querySelector('[id="'+id+'"]');
         if(!el){
           el=document.createElement(tag);el.id=id;
-          if(cls)el.className=cls;
-          if(tag==='button'){el.type='button';el.textContent=label||'';}
           engine.append(el);
         }
+        if(cls)cls.split(/\s+/).filter(Boolean).forEach(name=>el.classList.add(name));
+        if(tag==='button'){el.type='button';if(label&&!el.textContent.trim())el.textContent=label;}
         return el;
       };
       ensure('zip-analysis','div','zip-analysis');
@@ -291,8 +311,6 @@
       protect.setAttribute('aria-label','Proteger scripts Lua con el motor DRIPX');
       compile.setAttribute('aria-label','Compilar scripts Lua seleccionados');
       download.setAttribute('aria-label','Generar el ZIP final protegido');
-      if(typeof window.DRIPX_LOAD_ZIP!=='function')throw new Error('El motor DRIPX no está cargado. Recarga la página.');
-      const loaded=await window.DRIPX_LOAD_ZIP(file);
       if(!loaded||loaded.file!==file||!Array.isArray(loaded.files)||!loaded.files.length)throw new Error('El inventario ZIP no se pudo completar.');
       const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
       if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function')throw new Error('El motor de protección no está conectado al formulario de Productos. Recarga la página.');
@@ -348,8 +366,8 @@
   }
 
   async function previewProductZip(file){
-    const input=document.querySelector('#product-form input[name="file"]');
-    const form=input?.closest('#product-form');
+    let input=document.querySelector('#product-form input[name="file"]');
+    let form=input?.closest('#product-form');
     if(!input||!form)return;
     const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
     input.dataset.dripxZipRun=runId;
@@ -357,20 +375,26 @@
     window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
     window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
     lockProductSubmit(form,true);
-    let node=document.querySelector('#product-zip-preview');
-    if(!node){
-      node=document.createElement('div');node.id='product-zip-preview';node.className='dx-product-zip-preview';
-      const anchor=input.closest('label')||input.parentElement||input;
-      anchor.insertAdjacentElement('afterend',node);
-      const status=document.createElement('div');status.id='product-zip-upload-state';status.className='dx-upload-state';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
-      node.insertAdjacentElement('afterend',status);
-    }
+    let live=ensureLiveProductZipPreview(input,runId);
+    if(!live)return;
+    input=live.input;form=live.form;
+    let node=live.node;
     node.dataset.state='processing';
     node.innerHTML='<div class="dx-preview-loading">1/4 · Validando ZIP y leyendo meta.xml…</div>';
     setProductZipStatus('Preparando el resource para protección automática…','processing');
     try{
       await getAdminSession();
+      live=ensureLiveProductZipPreview(input,runId);
+      if(!live)return;
+      input=live.input;form=live.form;node=live.node;
+      lockProductSubmit(form,true);
+      node.dataset.state='processing';
+      node.innerHTML='<div class="dx-preview-loading">1/4 · Validando ZIP y leyendo meta.xml…</div>';
+      setProductZipStatus('Preparando el resource para protección automática…','processing');
       const engine=await mountProductZipPipeline(node,input,file);
+      live=ensureLiveProductZipPreview(input,runId);
+      if(!live)return;
+      input=live.input;form=live.form;node=engine.closest('#product-zip-preview')||live.node;
       if(input.dataset.dripxZipRun!==runId)return;
       const result=window.DRIPX_ZIP_SCAN_RESULT;
       if(!result||result.file!==file||!Array.isArray(result.files))throw new Error('El lector no devolvió un inventario válido.');

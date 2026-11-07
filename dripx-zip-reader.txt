@@ -1,12 +1,13 @@
   const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
   function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
   function dripxZipMtaBytecode(bytes){return !!bytes&&bytes.length>=4&&bytes[0]===0x1c&&bytes[1]===0x4d&&bytes[2]===0x76&&bytes[3]===0x62;}
-  async function loadZipForProtection(file){
+  async function loadZipForProtection(file,hostResolver){
     const ensureZipUiNode=(id,tag)=>{
-      let node=document.getElementById(id);
+      let host=typeof hostResolver==='function'?hostResolver():null;
+      if(!host?.isConnected)host=document.querySelector('.dx-product-engine')||document.querySelector('#product-zip-preview');
+      let node=host?.querySelector?.('#'+id)||null;
       if(node?.isConnected)return node;
-      const host=document.querySelector('.dx-product-engine')||document.querySelector('#product-zip-preview');
-      if(!host)throw new Error('El panel del lector ZIP no está montado. Vuelve a seleccionar el archivo para iniciar el análisis.');
+      if(!host?.isConnected)throw new Error('El formulario de Productos se actualizó y el lector perdió su contenedor. Vuelve a seleccionar el ZIP para reanudar el análisis.');
       node=document.createElement(tag);
       node.id=id;
       host.append(node);
