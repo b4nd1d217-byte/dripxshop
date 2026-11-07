@@ -74,7 +74,7 @@ const uploadChecks = [
   [appText.includes('__DRIPX_PROCESSED_PRODUCT_FILE=file') && appText.includes('new File([blob],name,{type:\'application/zip\''), 'direct processed ZIP File handoff without URL capture'],
   [uploadUi.includes('download.click()') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()'), 'product UI no longer intercepts URL.createObjectURL for ZIP capture'],
   [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private guard and public shared bridge'],
-  [appText.includes('name=\\\"function.fetchRemote\\\"') && appText.includes('name=\\\"function.stopResource\\\"'), 'generated MTA resource requests only the required license ACL rights'],
+  [appText.includes("const aclRights=['function.fetchRemote','function.stopResource']") && appText.includes('aclrequest'), 'generated MTA resource requests only the required license ACL rights'],
   [appText.includes('if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent') && !appText.includes('DRIPX_CLIENT_LICENSE_EVENT_REGISTERED'), 'shared and client scripts register the license event idempotently'],
   [!appText.includes('function makeLicenseGuard()') && !appText.includes('DRIPX-PASTE-YOUR-ACCOUNT-KEY-HERE'), 'obsolete insecure license bootstrap removed from generated app'],
   [downloadFunction.includes('compileMtaLicenseGuard') && downloadFunction.includes('license_guard_compilation_failed') && downloadFunction.includes('zip.remove(guardPath)'), 'buyer download compiles personalized server guard and rewrites meta.xml'],
