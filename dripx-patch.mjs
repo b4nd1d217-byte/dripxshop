@@ -372,7 +372,7 @@ export async function patchApp(source) {
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
   const staleGuardStart=app.indexOf("function makeLicenseGuard(){");
   if(staleGuardStart>=0){
-    const staleLineStart=app.lastIndexOf("\\n",staleGuardStart);
+    const staleLineStart=app.lastIndexOf("\n",staleGuardStart);
     const staleGuardEnd=app.indexOf("`;",staleGuardStart);
     if(staleGuardEnd<0)throw new Error('DRIPX patch failed: obsolete license helper boundary');
     const staleFunctionEnd=app.indexOf("}",staleGuardEnd+2);
