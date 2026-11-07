@@ -13,13 +13,12 @@
       return node;
     };
     const LIMITS={meta:2*1024*1024,compressed:50*1000*1000,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
-    if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
+    if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
     if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP completo supera los 50 MB permitidos por el almacenamiento Supabase Free. No es un límite por script Lua: cuenta también modelos, texturas, sonidos y demás recursos. Para subir ZIP mayores hay que ampliar el plan y el límite global de Storage.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
-    const archive=await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
+    const archive=Number(file.size)===0?new JSZip():await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
     const allEntries=Object.values(archive.files||{});
-    if(!allEntries.length)throw new Error('El ZIP no contiene entradas.');
     if(allEntries.length>LIMITS.entries)throw new Error('El ZIP contiene demasiadas entradas, incluidas carpetas.');
     if(allEntries.filter(entry=>!entry.dir).length>LIMITS.files)throw new Error('El ZIP supera el límite de 3.000 archivos.');
     const normalizePath=(entry)=>{
@@ -55,7 +54,6 @@
       records.push({entry,path,size});
 
     }
-    if(!records.length)throw new Error('El ZIP no contiene archivos utilizables.');
     const totalExpanded=records.reduce((sum,item)=>sum+item.size,0);
     if(!Number.isSafeInteger(totalExpanded))throw new Error('El tamaño total descomprimido no es válido.');
     if(totalExpanded>LIMITS.expanded)throw new Error('El ZIP supera 200 MB descomprimidos y no puede procesarse con seguridad.');
@@ -73,11 +71,13 @@
       }
     }
     const metaCandidates=records.filter(item=>item.path.toLowerCase()==='meta.xml'||item.path.toLowerCase().endsWith('/meta.xml'));
-    if(metaCandidates.length!==1)throw new Error(metaCandidates.length?'El ZIP contiene más de un meta.xml. Debe incluir un solo resource MTA:SA.':'No se encontró meta.xml dentro del ZIP.');
-    const metaRecord=metaCandidates[0];
-    if(metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
-    const slash=metaRecord.path.lastIndexOf('/');
-    const rootPrefix=slash>=0?metaRecord.path.slice(0,slash+1):'';
+    const rootMetas=metaCandidates.filter(item=>item.path.toLowerCase()==='meta.xml');
+    if(rootMetas.length>1||(!rootMetas.length&&metaCandidates.length>1))throw new Error('El ZIP contiene más de un meta.xml y no se puede determinar con seguridad cuál pertenece al resource.');
+    const metaRecord=rootMetas[0]||metaCandidates[0]||null;
+    if(metaRecord&&metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
+    let rootPrefix='';
+    if(metaRecord){const slash=metaRecord.path.lastIndexOf('/');rootPrefix=slash>=0?metaRecord.path.slice(0,slash+1):'';}
+    else if(records.length){const first=records[0].path.split('/')[0];if(first&&records.every(item=>item.path.startsWith(first+'/')))rootPrefix=first+'/';}
     const normalizedRecords=records.map(item=>{
       const relative=rootPrefix&&item.path.startsWith(rootPrefix)?item.path.slice(rootPrefix.length):item.path;
       const path=item===metaRecord?'meta.xml':relative;
@@ -109,19 +109,35 @@
         dosPermissions:item.entry.dosPermissions
       });
     }
-    const entries=Object.values(zip.files).filter(entry=>!entry.dir);
-    const meta=zip.file('meta.xml');
-    if(!meta)throw new Error('No se pudo reconstruir meta.xml en la raíz del resource.');
-    const metaText=await meta.async('string');
+    let entries=Object.values(zip.files).filter(entry=>!entry.dir);
+    let meta=zip.file('meta.xml');
+    let metaText=meta?await meta.async('string'):'';
+    const safeResourceName=String(file.name||'DRIPX-resource').replace(/\.zip$/i,'').replace(/[^A-Za-z0-9_-]+/g,'_').slice(0,64)||'DRIPX-resource';
+    const xmlEscape=value=>String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if(!meta){
+      const scriptFiles=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
+      const inferred=scriptFiles.map(entry=>{const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.(lua|luac)$/i.test(base)?'client':'server');return '<script src="'+xmlEscape(path)+'" type="'+type+'" />';}).join('\n');
+      metaText='<meta>\n  <info name="'+xmlEscape(safeResourceName)+'" author="DRIP X SHOP" version="1.0.0" type="script" />\n  '+inferred+'\n</meta>';
+      zip.file('meta.xml',metaText);meta=zip.file('meta.xml');entries=Object.values(zip.files).filter(entry=>!entry.dir);
+    }
+    if(metaText.length>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
     if(/<!DOCTYPE|<!ENTITY/i.test(metaText))throw new Error('meta.xml contiene declaraciones XML externas no permitidas.');
-    const parsed=new DOMParser().parseFromString(metaText,'application/xml');
-    if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA.');
-    const infoNode=parsed.querySelector('info'),infoText=Array.from(infoNode?.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=entries.map(entry=>entry.name).join(' ');
+    let parsed=new DOMParser().parseFromString(metaText,'application/xml');
+    if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA. Revisa sus etiquetas y vuelve a comprimirlo.');
+    let infoNode=parsed.querySelector('info');
+    if(!infoNode){
+      metaText=metaText.replace(/<\/meta\s*>/i,'  <info name="'+safeResourceName+'" author="DRIP X SHOP" version="1.0.0" type="script" />\n</meta>');
+      parsed=new DOMParser().parseFromString(metaText,'application/xml');infoNode=parsed.querySelector('info');
+    }
+    if(!infoNode)throw new Error('No se pudo preparar el bloque <info> de meta.xml.');
+    const setInfo=(name,value)=>{if(!String(infoNode.getAttribute(name)||'').trim())infoNode.setAttribute(name,value);};
+    setInfo('name',safeResourceName);setInfo('author','DRIP X SHOP');setInfo('version','1.0.0');setInfo('type','script');
+    metaText=new XMLSerializer().serializeToString(parsed);zip.file('meta.xml',metaText);
+    const infoText=Array.from(infoNode.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=entries.map(entry=>entry.name).join(' ');
     const hasFiveMManifest=entries.some(entry=>/^(fxmanifest|__resource)\.lua$/i.test(entry.name.split('/').pop()||''));
-    if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA con meta.xml y scripts compatibles.');
-    if(!infoNode)throw new Error('meta.xml no contiene el bloque <info>.');
+    if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA:SA.');
     const infoName=String(infoNode.getAttribute('name')||'').trim(),infoAuthor=String(infoNode.getAttribute('author')||'').trim(),infoVersion=String(infoNode.getAttribute('version')||'').trim(),infoType=String(infoNode.getAttribute('type')||'').trim().toLowerCase();
-    if(!infoName||!infoAuthor||!infoVersion||infoName.length>120||infoAuthor.length>120||infoVersion.length>40||infoType!=='script')throw new Error('La información de meta.xml está incompleta: se requiere info con name, author, version y type="script".');
+    if(!infoName||!infoAuthor||!infoVersion||infoName.length>120||infoAuthor.length>120||infoVersion.length>40||infoType!=='script')throw new Error('No se pudo completar la información mínima de meta.xml.');
     const normalizeScriptPath=value=>{
       let path=String(value||'').split(String.fromCharCode(92)).join('/');
       path=path.replace(/^(?:\.\/)+/,'');
@@ -142,8 +158,15 @@
       if(scripts.some(script=>script.src.toLowerCase()===src.toLowerCase()))throw new Error('meta.xml declara el mismo script más de una vez: '+src);
       scripts.push({src,originalSrc,type});
     }
-    if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
-    if(!scripts.some(script=>script.type==='server'))throw new Error('El resource debe declarar al menos un script Lua de servidor.');
+    if(!scripts.length){
+      const candidates=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&(/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
+      for(const entry of candidates){
+        const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];
+        const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.lua$/i.test(base)?'client':'server');
+        const node=parsed.createElement('script');node.setAttribute('src',path);node.setAttribute('type',type);parsed.documentElement.appendChild(node);scripts.push({src:path,originalSrc:path,type});
+      }
+      if(candidates.length){metaText=new XMLSerializer().serializeToString(parsed);zip.file('meta.xml',metaText);}
+    }
     const available=new Set(entries.map(entry=>entry.name));
     const missing=scripts.filter(script=>!available.has(script.src));
     if(missing.length)throw new Error('meta.xml referencia archivos que no existen en el ZIP: '+missing.slice(0,8).map(item=>item.src).join(', '));
@@ -176,9 +199,8 @@
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
       const type=scriptMap.get(entry.name);
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client'||type==='shared');
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
     });
-    if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
@@ -234,8 +256,8 @@
     if(!guard)throw new Error('No existe el guardián de licencia exclusivo del servidor.');
     const source=await guard.async('string');
     if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('El guardián server no tiene una marca de licencia válida.');
-    const compiledShared=(build.shared||[]).every(entry=>build.zip.file(entry.name.replace(/\.lua$/i,'.luac')));
-    if(!compiledShared)throw new Error('Todos los scripts shared originales deben compilarse a bytecode MTA.');
+    const retainedShared=(build.shared||[]).every(entry=>!!build.zip.file(entry.name)&&(/\.lua$/i.test(entry.name)||/\.luac$/i.test(entry.name)));
+    if(!retainedShared)throw new Error('No se conservaron todos los archivos shared declarados en meta.xml.');
     if(!build.productId)throw new Error('Falta el ID del producto.');
     build.licenseInjected=true;
     return {server_license_template:true,shared_bridge:true,compiled_shared_count:(build.shared||[]).length,product_id:build.productId};
