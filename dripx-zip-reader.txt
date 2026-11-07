@@ -101,8 +101,12 @@
     for(const item of normalizedRecords){
       const data=await item.entry.async('uint8array');
       if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
-      const expectedCrc=Number(item.entry._data?.crc32);
-      if(!Number.isFinite(expectedCrc)||expectedCrc<0||expectedCrc>0xffffffff||dripxZipCRC32(data)!==(expectedCrc>>>0))throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
+      const expectedCrcRaw=Number(item.entry._data?.crc32);
+      // JSZip reads 32-bit values with signed bitwise operations. A valid CRC32
+      // with bit 31 set (for example 0x9b2bcb9b) is therefore exposed as negative.
+      const validStoredCrc=Number.isFinite(expectedCrcRaw)&&Number.isInteger(expectedCrcRaw)&&expectedCrcRaw>=-0x80000000&&expectedCrcRaw<=0xffffffff;
+      const expectedCrc=expectedCrcRaw>>>0;
+      if(!validStoredCrc||dripxZipCRC32(data)!==expectedCrc)throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,

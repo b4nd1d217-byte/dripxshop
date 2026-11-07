@@ -107,6 +107,7 @@ const uploadChecks = [
   [downloadFunction.includes('resource_shared_source_contains_private_marker') && downloadFunction.includes('resource_shared_license_bridge_missing'), 'buyer download retains shared Lua and validates the bridge'],
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
   [zipReader.includes('dripxZipCRC32(data)') && zipReader.includes('LIMITS.expanded'), 'ZIP CRC and expansion limits'],
+  [zipReader.includes('const expectedCrcRaw=Number(item.entry._data?.crc32)') && zipReader.includes('expectedCrcRaw>=-0x80000000') && zipReader.includes('expectedCrcRaw>>>0') && ((0x9b2bcb9b|0)<0) && (((0x9b2bcb9b|0)>>>0)===0x9b2bcb9b), 'signed JSZip CRC values are normalized to unsigned before validation'],
   [zipReader.includes('const hasFiveMManifest=') && zipReader.includes('hadOriginalMeta') && zipReader.includes('hasMtaApi') && !zipReader.includes('fivem|fxserver/i.test(infoText)'), 'ZIP platform detection uses MTA manifest/API evidence instead of names and labels'],
   [zipReader.includes("type==='shared'") && zipReader.includes('infoType!==\'script\''), 'MTA metadata and license shared-script integrity'],
   [zipReader.includes('estructura o API exclusiva de FiveM') && zipReader.includes('fiveMApiCount>=2'), 'FiveM rejection requires an explicit manifest or multiple FiveM native API calls'],
