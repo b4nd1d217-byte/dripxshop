@@ -145,6 +145,7 @@ export async function patchApp(source) {
     if(working.file('dripx_shared_license.lua'))throw new Error('El resource ya contiene el nombre reservado dripx_shared_license.lua.');
     const sharedNames=(b.shared||[]).map(x=>x.name),sharedPayloads=[];
     for(const name of sharedNames){
+      if(!name.toLowerCase().endsWith('.lua'))throw new Error('El shared '+name+' ya está compilado o no es Lua. Sube su fuente .lua para que DRIPX pueda protegerla y compilarla después de integrar el guardián.');
       const file=working.file(name);if(!file)throw new Error('Falta el script shared: '+name);
       const source=await file.async('string');
       if(source.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD')||source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared '+name+' ya contiene marcas DRIPX o una clave antigua.');
