@@ -245,6 +245,85 @@ export async function patchApp(source) {
     const status=document.querySelector('#zip-status');if(status)status.textContent='Protección real integrada · '+serverNames.length+' scripts server · '+clientNames.length+' client · clave reservada al servidor.';
     return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,serverLicenseTemplate:guardName};
   }
+  async function compileZip(){
+    const b=state.zipBuild;
+    if(!b?.protected)throw new Error('Primero protege el resource.');
+    if(b.compiled)throw new Error('Este ZIP ya está compilado.');
+    const selected=[...new Set((b.compileTargets||[]).map(x=>x.name))];
+    if(!selected.length)throw new Error('No hay scripts client/server declarados que deban compilarse.');
+    const getToken=async(forceRefresh=false)=>{
+      const current=await db.auth.getSession();
+      if(current.error)throw current.error;
+      const session=current.data?.session;
+      const exp=Number(session?.expires_at||0)*1000;
+      if(!forceRefresh&&session?.access_token&&(!exp||exp>Date.now()+90000))return session.access_token;
+      const refreshed=await db.auth.refreshSession();
+      if(refreshed.error||!refreshed.data?.session?.access_token)throw new Error('La sesión administrativa expiró. Inicia sesión de nuevo; el ZIP protegido permanece guardado.');
+      return refreshed.data.session.access_token;
+    };
+    let token=await getToken(false);
+    const working=b.zip;
+    let meta=await working.file(b.metaName).async('string');
+    const completed=new Set(b.compiledFiles||[]);
+    const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    for(let i=0;i<selected.length;i++){
+      const name=selected[i];
+      if(completed.has(name))continue;
+      const sourceFile=working.file(name);
+      if(!sourceFile)throw new Error('No se encuentra el script pendiente de compilación: '+name);
+      const source=await sourceFile.async('string');
+      if(!source.trim())throw new Error('El script está vacío y no puede compilarse: '+name);
+      if(source.charCodeAt(0)===0x1b)throw new Error('El archivo ya parece estar compilado: '+name);
+      const status=document.querySelector('#zip-status');
+      if(status)status.textContent='Compilando '+(completed.size+1)+'/'+selected.length+' · '+name;
+      let response,result;
+      for(let attempt=0;attempt<2;attempt++){
+        if(attempt===1){token=await getToken(true);await delay(350);}
+        response=await fetch(String(C.supabaseUrl).replace(/\/+$/,'')+'/functions/v1/dripx-lua-compiler',{
+          method:'POST',
+          headers:{apikey:C.supabaseKey||C.publishableKey,authorization:'Bearer '+token,'content-type':'application/json'},
+          body:JSON.stringify({filename:name,source}),
+          signal:AbortSignal.timeout(90000)
+        });
+        result=await response.json().catch(()=>({error:'Respuesta no válida del compilador.'}));
+        if(response.status===401&&attempt===0)continue;
+        break;
+      }
+      if(!response?.ok||!result?.compiled_base64){
+        const reason=String(result?.detail||result?.error||('HTTP '+(response?.status||'desconocido')));
+        console.error('[DRIPX][COMPILER]',{file:name,status:response?.status,error:reason,sourceBytes:new TextEncoder().encode(source).length});
+        throw new Error('No se pudo compilar '+name+' ('+(response?.status||'sin respuesta')+'): '+reason+'. El avance anterior se conservó; puedes reintentar.');
+      }
+      let bytes;
+      try{bytes=Uint8Array.from(atob(result.compiled_base64),c=>c.charCodeAt(0));}
+      catch{throw new Error('El compilador devolvió datos dañados para '+name+'.');}
+      if(bytes.length<4||bytes[0]!==0x1c||bytes[1]!==0x4d||bytes[2]!==0x76||bytes[3]!==0x62)throw new Error('La salida no es bytecode MTA válido: '+name);
+      const output=name.slice(0,-4)+'.luac';
+      const original=b.scriptSrcByFile?.get(name);
+      if(!original)throw new Error('No existe una referencia meta.xml para el script '+name+'.');
+      const at=meta.indexOf(original);
+      if(at<0)throw new Error('meta.xml ya no contiene la referencia original de '+name+'.');
+      const compiledPath=original.slice(0,-4)+'.luac';
+      const nextMeta=meta.slice(0,at)+compiledPath+meta.slice(at+original.length);
+      if(working.file(output))throw new Error('Ya existe el destino compilado '+output+'. No se sobrescribió ningún archivo.');
+      working.file(output,bytes);
+      working.remove(name);
+      meta=nextMeta;
+      working.file(b.metaName,meta);
+      completed.add(name);
+      b.zip=working;
+      b.metaText=meta;
+      b.compiledFiles=[...completed];
+      if(status)status.textContent='Compilado '+completed.size+'/'+selected.length+' · '+name;
+    }
+    if(completed.size!==selected.length)throw new Error('La compilación quedó incompleta. Se conservó el avance realizado.');
+    if(new DOMParser().parseFromString(meta,'application/xml').querySelector('parsererror'))throw new Error('meta.xml inválido tras compilar.');
+    b.zip=working;b.metaText=meta;b.compiledFiles=[...completed];b.compiled=true;
+    const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
+    if(protect)protect.disabled=true;if(compile)compile.disabled=true;if(download)download.disabled=false;
+    const st=document.querySelector('#zip-status');if(st)st.textContent='Compilación MTA completada · '+completed.size+' scripts verificados.';
+    return {compiledCount:completed.size};
+  }
   async function downloadProtectedZip(){
     const b=state.zipBuild;if(!b?.protected||!b.compiled||!b.licenseInjected)throw new Error('Completa protección y compilación.');
     const blob=await b.zip.generateAsync({type:'blob',mimeType:'application/zip',compression:'DEFLATE',compressionOptions:{level:6}});
