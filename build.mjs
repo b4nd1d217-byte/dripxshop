@@ -76,7 +76,7 @@ const uploadChecks = [
   [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private guard and public shared bridge'],
   [appText.includes("const aclRights=['function.fetchRemote','function.stopResource']") && appText.includes('aclrequest'), 'generated MTA resource requests only the required license ACL rights'],
   [appText.includes('if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent') && !appText.includes('DRIPX_CLIENT_LICENSE_EVENT_REGISTERED'), 'shared and client scripts register the license event idempotently'],
-  [!appText.includes('function makeLicenseGuard()') && !appText.includes('DRIPX-PASTE-YOUR-ACCOUNT-KEY-HERE'), 'obsolete insecure license bootstrap removed from generated app'],
+  [appText.includes("const guardName='dripx_server_license.lua'") && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'active product pipeline creates a server-only license template for buyer-time compilation'],
   [downloadFunction.includes('compileMtaLicenseGuard') && downloadFunction.includes('license_guard_compilation_failed') && downloadFunction.includes('zip.remove(guardPath)'), 'buyer download compiles personalized server guard and rewrites meta.xml'],
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [uploadUi.includes('Number(file?.size)>50_000_000') && zipReader.includes('compressed:50*1000*1000') && uploadValidator.includes('source.length > 50_000_000') && downloadFunction.includes('sourceZip.byteLength > 50_000_000'), 'Supabase Free ZIP size cap aligned across browser, server validation and downloads'],
