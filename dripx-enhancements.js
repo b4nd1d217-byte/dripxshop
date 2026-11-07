@@ -337,6 +337,7 @@
         body:JSON.stringify({event:'resource_protected',details:{
           filename:protectedFile.name,source_filename:file.name,file_count:result.files.length,
           server_lua_count:result.server.length,client_lua_count:result.client.length,
+          shared_lua_count:result.files.filter(item=>item.kind==='shared_lua').length,
           source_bytes:file.size,protected_bytes:protectedFile.size
         }}),
         signal:AbortSignal.timeout(15000)
