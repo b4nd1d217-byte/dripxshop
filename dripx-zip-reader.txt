@@ -11,10 +11,10 @@
       host.append(node);
       return node;
     };
-    const LIMITS={meta:2*1024*1024,compressed:100*1024*1024,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
+    const LIMITS={meta:2*1024*1024,compressed:50*1000*1000,files:3000,entries:6000,entry:100*1024*1024,expanded:200*1024*1024};
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<=0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
-    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP comprimido supera 100 MB. Optimiza el resource o divídelo en módulos; el límite protege la memoria de procesamiento.');
+    if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP comprimido supera el límite actual de 50 MB de Supabase Free. Optimiza el resource o divídelo en módulos; el límite protege la memoria de procesamiento.');
     if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
     const archive=await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
     const allEntries=Object.values(archive.files||{});

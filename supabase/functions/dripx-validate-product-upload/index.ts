@@ -171,7 +171,7 @@ async function validateProduct(req: Request) {
   });
   if (!stored.ok) return json(502, { error: "stored_zip_unavailable" });
   const source = new Uint8Array(await stored.arrayBuffer());
-  if (!source.length || source.length > 100 * 1024 * 1024) return json(413, { error: "zip_size_invalid" });
+  if (!source.length || source.length > 50_000_000) return json(413, { error: "zip_size_invalid" });
   const streamInfo = await verifyExpandedZip(source);
   let zip: JSZip;
   try { zip = await JSZip.loadAsync(source, { checkCRC32: true }); }

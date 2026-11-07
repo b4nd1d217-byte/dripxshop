@@ -190,8 +190,16 @@
   // OAuth code-exchange promise so the PKCE verifier is consumed only once.
   let callbackExchange = null;
   let callbackCode = null;
+  let sharedSupabaseClient = null;
+  let sharedSupabaseUrl = '';
+  let sharedSupabaseKey = '';
   if (typeof originalCreate !== 'function') return;
   window.supabase.createClient = (url, key, options = {}) => {
+    const normalizedUrl=String(url||'').replace(/\/$/,'');
+    const normalizedKey=String(key||'');
+    if(sharedSupabaseClient&&sharedSupabaseUrl===normalizedUrl&&sharedSupabaseKey===normalizedKey){
+      return sharedSupabaseClient;
+    }
     const client = originalCreate.call(window.supabase, url, key, {
       ...options,
       auth: {
@@ -250,6 +258,10 @@
         throw error;
       }
     };
+    sharedSupabaseClient=client;
+    sharedSupabaseUrl=normalizedUrl;
+    sharedSupabaseKey=normalizedKey;
+    window.DRIPX_SUPABASE_CLIENT=client;
     return client;
   };
 })();
