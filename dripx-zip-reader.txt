@@ -140,8 +140,6 @@
       scripts.push({src,originalSrc,type});
     }
     if(!scripts.length)throw new Error('meta.xml no declara scripts Lua.');
-    const sharedLua=scripts.filter(script=>script.type==='shared'&&/\.lua$/i.test(script.src));
-    if(sharedLua.length!==1)throw new Error('El resource debe declarar exactamente un único script shared Lua para insertar la licencia DRIPX.');
     if(!scripts.some(script=>script.type==='server'))throw new Error('El resource debe declarar al menos un script Lua de servidor.');
     const available=new Set(entries.map(entry=>entry.name));
     const missing=scripts.filter(script=>!available.has(script.src));
