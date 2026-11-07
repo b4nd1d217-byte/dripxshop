@@ -74,6 +74,7 @@
     const rootMetas=metaCandidates.filter(item=>item.path.toLowerCase()==='meta.xml');
     if(metaCandidates.length>1)throw new Error('El ZIP contiene más de un meta.xml. Debe conservarse un único manifiesto MTA para evitar referencias ambiguas.');
     const metaRecord=rootMetas[0]||metaCandidates[0]||null;
+    const hadOriginalMeta=!!metaRecord;
     if(metaRecord&&metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
     let rootPrefix='';
     if(metaRecord){const slash=metaRecord.path.lastIndexOf('/');rootPrefix=slash>=0?metaRecord.path.slice(0,slash+1):'';}
@@ -138,9 +139,24 @@
     const setInfo=(name,value)=>{if(!String(infoNode.getAttribute(name)||'').trim())infoNode.setAttribute(name,value);};
     setInfo('name',safeResourceName);setInfo('author','DRIP X SHOP');setInfo('version','1.0.0');setInfo('type','script');
     metaText=new XMLSerializer().serializeToString(parsed);zip.file('meta.xml',metaText);
-    const infoText=Array.from(infoNode.attributes||[]).map(attr=>String(attr.value||'')).join(' '),archiveNames=entries.map(entry=>entry.name).join(' ');
     const hasFiveMManifest=entries.some(entry=>/^(fxmanifest|__resource)\.lua$/i.test(entry.name.split('/').pop()||''));
-    if(hasFiveMManifest||(/fivem|fxserver/i.test(infoText)&&/fivem|fxserver/i.test(archiveNames)))throw new Error('Este ZIP parece ser un resource FiveM, no MTA:SA. DRIP X SHOP solo importa resources MTA:SA.');
+    const luaSources=entries.filter(entry=>/\.lua$/i.test(entry.name));
+    let mtaApiCount=0,fiveMApiCount=0;
+    for(const entry of luaSources){
+      const source=await entry.async('string');
+      mtaApiCount+=(source.match(/\b(?:addEventHandler|addEvent|triggerServerEvent|triggerClientEvent|createMarker|createVehicle|createObject|dxDrawText|dxDrawImage|guiGetScreenSize|getElementsByType|setElementData|getElementData|fetchRemote|dbConnect|addCommandHandler|bindKey)\s*\(|\b(?:resourceRoot|localPlayer)\b/g)||[]).length;
+      fiveMApiCount+=(source.match(/\b(?:RegisterNetEvent|RegisterCommand|CreateThread|TriggerServerEvent|TriggerClientEvent|PlayerPedId|GetPlayerPed|GetEntityCoords|GetResourceState|SetNuiFocus|RegisterNUICallback)\s*\(/g)||[]).length;
+    }
+    const mtaScriptNodes=Array.from(parsed.querySelectorAll('script'));
+    const hasMtaMeta=hadOriginalMeta&&mtaScriptNodes.length>0&&mtaScriptNodes.every(node=>['server','client','shared'].includes(String(node.getAttribute('type')||'server').trim().toLowerCase()));
+    const hasMtaApi=mtaApiCount>0;
+    const hasFiveMApi=fiveMApiCount>=2&&!hasMtaApi;
+    // Names, comments and branding such as "FiveM Ready" or "fivem_markers.lua" are not platform evidence.
+    // An actual MTA meta.xml or MTA native API calls take precedence over FiveM-style labels.
+    if((hasFiveMManifest&&!hasMtaMeta&&!hasMtaApi)||(!hasMtaMeta&&!hasMtaApi&&hasFiveMApi)){
+      throw new Error('El ZIP parece utilizar una estructura o API exclusiva de FiveM. Se requiere un resource MTA:SA con meta.xml y scripts compatibles.');
+    }
+    const runtimeEvidence=hasMtaMeta?'meta.xml de MTA:SA':(hasMtaApi?'funciones nativas de MTA:SA':'estructura de resource MTA:SA preparada por DRIP X SHOP');
     const infoName=String(infoNode.getAttribute('name')||'').trim(),infoAuthor=String(infoNode.getAttribute('author')||'').trim(),infoVersion=String(infoNode.getAttribute('version')||'').trim(),infoType=String(infoNode.getAttribute('type')||'').trim().toLowerCase();
     if(!infoName||!infoAuthor||!infoVersion||infoName.length>120||infoAuthor.length>120||infoVersion.length>40||infoType!=='script')throw new Error('No se pudo completar la información mínima de meta.xml.');
     const normalizeScriptPath=value=>{
@@ -212,7 +228,7 @@
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
       compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
-      compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded
+      compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded,runtimeTarget:'MTA:SA',runtimeEvidence,mtaApiCount,fiveMApiCount
     };
     const configCount=files.filter(item=>item.kind==='config'||item.kind==='shared_lua').length;
     const shaderCount=files.filter(item=>item.kind==='shader').length;
@@ -234,7 +250,7 @@
     const downloadButton=ensureZipUiNode('zip-download','button');
     const statusNode=ensureZipUiNode('zip-status','p');
     for(const button of [protectButton,compileButton,downloadButton])button.type='button';
-    analysisNode.innerHTML='<b>ZIP analizado</b> · '+files.length+' archivos · '+scriptCount+' Lua · '+server.length+' server · '+client.length+' client · '+shaderCount+' shaders · '+configCount+' config/shared · '+bytes(normalizedExpanded);
+    analysisNode.innerHTML='<b>ZIP analizado · MTA:SA</b> · '+files.length+' archivos · '+scriptCount+' Lua · '+server.length+' server · '+client.length+' client · '+shaderCount+' shaders · '+configCount+' config/shared · '+bytes(normalizedExpanded);
     fileListNode.innerHTML='<div class="dx-zip-list-head"><strong>Archivos detectados</strong><span>'+files.length+'</span></div>'+rows;
     protectButton.disabled=false;
     protectButton.textContent='Proteger';
@@ -243,7 +259,7 @@
     downloadButton.disabled=true;
     downloadButton.textContent='Preparar ZIP';
     statusNode.textContent='ZIP analizado.';
-    const result={file,zip,entries,files,expanded:normalizedExpanded,metaPath:'meta.xml',rootPrefix,server:serverEntries,client:clientEntries,luaCount:lua.length};
+    const result={file,zip,entries,files,expanded:normalizedExpanded,metaPath:'meta.xml',rootPrefix,server:serverEntries,client:clientEntries,luaCount:lua.length,runtimeTarget:'MTA:SA',runtimeEvidence,mtaApiCount,fiveMApiCount};
     window.DRIPX_ZIP_SCAN_RESULT=result;
     window.DRIPX_ZIP_ROOT_PREFIX=rootPrefix;
     return result;
