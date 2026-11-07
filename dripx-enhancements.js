@@ -259,6 +259,34 @@
       check();
     });
   }
+  function ensureLiveProductZipPreview(inputHint,runId){
+    const form=document.getElementById('product-form')||inputHint?.closest?.('#product-form');
+    const input=form?.querySelector('input[name="file"]')||(inputHint?.isConnected?inputHint:null);
+    if(!form||!input||!input.isConnected)return null;
+    const activeRun=String(input.dataset.dripxZipRun||'');
+    if(activeRun&&runId&&activeRun!==runId)return null;
+    if(runId)input.dataset.dripxZipRun=runId;
+    let node=form.querySelector('#product-zip-preview');
+    if(!node){
+      node=document.createElement('div');
+      node.id='product-zip-preview';
+      node.className='dx-product-zip-preview';
+      const anchor=input.closest('label')||input.parentElement||input;
+      anchor.insertAdjacentElement('afterend',node);
+    }
+    if(!node.isConnected||!form.contains(node))return null;
+    let status=form.querySelector('#product-zip-upload-state');
+    if(!status){
+      status=document.createElement('div');
+      status.id='product-zip-upload-state';
+      status.className='dx-upload-state';
+      status.setAttribute('role','status');
+      status.setAttribute('aria-live','polite');
+      node.insertAdjacentElement('afterend',status);
+    }
+    return {form,input,node,status};
+  }
+
   function mountProductZipPipeline(node,input,file){
     return (async()=>{
       const runId=String(input?.dataset?.dripxZipRun||'');
