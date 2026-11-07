@@ -152,7 +152,7 @@ export async function patchApp(source) {
       sharedPayloads.push({name,source:wrapped});
     }
     const serverNames=b.server.map(x=>x.name),clientNames=b.client.map(x=>x.name);
-    const serverPayloads=[],clientPayloads=[],sharedPayloads=[];
+    const serverPayloads=[],clientPayloads=[];
     for(let i=0;i<serverNames.length;i++){
       const name=serverNames[i],file=working.file(name);
       if(!file)throw new Error('Falta el script de servidor: '+name);
