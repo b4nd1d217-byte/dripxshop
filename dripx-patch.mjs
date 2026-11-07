@@ -370,6 +370,7 @@ export async function patchApp(source) {
   modernPipeline=modernPipeline.replace(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g,'DRIPX_LICENSE_EVENT_REGISTERED');
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
+  replaceValidatorFragment("const {data,error}=await db.storage.from('product-files').createSignedUrl(path,120);if(error)throw error;","if(String(path).toLowerCase().endsWith('.zip'))throw new Error('Descargas ZIP deben pasar por dripx-license/download para personalizar la licencia.');const {data,error}=await db.storage.from('product-files').createSignedUrl(path,120);if(error)throw error;","legacy ZIP download fails closed");
   const staleGuardStart=app.indexOf("function makeLicenseGuard(){");
   if(staleGuardStart>=0){
     const staleLineStart=app.lastIndexOf("\n",staleGuardStart);
