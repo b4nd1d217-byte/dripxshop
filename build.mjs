@@ -71,6 +71,7 @@ const privacyMigration = await readFile('supabase/migrations/20261106210000_drip
 const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
+  [uploadUi.includes('Number(file?.size)>50_000_000') && zipReader.includes('compressed:50*1000*1000') && uploadValidator.includes('source.length > 50_000_000') && downloadFunction.includes('sourceZip.byteLength > 50_000_000'), 'Supabase Free ZIP size cap aligned across browser, server validation and downloads'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
   [appText.includes('async function resumeZip()'), 'ZIP resume action'],
   [appText.includes('b.finalBlobSize=blob.size'), 'final archive identity check'],
