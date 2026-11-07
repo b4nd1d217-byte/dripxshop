@@ -316,7 +316,7 @@ export async function patchApp(source) {
         let response,result;
         for(let attempt=0;attempt<2;attempt++){
           if(attempt===1){token=await getToken(true);await delay(350);}
-          response=await fetch(String(C.supabaseUrl).replace(/\\/+$/,'')+'/functions/v1/dripx-lua-compiler',{
+          response=await fetch(String(C.supabaseUrl).replace(/\/+$/,'')+'/functions/v1/dripx-lua-compiler',{
             method:'POST',
             headers:{apikey:C.supabaseKey||C.publishableKey,authorization:'Bearer '+token,'content-type':'application/json'},
             body:JSON.stringify({filename:name,source:sourceText}),
