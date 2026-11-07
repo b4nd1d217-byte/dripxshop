@@ -182,6 +182,7 @@
         if(!window.tus?.Upload)throw new Error('No se pudo cargar el módulo de subida reanudable. Recarga la página.');
         if(!projectRef)throw new Error('Configuración de Supabase inválida.');
         if(!client)throw new Error('No se pudo iniciar el cliente de Supabase.');
+        if(bucket==='product-files'&&Number(file?.size)>50_000_000)throw new Error('Tu proyecto usa Supabase Free: cada ZIP puede pesar como máximo 50 MB. Para subir 100 MB o más se necesita Supabase Pro y ajustar el límite del bucket.');
         const current=await client.auth.getSession();if(current.error)throw current.error;
         let session=current.data?.session||null;
         const expires=Number(session?.expires_at||0)*1000;
