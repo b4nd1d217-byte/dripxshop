@@ -70,6 +70,11 @@ const profileMigration = await readFile('supabase/migrations/20261106203640_secu
 const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
 const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
 const uploadChecks = [
+  [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'dedicated server-only license guard is generated'],
+  [appText.includes('__DRIPX_PROCESSED_PRODUCT_FILE=file') && appText.includes('new File([blob],name,{type:\'application/zip\''), 'direct processed ZIP File handoff without URL capture'],
+  [uploadUi.includes('download.click()') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()'), 'product UI no longer intercepts URL.createObjectURL for ZIP capture'],
+  [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private guard and public shared bridge'],
+  [downloadFunction.includes('compileMtaLicenseGuard') && downloadFunction.includes('license_guard_compilation_failed') && downloadFunction.includes('zip.remove(guardPath)'), 'buyer download compiles personalized server guard and rewrites meta.xml'],
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [uploadUi.includes('Number(file?.size)>50_000_000') && zipReader.includes('compressed:50*1000*1000') && uploadValidator.includes('source.length > 50_000_000') && downloadFunction.includes('sourceZip.byteLength > 50_000_000'), 'Supabase Free ZIP size cap aligned across browser, server validation and downloads'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
