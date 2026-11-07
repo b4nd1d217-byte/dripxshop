@@ -100,7 +100,7 @@
       const data=await item.entry.async('uint8array');
       if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
       const expectedCrc=Number(item.entry._data?.crc32);
-      if(!Number.isFinite(expectedCrc)||expectedCrc<0||expectedCrc>0xffffffff||dripxZipCRC32(data)!==(expectedCrc>>>0))throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
+      if(!Number.isInteger(expectedCrc)||expectedCrc < -0x80000000||expectedCrc>0xffffffff||dripxZipCRC32(data)!==(expectedCrc>>>0))throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,

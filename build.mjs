@@ -87,6 +87,7 @@ const uploadChecks = [
   [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
   [zipReader.includes('dripxZipCRC32(data)') && zipReader.includes('LIMITS.expanded'), 'ZIP CRC and expansion limits'],
+  [zipReader.includes('expectedCrc < -0x80000000') && zipReader.includes('expectedCrc>>>0'), 'ZIP CRC accepts signed 32-bit values while retaining unsigned range validation'],
   [zipReader.includes("archiveNames=entries.map(entry=>entry.name)") && !zipReader.includes("archiveNames=files.map("), 'ZIP platform detection without temporal-dead-zone access'],
   [zipReader.includes("exactamente un único script shared") && zipReader.includes('infoType!==\'script\''), 'MTA metadata and license shared-script integrity'],
   [zipReader.includes('resource FiveM'), 'FiveM archive rejection with explicit guidance'],
