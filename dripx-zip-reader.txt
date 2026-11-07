@@ -148,7 +148,7 @@
     if(missing.length)throw new Error('meta.xml referencia archivos que no existen en el ZIP: '+missing.slice(0,8).map(item=>item.src).join(', '));
     const scriptMap=new Map(scripts.map(script=>[script.src,script.type]));
     const scriptSrcByFile=new Map(scripts.map(script=>[script.src,script.originalSrc]));
-    const reservedNames=new Set(['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac','dripx_license_guard.lua','dripx_manifest.json','dripx_server_license.lua']);
+    const reservedNames=new Set(['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac','dripx_license_guard.lua','dripx_manifest.json','dripx_server_license.lua','dripx_shared_license.lua']);
     const reserved=entries.find(entry=>reservedNames.has(entry.name.split('/').pop().toLowerCase()));
     if(reserved)throw new Error('El ZIP contiene un archivo reservado por DRIPX: '+reserved.name+'. Renómbralo y vuelve a subirlo.');
     const configExtensions=new Set(['xml','json','ini','cfg','conf','yaml','yml','toml']);
@@ -175,7 +175,7 @@
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
       const type=scriptMap.get(entry.name);
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client'||type==='shared');
     });
     if(!lua.length||!compileTargets.length)throw new Error('El resource no contiene scripts Lua que puedan protegerse.');
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
@@ -225,15 +225,17 @@
   window.DRIPX_INJECT_LICENSE_GUARD = async function(){
     const build=state.zipBuild;
     if(!build?.zip||!build.protected||!build.compiled)throw new Error('El resource todavía no está protegido y compilado.');
-    const shared=build.shared?.[0];
-    if(!shared)throw new Error('El resource necesita un archivo Lua type="shared".');
-    const sharedSource=await build.zip.file(shared.name).async('string');
-    if(sharedSource.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!sharedSource.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared no contiene el puente público correcto o expone una clave.');
+    const bridge=build.zip.file('dripx_shared_license.lua');
+    if(!bridge)throw new Error('No existe el puente shared público de licencia.');
+    const bridgeSource=await bridge.async('string');
+    if(bridgeSource.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!bridgeSource.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El puente shared debe ser público y no contener secretos.');
     const guard=build.zip.file('dripx_server_license.lua');
     if(!guard)throw new Error('No existe el guardián de licencia exclusivo del servidor.');
     const source=await guard.async('string');
     if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('El guardián server no tiene una marca de licencia válida.');
+    const compiledShared=(build.shared||[]).every(entry=>build.zip.file(entry.name.replace(/\.lua$/i,'.luac')));
+    if(!compiledShared)throw new Error('Todos los scripts shared originales deben compilarse a bytecode MTA.');
     if(!build.productId)throw new Error('Falta el ID del producto.');
     build.licenseInjected=true;
-    return {server_license_template:true,shared_bridge:true,product_id:build.productId};
+    return {server_license_template:true,shared_bridge:true,compiled_shared_count:(build.shared||[]).length,product_id:build.productId};
   };
