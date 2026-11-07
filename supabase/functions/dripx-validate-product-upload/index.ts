@@ -232,6 +232,7 @@ async function validateProduct(req: Request) {
     file_count: archiveFiles.length,
     compiled_count: compiledCount,
     server_compiled_count: serverCompiledCount,
+    shared_compiled_count: sharedCompiledCount,
     expanded_bytes: streamInfo.expanded,
   });
 }
