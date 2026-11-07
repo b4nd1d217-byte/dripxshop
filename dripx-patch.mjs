@@ -114,22 +114,6 @@ export async function patchApp(source) {
   replaceValidatorFragment("if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('La clave debe aparecer una sola vez en el shared.');","if(source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||!source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared debe contener solo el puente público; la clave nunca puede quedar en shared.');","shared secret separation");
   replaceValidatorFragment("if((s.type==='server'||s.type==='client')&&s.src.toLowerCase().endsWith('.lua'))throw new Error('Lua sin compilar: '+s.src+' · Todos los scripts declarados server/client deben compilarse con MTA. Los archivos config solo se conservan sin compilar cuando no están declarados como ejecutables.');","if(s.type==='server'&&s.src.toLowerCase()==='dripx_server_license.lua'){licenseGuard++;const source=await zip.file(s.src).async('string');if(source.split('DRIPX_LICENSE_KEY_PLACEHOLDER').length!==2)throw new Error('El guardián server de licencia no es válido.');}else if((s.type==='server'||s.type==='client')&&s.src.toLowerCase().endsWith('.lua'))throw new Error('Lua sin compilar: '+s.src+' · Solo el guardián temporal de licencia puede permanecer como fuente hasta la descarga personalizada.');","allow dedicated server license source");
   replaceValidatorFragment("if(shared!==1)throw new Error('Se requiere exactamente un archivo shared para la licencia.');","if(shared!==1)throw new Error('Se requiere exactamente un archivo shared para el puente público de licencia.');if(licenseGuard!==1)throw new Error('Se requiere exactamente un guardián server DRIPX para personalizar la descarga.');","require one server guard");
-  const clientFlagCount=(app.match(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g)||[]).length;
-  if(clientFlagCount>0)app=app.replace(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g,'DRIPX_LICENSE_EVENT_REGISTERED');
-  const legacyGuardStart=app.indexOf("  function makeLicenseGuard(){");
-  const protectStart=app.indexOf("  async function protectZip(){",legacyGuardStart);
-  if(legacyGuardStart>=0&&protectStart>legacyGuardStart)app=app.slice(0,legacyGuardStart)+app.slice(protectStart);
-  const scriptTagMatch=/const\\s+scriptTag\\s*=/.exec(app);
-  const scriptTagPosition=scriptTagMatch?.index??-1;
-  if(scriptTagPosition<0)throw new Error('DRIPX patch failed: server license script tag insertion point');
-  const aclInjection=[
-    "    const aclRights=['function.fetchRemote','function.stopResource'];",
-    "    const aclClose=/<\\\\/aclrequest\\\\s*>/i.exec(meta);",
-    "    if(aclClose){const before=meta.slice(0,aclClose.index);const missing=aclRights.filter(right=>!before.includes('name=\\\"'+right+'\\\"'));if(missing.length)meta=before+missing.map(right=>'  <right name=\\\"'+right+'\\\" access=\\\"true\\\" />').join(nl)+nl+meta.slice(aclClose.index);}",
-    "    else{const metaClose=/<\\\\/meta\\\\s*>/i.exec(meta);if(!metaClose)throw new Error('meta.xml no tiene cierre para permisos ACL.');meta=meta.slice(0,metaClose.index)+'<aclrequest>'+nl+aclRights.map(right=>'  <right name=\\\"'+right+'\\\" access=\\\"true\\\" />').join(nl)+nl+'</aclrequest>'+nl+meta.slice(metaClose.index);}",
-  ].join('\\n');
-  app=app.slice(0,scriptTagPosition)+aclInjection+'\\n    '+app.slice(scriptTagPosition);
-
   const newAddStart = app.indexOf("  async function addProduct(form){");
   const checkoutStart = app.indexOf("\n\n  async function checkout(){", newAddStart);
   if (newAddStart < 0 || checkoutStart < 0) throw new Error('DRIPX patch failed: product save boundaries');
@@ -143,7 +127,7 @@ export async function patchApp(source) {
   const pipelineStart = app.indexOf("  async function protectZip(){");
   const pipelineEnd = app.indexOf("  async function renderAdmin(){", pipelineStart);
   if (pipelineStart < 0 || pipelineEnd < 0) throw new Error('DRIPX patch failed: legacy ZIP pipeline boundaries');
-  const modernPipeline = String.raw`  async function protectZip(){
+  let modernPipeline = String.raw`  async function protectZip(){
     const b=state.zipBuild;
     if(!b?.zip)throw new Error('Selecciona el ZIP original.');
     if(b.protected)throw new Error('Este ZIP ya fue protegido.');
@@ -247,6 +231,17 @@ export async function patchApp(source) {
     for(const item of serverPayloads)working.file(item.name,item.source);
     for(const item of clientPayloads)working.file(item.name,item.source);
     working.file(guardName,guardSource);
+    const aclRights=['function.fetchRemote','function.stopResource'];
+    const aclClose=/<\/aclrequest\s*>/i.exec(meta);
+    if(aclClose){
+      const before=meta.slice(0,aclClose.index);
+      const missing=aclRights.filter(right=>!meta.includes('name="'+right+'"')&&!meta.includes("name='"+right+"'"));
+      if(missing.length)meta=before+missing.map(right=>'  <right name="'+right+'" access="true" />').join(nl)+nl+meta.slice(aclClose.index);
+    }else{
+      const metaClose=/<\/meta\s*>/i.exec(meta);
+      if(!metaClose)throw new Error('meta.xml no tiene cierre para permisos ACL.');
+      meta=meta.slice(0,metaClose.index)+'<aclrequest>'+nl+aclRights.map(right=>'  <right name="'+right+'" access="true" />').join(nl)+nl+'</aclrequest>'+nl+meta.slice(metaClose.index);
+    }
     const scriptTag='<script src="'+guardName+'" type="server" />'+nl;
     const firstScript=/<script\b/i.exec(meta);
     if(!firstScript)throw new Error('meta.xml no contiene scripts donde insertar el guardián.');
@@ -369,6 +364,7 @@ export async function patchApp(source) {
   }
   window.DRIPX_PRODUCT_PROTECTION_ACTIONS={protect:protectZip,compile:compileZip,download:downloadProtectedZip,resume:resumeZip};
 `;
+  modernPipeline=modernPipeline.replace(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g,'DRIPX_LICENSE_EVENT_REGISTERED');
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
 
