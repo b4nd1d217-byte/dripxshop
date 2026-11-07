@@ -326,32 +326,6 @@
     })();
   }
 
-  function armCompiledZipCapture(input){
-    if(!input||input.dataset.dripxCaptureArmed==='true')return;
-    input.dataset.dripxCaptureArmed='true';
-    const native=URL.createObjectURL.bind(URL);
-    let captured=false;
-    URL.createObjectURL=function(object){
-      const url=native(object);
-      if(!captured&&object instanceof Blob&&object.size>0&&/zip/i.test(String(object.type||''))){
-        try{
-          const source=input.files?.[0],sourceName=source?.name||'resource.zip',name=(sourceName.toLowerCase().endsWith('.zip')?sourceName.slice(0,-4):sourceName)+'-DRIPX-protegido.zip';
-          const processed=new File([object],name,{type:'application/zip',lastModified:Date.now()});
-          window.__DRIPX_PROCESSED_PRODUCT_FILE=processed;
-          window.__DRIPX_PROCESSED_PRODUCT_ZIP={name,bytes:processed.size,productId:window.__DRIPX_PENDING_PRODUCT_ID||'',resourceName:window.__DRIPX_RESOURCE_NAME||'',at:Date.now()};
-          captured=true;
-          setProductZipStatus('ZIP protegido preparado en memoria. Se conserva el ZIP original seleccionado; al guardar se subirá el archivo protegido.','success');
-          URL.createObjectURL=native;
-        }catch(error){console.warn('[DRIPX] No se pudo preparar el ZIP protegido en memoria; se permitirá reintentar:',error);}
-      }
-      return url;
-    };
-    window.setTimeout(()=>{
-      if(URL.createObjectURL!==native)URL.createObjectURL=native;
-      delete input.dataset.dripxCaptureArmed;
-    },480000);
-  }
-
   async function sendProtectedProductLog(file,result,protectedFile){
     if(!client||!C.supabaseUrl||!(C.supabaseKey||C.publishableKey))return;
     try{
@@ -427,10 +401,9 @@
       if(input.dataset.dripxZipRun!==runId)return;
       if(typeof window.DRIPX_INJECT_LICENSE_GUARD!=='function')throw new Error('El módulo de licencia MTA no está integrado en el motor de protección. Recarga la página e inténtalo de nuevo.');
       await window.DRIPX_INJECT_LICENSE_GUARD();
-      setProductZipStatus('04/4 · Inyectando la licencia y el guardián compartido…','processing');
+      setProductZipStatus('04/4 · Verificando guardián server y puente shared sin secretos…','processing');
       node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
       node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
-      armCompiledZipCapture(input);
       download.click();
       await waitForZipState(()=>window.__DRIPX_PROCESSED_PRODUCT_FILE instanceof File&&!!window.__DRIPX_PROCESSED_PRODUCT_ZIP&&window.__DRIPX_PROCESSED_PRODUCT_FILE.name===window.__DRIPX_PROCESSED_PRODUCT_ZIP.name,'generación del ZIP protegido');
       if(input.dataset.dripxZipRun!==runId)return;
@@ -466,7 +439,6 @@
           const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
           if(typeof actions?.resume!=='function')throw new Error('El motor de reanudación no está disponible. Recarga la página; el ZIP original permanece seleccionado.');
           setProductZipStatus('Reanudando desde el último paso completado…','processing');
-          armCompiledZipCapture(input);
           await actions.resume();
           const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE;
           if(!(protectedFile instanceof File)||!window.__DRIPX_PROCESSED_PRODUCT_ZIP||protectedFile.name!==window.__DRIPX_PROCESSED_PRODUCT_ZIP.name)throw new Error('El ZIP final no pudo adjuntarse al formulario.');
