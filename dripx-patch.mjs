@@ -370,9 +370,15 @@ export async function patchApp(source) {
   modernPipeline=modernPipeline.replace(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g,'DRIPX_LICENSE_EVENT_REGISTERED');
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
-  const staleGuardStart=app.indexOf("  function makeLicenseGuard(){");
-  const newGuardPipelineStart=app.indexOf("  async function protectZip(){",staleGuardStart);
-  if(staleGuardStart>=0&&newGuardPipelineStart>staleGuardStart)app=app.slice(0,staleGuardStart)+app.slice(newGuardPipelineStart);
+  const staleGuardStart=app.indexOf("function makeLicenseGuard(){");
+  if(staleGuardStart>=0){
+    const staleLineStart=app.lastIndexOf("\\n",staleGuardStart);
+    const staleGuardEnd=app.indexOf("`;",staleGuardStart);
+    if(staleGuardEnd<0)throw new Error('DRIPX patch failed: obsolete license helper boundary');
+    const staleFunctionEnd=app.indexOf("}",staleGuardEnd+2);
+    if(staleFunctionEnd<0)throw new Error('DRIPX patch failed: obsolete license helper close');
+    app=app.slice(0,staleLineStart+1)+app.slice(staleFunctionEnd+1);
+  }
 
 
   const protectionRequired = [
