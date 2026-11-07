@@ -202,6 +202,7 @@ export async function patchApp(source) {
       '      if not DRIPX_VALIDATED then',
       '        DRIPX_VALIDATED = true',
       '        triggerEvent("dripx:license:ready",resourceRoot)',
+      '        triggerEvent("onResourceStart",resourceRoot,getThisResource())',
       '        dripxUnlockClients()',
       '        outputDebugString("[DRIPX] Licencia validada para "..getResourceName(getThisResource()),3)',
       '      end',
@@ -286,7 +287,7 @@ export async function patchApp(source) {
     "El ZIP no ha terminado el proceso automático de protección"
   ];
   const missingProtection = protectionRequired.filter(fragment => !app.includes(fragment));
-  if (app.includes('DRIPX_LICENSE_KEY_PLACEHOLDER') && app.includes('DRIPX_LICENSE_EVENT_NAME =')) throw new Error('DRIPX security regression: buyer license key marker must never be stored in shared code.');
+  if (app.includes("working.file(shared,sharedText+nl+'-- DRIP X SHOP license binding'+nl+'DRIPX_LICENSE_KEY =")) throw new Error('DRIPX security regression: buyer license key must never be injected into shared code.');
   if (missingProtection.length) {
     throw new Error('DRIPX protection upload pipeline is incomplete: ' + missingProtection.join(', '));
   }
