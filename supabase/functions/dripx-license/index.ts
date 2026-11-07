@@ -426,6 +426,7 @@ async function downloadOwnedProduct(req: Request) {
   const scriptRefs = new Set<string>();
   const sharedBridges: string[] = [];
   const serverLicenseTemplates: string[] = [];
+  const serverLicenseConfigs: string[] = [];
   let compiledCount = 0, serverCompiledCount = 0, sharedCompiledCount = 0;
   for (const tag of tags) {
     let src = xmlAttribute(tag, "src").trim();
@@ -450,7 +451,9 @@ async function downloadOwnedProduct(req: Request) {
       compiledCount++;
       sharedCompiledCount++;
     }
-    if (type === "server" && lower === "dripx_server_license.lua") {
+    if (type === "server" && lower === "dripx-cfg.lua") {
+      serverLicenseConfigs.push(src);
+    } else if (type === "server" && lower === "dripx_server_license.lua") {
       serverLicenseTemplates.push(src);
     } else if ((type === "server" || type === "client") && lower.endsWith(".lua")) {
       return json(409, { error: "resource_uncompiled_lua_present", path: src });
@@ -465,6 +468,14 @@ async function downloadOwnedProduct(req: Request) {
   if (sharedBridges.length !== 1) return json(409, { error: "resource_shared_license_bridge_missing" });
   if (serverLicenseTemplates.length !== 1) {
     return json(409, { error: "resource_server_license_template_missing" });
+  }
+  if (serverLicenseConfigs.length !== 1) {
+    return json(409, { error: "resource_server_license_config_missing" });
+  }
+  const configTagIndex = tags.findIndex(tag => xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === "dripx-cfg.lua");
+  const guardTagIndex = tags.findIndex(tag => xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === "dripx_server_license.lua");
+  if (configTagIndex < 0 || guardTagIndex < 0 || configTagIndex >= guardTagIndex) {
+    return json(409, { error: "resource_server_license_config_load_order_invalid" });
   }
   const sharedBridge = zip.file(sharedBridges[0]);
   if (!sharedBridge) return json(409, { error: "resource_shared_license_bridge_missing" });
@@ -483,11 +494,27 @@ async function downloadOwnedProduct(req: Request) {
   if (!guardEntry) return json(409, { error: "resource_server_license_template_missing" });
   const guardSource = await guardEntry.async("string");
   const placeholder = "DRIPX_LICENSE_KEY_PLACEHOLDER";
-  if (guardSource.split(placeholder).length !== 2
-      || !guardSource.includes('DRIPX_PRODUCT_ID = "' + productId + '"')) {
+  if (guardSource.includes(placeholder)
+      || !guardSource.includes("DRIPX_CFG_LICENSE_KEY")
+      || !guardSource.includes("DRIPX_CFG_PRODUCT_ID")) {
     return json(409, { error: "resource_server_license_template_invalid" });
   }
-  const personalizedSource = guardSource.replace(placeholder, licenseKey);
+  const configPath = serverLicenseConfigs[0];
+  const configEntry = zip.file(configPath);
+  if (!configEntry) return json(409, { error: "resource_server_license_config_missing" });
+  const configSource = await configEntry.async("string");
+  if (configSource.split(placeholder).length !== 2
+      || !configSource.includes('DRIPX_CFG_LICENSE_KEY = "' + placeholder + '"')
+      || !configSource.includes('DRIPX_CFG_PRODUCT_ID = "' + productId + '"')) {
+    return json(409, { error: "resource_server_license_config_invalid" });
+  }
+  const personalizedConfig = configSource.replace(placeholder, licenseKey);
+  if (personalizedConfig.split(licenseKey).length !== 2) {
+    return json(409, { error: "resource_server_license_config_personalization_invalid" });
+  }
+  // Personalize only this in-memory buyer ZIP. The stored product ZIP remains a key-free template.
+  zip.file(configPath, personalizedConfig);
+  const personalizedSource = guardSource;
   let compiledGuard: Uint8Array;
   try {
     compiledGuard = await compileMtaLicenseGuard(personalizedSource);

@@ -149,7 +149,7 @@
     if(missing.length)throw new Error('meta.xml referencia archivos que no existen en el ZIP: '+missing.slice(0,8).map(item=>item.src).join(', '));
     const scriptMap=new Map(scripts.map(script=>[script.src,script.type]));
     const scriptSrcByFile=new Map(scripts.map(script=>[script.src,script.originalSrc]));
-    const reservedNames=new Set(['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac','dripx_license_guard.lua','dripx_manifest.json','dripx_server_license.lua','dripx_server_license.luac','dripx_shared_license.lua','dripx_shared_license.luac']);
+    const reservedNames=new Set(['dripx_license.lua','dripx_guard_shared.lua','dripx_license.luac','dripx_license_guard.lua','dripx_manifest.json','dripx_server_license.lua','dripx_server_license.luac','dripx-cfg.lua','dripx_shared_license.lua','dripx_shared_license.luac']);
     const reserved=entries.find(entry=>reservedNames.has(entry.name.split('/').pop().toLowerCase()));
     if(reserved)throw new Error('El ZIP contiene un archivo reservado por DRIPX: '+reserved.name+'. Renómbralo y vuelve a subirlo.');
     const configExtensions=new Set(['xml','json','ini','cfg','conf','yaml','yml','toml']);

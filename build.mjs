@@ -70,10 +70,12 @@ const profileMigration = await readFile('supabase/migrations/20261106203640_secu
 const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
 const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
 const uploadChecks = [
-  [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'dedicated server-only license guard is generated'],
+  [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
+  [appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,bridgeScriptTag") && appText.includes("type=\\'server\\'"), 'private license config is loaded before the server license guard'],
   [appText.includes('__DRIPX_PROCESSED_PRODUCT_FILE=file') && appText.includes('new File([blob],name,{type:\'application/zip\''), 'direct processed ZIP File handoff without URL capture'],
   [uploadUi.includes('download.click()') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()'), 'product UI no longer intercepts URL.createObjectURL for ZIP capture'],
-  [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private guard and public shared bridge'],
+  [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('server_license_config_missing') && uploadValidator.includes('DRIPX_CFG_PRODUCT_ID') && uploadValidator.includes('DRIPX_LICENSE_EVENT_NAME'), 'server upload validator enforces private cfg, guard and public shared bridge'],
+  [downloadFunction.includes('const personalizedConfig = configSource.replace(placeholder, licenseKey)') && downloadFunction.includes('zip.file(configPath, personalizedConfig)') && downloadFunction.includes('resource_server_license_config_load_order_invalid'), 'buyer license key is injected only into DRIPX-CFG.LUA during authorized download'],
   [appText.includes("const aclRights=['function.fetchRemote','function.stopResource']") && appText.includes('aclrequest'), 'generated MTA resource requests only the required license ACL rights'],
   [appText.includes('if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent') && !appText.includes('DRIPX_CLIENT_LICENSE_EVENT_REGISTERED'), 'shared and client scripts register the license event idempotently'],
   [appText.includes("const guardName='dripx_server_license.lua'") && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'active product pipeline creates a server-only license template for buyer-time compilation'],
@@ -94,7 +96,7 @@ const uploadChecks = [
   [authBootstrap.includes('sharedSupabaseClient=client') && authBootstrap.includes('return sharedSupabaseClient;'), 'single authenticated Supabase client across app panels'],
   [zipReader.includes("return /\\.lua$/i.test(entry.name)&&(type==='server'||type==='client'||type==='shared');") && !zipReader.includes("record?.kind!=='config'"), 'compile every executable Lua declaration consistently'],
   [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
-  [zipReader.includes("type==='server'||type==='client'||type==='shared'") && zipReader.includes("'dripx_shared_license.lua'"), 'shared Lua scripts are compiled and the public bridge name is reserved'],
+  [zipReader.includes("type==='server'||type==='client'||type==='shared'") && zipReader.includes("'dripx_shared_license.lua'") && zipReader.includes("'dripx-cfg.lua'"), 'shared Lua scripts are compiled and both DRIPX reserved module names are protected'],
   [patchSource.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD') && patchSource.includes("working.file('dripx_shared_license.lua',sharedBridge)"), 'original shared code is gated and the separate public bridge is generated'],
   [patchSource.includes('const sharedScriptTags=originalScriptTags.filter') && patchSource.includes('const otherScriptTags=originalScriptTags.filter'), 'shared scripts are ordered before server/client startup'],
   [zipReader.includes("type==='shared'&&/\\.luac$/i.test(src)") && zipReader.includes('dripxZipMtaBytecode') && patchSource.includes('sharedFallbackFiles') && patchSource.includes('response?.status===422'), 'precompiled shared MTA bytecode is preserved and incompatible wrappers receive a compatibility compile'],
