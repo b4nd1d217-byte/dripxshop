@@ -159,7 +159,7 @@
       scripts.push({src,originalSrc,type});
     }
     if(!scripts.length){
-      const candidates=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&(/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
+      const candidates=entries.filter(entry=>/\.lua$/i.test(entry.name)||(/\.luac$/i.test(entry.name)&&(/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name))));
       for(const entry of candidates){
         const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];
         const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.lua$/i.test(base)?'client':'server');
