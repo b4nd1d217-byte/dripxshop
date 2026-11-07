@@ -255,10 +255,18 @@ export async function patchApp(source) {
       if(!metaClose)throw new Error('meta.xml no tiene cierre para permisos ACL.');
       meta=meta.slice(0,metaClose.index)+'<aclrequest>'+nl+aclRights.map(right=>'  <right name="'+right+'" access="true" />').join(nl)+nl+'</aclrequest>'+nl+meta.slice(metaClose.index);
     }
-    const scriptTag='<script src="'+guardName+'" type="server" />'+nl+'<script src="dripx_shared_license.lua" type="shared" />'+nl;
-    const firstScript=/<script\b/i.exec(meta);
-    if(!firstScript)throw new Error('meta.xml no contiene scripts donde insertar el guardián.');
-    meta=meta.slice(0,firstScript.index)+scriptTag+meta.slice(firstScript.index);
+    const guardScriptTag='<script src="'+guardName+'" type="server" />';
+    const bridgeScriptTag='<script src="dripx_shared_license.lua" type="shared" />';
+    const scriptTagCount=(meta.match(/<script\b/gi)||[]).length;
+    const originalScriptTags=[...meta.matchAll(/<script\b[^>]*\/>/gi)].map(match=>match[0]);
+    if(!scriptTagCount||originalScriptTags.length!==scriptTagCount)throw new Error('meta.xml contiene etiquetas script no compatibles o no válidas.');
+    const scriptType=tag=>(tag.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1]||'server').trim().toLowerCase();
+    const sharedScriptTags=originalScriptTags.filter(tag=>scriptType(tag)==='shared');
+    const otherScriptTags=originalScriptTags.filter(tag=>scriptType(tag)!=='shared');
+    const withoutScripts=meta.replace(/<script\b[^>]*\/>/gi,'');
+    const metaClose=/<\/meta\s*>/i.exec(withoutScripts);if(!metaClose)throw new Error('No se pudo finalizar meta.xml.');
+    const orderedScripts=[guardScriptTag,bridgeScriptTag,...sharedScriptTags,...otherScriptTags].join(nl)+nl;
+    meta=withoutScripts.slice(0,metaClose.index)+orderedScripts+withoutScripts.slice(metaClose.index);
     const close=/<\/meta\s*>/i.exec(meta);if(!close)throw new Error('No se pudo finalizar meta.xml.');
     meta=meta.slice(0,close.index)+'<!-- DRIPX_PRODUCT_ID: '+productId+' -->'+nl+meta.slice(close.index);
     working.file(b.metaName,meta);
