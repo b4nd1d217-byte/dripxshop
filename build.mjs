@@ -118,6 +118,8 @@ const uploadChecks = [
   [profileMigration.includes('grant update (leaderboard_public, updated_at)'), 'profile privilege allowlist migration'],
   [privacyMigration.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in'],
   [uploadUi.includes('Reanudar proceso'), 'visible retry control'],
+  [uploadUi.includes('function renderProductZipSelection(input,file)') && uploadUi.includes('data-dripx-start-protection') && uploadUi.includes('Iniciar protección automática') && uploadUi.includes('previewProductZip(file)'), 'ZIP selection shows filename and explicit one-click automatic protection'],
+  [uploadUi.includes('window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file') && uploadUi.includes('ARCHIVO SELECCIONADO') && uploadUi.includes('Todo salió bien'), 'selected ZIP remains visibly identified and reports final success'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
   [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling'],
   [uploadUi.includes('function categoryViewActive()') && uploadUi.includes('async function renderCategoryManager(force=false)') && uploadUi.includes('data-dx-category-action="delete"'), 'complete admin category manager with CRUD controls'],

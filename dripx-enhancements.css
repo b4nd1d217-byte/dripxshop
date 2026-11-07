@@ -258,3 +258,18 @@
 .dx-zip-retry{border-color:rgba(0,199,255,.3);background:rgba(0,199,255,.08);color:#d9f5ff}
 .dx-zip-retry:hover:not(:disabled){border-color:rgba(0,199,255,.55);background:rgba(0,199,255,.14)}
 @media(max-width:520px){.dx-product-zip-preview .dx-preview-summary{align-items:flex-start}.dx-product-zip-preview .dx-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-product-zip-preview .dx-auto-progress{gap:6px}.dx-product-zip-preview .dx-auto-step{font-size:10px;padding:6px 8px}}
+
+/* Explicit ZIP selection and one-click protection */
+.dx-zip-selection-card{display:grid;gap:9px;padding:13px;border:1px solid rgba(0,199,255,.28);border-radius:11px;background:linear-gradient(145deg,rgba(0,199,255,.075),rgba(4,13,23,.92))}
+.dx-zip-selection-head{display:flex;align-items:center;gap:8px}
+.dx-zip-selection-icon{display:inline-grid;place-items:center;width:34px;height:30px;border-radius:8px;background:rgba(0,199,255,.13);color:#8fe7ff;font-size:10px;font-weight:850;letter-spacing:.05em}
+.dx-zip-selection-status{font-size:10px;font-weight:800;letter-spacing:.09em;color:#83e6bd}
+.dx-zip-selection-name{min-width:0;overflow-wrap:anywhere;font-size:13px;color:var(--text,#f3f7fb)}
+.dx-zip-selection-meta,.dx-zip-selection-hint{font-size:11px;color:var(--muted,#8da0b1);line-height:1.5}
+.dx-zip-start{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:44px;padding:11px 14px;border:1px solid rgba(0,199,255,.58);border-radius:9px;background:linear-gradient(110deg,#00bde9,#087fae);color:#03131d;font:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 5px 16px rgba(0,160,220,.16);transition:filter .16s,transform .16s}
+.dx-zip-start:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px)}
+.dx-zip-start:disabled{opacity:.6;cursor:wait;transform:none}
+.dx-zip-restart{border-color:rgba(0,199,255,.35)}
+.dx-product-zip-preview[data-state="selected"]{border-color:rgba(0,199,255,.4)}
+.dx-product-zip-preview[data-state="success"] .dx-preview-summary strong{color:#83e6bd}
+@media(max-width:600px){.dx-zip-selection-card{padding:11px}.dx-zip-start{min-height:46px;font-size:12px}.dx-zip-selection-name{font-size:12px}}
