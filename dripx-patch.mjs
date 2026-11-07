@@ -124,6 +124,9 @@ export async function patchApp(source) {
        'verify resource before manual publishing');
 
 
+  const legacyGuardStart = app.indexOf("  function makeLicenseGuard(){");
+  const oldPipelineStart = app.indexOf("  async function protectZip(){");
+  if(legacyGuardStart>=0&&oldPipelineStart>legacyGuardStart)app=app.slice(0,legacyGuardStart)+app.slice(oldPipelineStart);
   const pipelineStart = app.indexOf("  async function protectZip(){");
   const pipelineEnd = app.indexOf("  async function renderAdmin(){", pipelineStart);
   if (pipelineStart < 0 || pipelineEnd < 0) throw new Error('DRIPX patch failed: legacy ZIP pipeline boundaries');
