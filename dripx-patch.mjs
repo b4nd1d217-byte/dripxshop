@@ -370,7 +370,9 @@ export async function patchApp(source) {
   modernPipeline=modernPipeline.replace(/DRIPX_CLIENT_LICENSE_EVENT_REGISTERED/g,'DRIPX_LICENSE_EVENT_REGISTERED');
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
-  app=app.replace(/  function makeLicenseGuard\(\)\{return `[^`]*`;\}\s*/,'');
+  const staleGuardStart=app.indexOf("  function makeLicenseGuard(){");
+  const newGuardPipelineStart=app.indexOf("  async function protectZip(){",staleGuardStart);
+  if(staleGuardStart>=0&&newGuardPipelineStart>staleGuardStart)app=app.slice(0,staleGuardStart)+app.slice(newGuardPipelineStart);
 
 
   const protectionRequired = [
