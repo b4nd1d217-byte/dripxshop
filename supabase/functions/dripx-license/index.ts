@@ -424,9 +424,9 @@ async function downloadOwnedProduct(req: Request) {
   const tags = metaText.match(/<script\b[^>]*>/gi) || [];
   if (!tags.length) return json(409, { error: "resource_scripts_missing" });
   const scriptRefs = new Set<string>();
-  const sharedScripts: string[] = [];
+  const sharedBridges: string[] = [];
   const serverLicenseTemplates: string[] = [];
-  let compiledCount = 0, serverCompiledCount = 0;
+  let compiledCount = 0, serverCompiledCount = 0, sharedCompiledCount = 0;
   for (const tag of tags) {
     let src = xmlAttribute(tag, "src").trim();
     const type = (xmlAttribute(tag, "type").trim().toLowerCase() || "server");
@@ -440,38 +440,39 @@ async function downloadOwnedProduct(req: Request) {
     const entry = available.get(key);
     if (!entry) return json(422, { error: "resource_meta_script_missing", path: src });
     const lower = src.toLowerCase();
-    if (type === "shared" && lower.endsWith(".lua")) sharedScripts.push(src);
+    if (type === "shared" && lower === "dripx_shared_license.lua") {
+      sharedBridges.push(src);
+    } else if (type === "shared" && lower.endsWith(".lua")) {
+      return json(409, { error: "resource_uncompiled_shared_lua_present", path: src });
+    } else if (type === "shared" && lower.endsWith(".luac")) {
+      const output = await entry.async("uint8array");
+      if (!isMtaBytecode(output)) return json(422, { error: "resource_shared_bytecode_invalid", path: src });
+      compiledCount++;
+      sharedCompiledCount++;
+    }
     if (type === "server" && lower === "dripx_server_license.lua") {
       serverLicenseTemplates.push(src);
-    } else if (type === "server" || type === "client") {
-      if (lower.endsWith(".lua")) {
-        return json(409, { error: "resource_uncompiled_lua_present", path: src });
-      }
-      if (lower.endsWith(".luac")) {
-        const output = await entry.async("uint8array");
-        if (!isMtaBytecode(output)) {
-          return json(422, { error: "resource_compiled_bytecode_invalid", path: src });
-        }
-        compiledCount++;
-        if (type === "server") serverCompiledCount++;
-      }
+    } else if ((type === "server" || type === "client") && lower.endsWith(".lua")) {
+      return json(409, { error: "resource_uncompiled_lua_present", path: src });
+    } else if ((type === "server" || type === "client") && lower.endsWith(".luac")) {
+      const output = await entry.async("uint8array");
+      if (!isMtaBytecode(output)) return json(422, { error: "resource_compiled_bytecode_invalid", path: src });
+      compiledCount++;
+      if (type === "server") serverCompiledCount++;
     }
   }
 
-  if (sharedScripts.length !== 1) {
-    return json(409, { error: "resource_shared_license_file_invalid" });
-  }
+  if (sharedBridges.length !== 1) return json(409, { error: "resource_shared_license_bridge_missing" });
   if (serverLicenseTemplates.length !== 1) {
     return json(409, { error: "resource_server_license_template_missing" });
   }
-  const shared = zip.file(sharedScripts[0]);
-  if (!shared) return json(409, { error: "resource_shared_license_file_missing" });
-  const sharedText = await shared.async("string");
-  if (sharedText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER") || !sharedText.includes("DRIPX_LICENSE_EVENT_NAME")) {
+  const sharedBridge = zip.file(sharedBridges[0]);
+  if (!sharedBridge) return json(409, { error: "resource_shared_license_bridge_missing" });
+  const sharedText = await sharedBridge.async("string");
+  if (sharedText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
+      || !sharedText.includes("DRIPX_LICENSE_EVENT_NAME")
+      || sharedText.includes(licenseKey)) {
     return json(409, { error: "resource_shared_license_bridge_invalid" });
-  }
-  if (sharedText.includes(licenseKey)) {
-    return json(409, { error: "resource_license_secret_exposed_in_shared" });
   }
   if (!compiledCount || !serverCompiledCount) {
     return json(409, { error: "resource_server_bytecode_missing" });
