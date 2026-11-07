@@ -274,6 +274,7 @@ export async function patchApp(source) {
     return downloadProtectedZip();
   }
   window.DRIPX_PRODUCT_PROTECTION_ACTIONS={protect:protectZip,compile:compileZip,download:downloadProtectedZip,resume:resumeZip};
+`;
 
   app = app.slice(0, pipelineStart) + modernPipeline + "\n" + app.slice(pipelineEnd);
 
