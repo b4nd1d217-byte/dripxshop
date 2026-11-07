@@ -295,7 +295,7 @@ async function downloadOwnedProduct(req: Request) {
   });
   if (!storageResponse.ok) return json(502, { error: "protected_file_unavailable" });
   const sourceZip = new Uint8Array(await storageResponse.arrayBuffer());
-  if (!sourceZip.length || sourceZip.byteLength > 100 * 1024 * 1024) {
+  if (!sourceZip.length || sourceZip.byteLength > 50_000_000) {
     return json(413, { error: "product_file_size_invalid" });
   }
 
