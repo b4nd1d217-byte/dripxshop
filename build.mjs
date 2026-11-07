@@ -78,6 +78,7 @@ const uploadChecks = [
   [appText.includes('if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent') && !appText.includes('DRIPX_CLIENT_LICENSE_EVENT_REGISTERED'), 'shared and client scripts register the license event idempotently'],
   [appText.includes("const guardName='dripx_server_license.lua'") && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'active product pipeline creates a server-only license template for buyer-time compilation'],
   [downloadFunction.includes('compileMtaLicenseGuard') && downloadFunction.includes('license_guard_compilation_failed') && downloadFunction.includes('zip.remove(guardPath)'), 'buyer download compiles personalized server guard and rewrites meta.xml'],
+  [appText.includes('Descargas ZIP deben pasar por dripx-license/download') && uploadUi.includes('/functions/v1/dripx-license/download'), 'legacy signed-URL ZIP delivery is blocked in favor of personalized server download'],
   [appText.includes('b.compiledFiles=[...completed]'), 'resumable per-file compilation'],
   [uploadUi.includes('Number(file?.size)>50_000_000') && zipReader.includes('compressed:50*1000*1000') && uploadValidator.includes('source.length > 50_000_000') && downloadFunction.includes('sourceZip.byteLength > 50_000_000'), 'Supabase Free ZIP size cap aligned across browser, server validation and downloads'],
   [appText.includes('db.auth.refreshSession()'), 'session refresh before compilation'],
