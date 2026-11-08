@@ -273,3 +273,37 @@
 .dx-product-zip-preview[data-state="selected"]{border-color:rgba(0,199,255,.4)}
 .dx-product-zip-preview[data-state="success"] .dx-preview-summary strong{color:#83e6bd}
 @media(max-width:600px){.dx-zip-selection-card{padding:11px}.dx-zip-start{min-height:46px;font-size:12px}.dx-zip-selection-name{font-size:12px}}
+
+
+/* King Protection-inspired DRIP X job dialog: clear, linear, touch-first. */
+.dx-protection-overlay{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:16px;background:rgba(1,7,13,.82);backdrop-filter:blur(12px)}
+.dx-protection-dialog{width:min(100%,560px);max-height:min(90dvh,760px);overflow:auto;padding:clamp(17px,3vw,25px);border:1px solid rgba(0,199,255,.25);border-radius:19px;background:linear-gradient(155deg,#0b1d2b,#07111c 70%);box-shadow:0 30px 100px rgba(0,0,0,.58);color:#e9f7ff}
+.dx-protection-dialog>header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.dx-protection-kicker{color:#5bdcff;font-size:9px;font-weight:850;letter-spacing:.14em}
+.dx-protection-dialog h2{margin:6px 0;color:#f0f9ff;font-size:clamp(19px,4vw,24px);letter-spacing:-.035em}
+.dx-protection-filename{max-width:390px;margin:0;color:#8fa9bb;font-size:11px;overflow-wrap:anywhere}
+.dx-protection-shield{display:grid;place-items:center;width:40px;height:40px;flex:none;border:1px solid rgba(0,199,255,.3);border-radius:12px;background:rgba(0,199,255,.1);color:#70e4ff;font-size:20px}
+.dx-protection-progress{height:5px;margin:22px 0 17px;overflow:hidden;border-radius:99px;background:rgba(147,180,203,.13)}
+.dx-protection-progress-fill{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#00a9d6,#75e8ff);transition:width .25s ease}
+.dx-protection-steps{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.dx-protection-steps li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:58px;padding:9px 11px;border:1px solid rgba(143,180,204,.11);border-radius:11px;background:rgba(255,255,255,.025)}
+.dx-protection-steps li>span{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:rgba(145,180,202,.1);color:#9db7c9;font-size:10px;font-weight:850}
+.dx-protection-steps li>div{display:grid;gap:3px;min-width:0}
+.dx-protection-steps li strong{font-size:12px;color:#dceefa}
+.dx-protection-steps li small{font-size:10px;color:#7894a8;line-height:1.4}
+.dx-protection-steps li>b{color:#7894a8;font-size:9px;font-weight:700;white-space:nowrap}
+.dx-protection-steps li[data-state=active]{border-color:rgba(0,199,255,.32);background:rgba(0,199,255,.065)}
+.dx-protection-steps li[data-state=active]>span{background:rgba(0,199,255,.17);color:#83eaff}
+.dx-protection-steps li[data-state=active]>b{color:#83eaff}
+.dx-protection-steps li[data-state=done]>span{background:rgba(61,193,137,.13);color:#79e0b3}
+.dx-protection-steps li[data-state=done]>b{color:#79e0b3}
+.dx-protection-message{margin:15px 0 0;padding:11px 12px;border:1px solid rgba(0,199,255,.16);border-radius:10px;background:rgba(0,199,255,.055);color:#a9eaff;font-size:11px;line-height:1.6}
+.dx-protection-message[data-state=success]{border-color:rgba(61,193,137,.25);background:rgba(61,193,137,.07);color:#83e6b8}
+.dx-protection-message[data-state=error]{border-color:rgba(255,103,103,.25);background:rgba(255,103,103,.07);color:#ffaaaa}
+.dx-protection-error{margin-top:9px;padding:11px;border:1px solid rgba(255,103,103,.25);border-radius:9px;background:rgba(255,103,103,.06);color:#ffb5b5;font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+.dx-protection-dialog>footer{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}
+.dx-protection-dialog>footer button{min-height:40px;padding:0 15px;border:1px solid rgba(143,180,204,.2);border-radius:9px;background:rgba(255,255,255,.045);color:#d8edf9;font:700 11px inherit;cursor:pointer}
+.dx-protection-dialog>footer button:disabled{opacity:.45;cursor:not-allowed}
+.dx-protection-dialog>footer .dx-protection-finish{border-color:rgba(0,199,255,.5);background:linear-gradient(110deg,#00bde9,#087fae);color:#03131d}
+.dx-protection-dialog>footer .dx-protection-retry{border-color:rgba(0,199,255,.35);color:#8deaff}
+@media(max-width:520px){.dx-protection-overlay{padding:9px;align-items:end}.dx-protection-dialog{max-height:92dvh;border-radius:17px;padding:15px}.dx-protection-steps li{grid-template-columns:30px minmax(0,1fr);gap:8px}.dx-protection-steps li>b{grid-column:2}.dx-protection-dialog>footer button{flex:1}}
