@@ -233,7 +233,7 @@
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
       zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
-      compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
+      compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:window.__DRIPX_REPLACE_PRODUCT_ID||crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
       compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded,runtimeTarget:'MTA:SA',runtimeEvidence,mtaApiCount,fiveMApiCount
     };
     const configCount=files.filter(item=>item.kind==='config'||item.kind==='shared_lua').length;
