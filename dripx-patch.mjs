@@ -460,8 +460,8 @@ export async function patchApp(source) {
   app = app.replace(/const tabs=\['pedidos','tickets','resenas','productos','usuarios','ajustes'\]/g,
     "const tabs=['pedidos','tickets','resenas','productos','categorias','usuarios','ajustes']");
   once('<select name="product_type"><option value="resource">Producto descargable</option><option value="plan">Plan de protección</option></select>',
-       '<select name="product_type"><option value="plan">Plan de acceso · sin ZIP</option><option value="resource">Producto descargable · se crea en Productos</option></select>',
-       'plan default and resource creation separated');
+       '<select name="product_type"><option value="resource">Producto descargable · ZIP · categoría Productos</option></select>',
+       'product form creates downloadable products only');
   const protectionRequired = [
     'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'DRIPX-CFG.LUA', 'DRIPX_CFG_LICENSE_KEY', 'dripx_server_license.lua', 'DRIPX_LICENSE_EVENT_NAME', 'dripx:license:clientReady',
     "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
