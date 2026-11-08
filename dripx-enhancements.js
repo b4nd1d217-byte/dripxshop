@@ -593,9 +593,9 @@
         await actions.resume();
       }else{
         window.__DRIPX_PROTECTION_JOB={id:crypto.randomUUID(),file,started:true,status:'processing',step:'protect'};
-        update(1,'Protegiendo resource…','Integrando el guardián privado de servidor y el puente shared sin secretos.');
+        update(1,'Protegiendo resource…','Integrando el guardián privado de servidor; los shared originales no se modifican.');
         const protectedResult=await actions.protect();
-        if(!protectedResult?.productId||protectedResult.serverLicenseTemplate!=='dripx_server_license.lua'||protectedResult.sharedBridge!==true)throw new Error('El motor no confirmó el guardián genérico y el puente shared.');
+        if(!protectedResult?.productId||protectedResult.serverLicenseTemplate!=='dripx_server_license.lua'||protectedResult.sharedFilesPreserved!==true)throw new Error('El motor no confirmó el guardián genérico o la conservación de los shared originales.');
         window.__DRIPX_PROTECTION_JOB.step='compile';
         update(2,'Compilando scripts Lua…','Compilando todos los Lua no-shared a bytecode MTA.');
         const compiledResult=await actions.compile();
