@@ -585,7 +585,9 @@
       node.append(engine);
       const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
       if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function'||typeof actions.resume!=='function')throw new Error('El motor DRIPX no está conectado al formulario de Productos.');
-      const scan=result.files.filter(item=>['server_lua','client_lua'].includes(item.kind)||(item.kind==='lua_other'&&/\.lua$/i.test(String(item.path||'')))).length;
+      const scan=result.files.filter(item=>['server_lua','client_lua'].includes(item.kind)).length;
+      const undeclaredLua=result.files.filter(item=>item.kind==='lua_other'&&/\.lua$/i.test(String(item.path||'')));
+      if(undeclaredLua.length)throw new Error('Hay '+undeclaredLua.length+' archivos Lua que no están declarados en meta.xml: '+undeclaredLua.slice(0,8).map(item=>item.path).join(', ')+'. Decláralos como server, client o shared antes de proteger; no se compilan archivos sin clasificación.');
       if(resume&&window.__DRIPX_PROTECTION_JOB?.started){
         update(1,'Reanudando trabajo de protección…','Continuando desde el último paso que el motor dejó completado.');
         await actions.resume();
@@ -593,16 +595,13 @@
         window.__DRIPX_PROTECTION_JOB={id:crypto.randomUUID(),file,started:true,status:'processing',step:'protect'};
         update(1,'Protegiendo resource…','Integrando el guardián privado de servidor y el puente shared sin secretos.');
         const protectedResult=await actions.protect();
-        if(!protectedResult?.productId)throw new Error('El motor no confirmó la protección del resource.');
+        if(!protectedResult?.productId||protectedResult.serverLicenseTemplate!=='dripx_server_license.lua'||protectedResult.sharedBridge!==true)throw new Error('El motor no confirmó el guardián genérico y el puente shared.');
         window.__DRIPX_PROTECTION_JOB.step='compile';
         update(2,'Compilando scripts Lua…','Compilando todos los Lua no-shared a bytecode MTA.');
         const compiledResult=await actions.compile();
-        if(Number(compiledResult?.compiledCount)!==scan)throw new Error('La compilación no confirmó todos los scripts server/client esperados ('+Number(compiledResult?.compiledCount||0)+'/'+scan+').');
-        window.__DRIPX_PROTECTION_JOB.step='license';
-        update(3,'Verificando licencia y preparando ZIP…','Comprobando el guardián server, el puente shared y el manifiesto MTA.');
-        const licenseResult=await window.DRIPX_INJECT_LICENSE_GUARD();
-        if(licenseResult?.server_license_template!==true||licenseResult?.shared_bridge!==true)throw new Error('No se confirmó la integración segura del módulo de licencia.');
+        const expectedCompiled=scan+1;\n        if(Number(compiledResult?.compiledCount)!==expectedCompiled)throw new Error('La compilación no confirmó los '+scan+' Lua declarados y el guardián DRIPX ('+Number(compiledResult?.compiledCount||0)+'/'+expectedCompiled+').');
         window.__DRIPX_PROTECTION_JOB.step='package';
+        update(3,'Guardando paquete genérico…','El guardián DRIPX ya quedó compilado una sola vez en este ZIP. La Key no se incrusta al descargar.');
         await actions.download();
       }
       update(3,'Verificando ZIP final…','Comprobando el archivo generado y su asociación con el formulario.');
