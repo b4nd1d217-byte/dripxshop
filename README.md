@@ -26,3 +26,10 @@ Stripe permanece deliberadamente fuera del flujo de compra actual.
 
 ## Build y validación
 `node build.mjs` genera `dist/`. Comprobaciones locales previas: `node --check app.js`, `node --check config.js` y parseo HTML. El build valida sintaxis de `app.js`, `auth-bootstrap.js` y `dripx-enhancements.js`. Aún falta una prueba E2E interactiva con OAuth Discord real, comprobante, aprobación, descarga y servidor MTA:SA de pruebas antes de certificar toda la operación.
+
+## Vercel deployment
+- Production branch: `main`.
+- Build command: `npm run build`.
+- Static output directory: `dist`.
+- Node.js: `22.x`.
+- ZIP inspection is independent of optional MTA protection/compilation; original ZIP downloads are served through the authenticated Supabase Edge Function.
