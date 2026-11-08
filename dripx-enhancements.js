@@ -393,76 +393,120 @@
     }catch(error){console.warn('[DRIPX] Discord protection log failed:',error?.message||error);}
   }
 
+  function createProtectionDialog(file){
+    document.querySelector('#dx-protection-dialog')?.remove();
+    const overlay=document.createElement('div');
+    overlay.id='dx-protection-dialog';
+    overlay.className='dx-protection-overlay';
+    overlay.setAttribute('role','dialog');
+    overlay.setAttribute('aria-modal','true');
+    overlay.setAttribute('aria-labelledby','dx-protection-title');
+    overlay.innerHTML='<section class="dx-protection-dialog"><header><div><span class="dx-protection-kicker">DRIP X SHOP · MTA:SA</span><h2 id="dx-protection-title">Protección del resource</h2><p class="dx-protection-filename">'+escapeHtml(file.name)+'</p></div><span class="dx-protection-shield" aria-hidden="true">✓</span></header><div class="dx-protection-progress"><span class="dx-protection-progress-fill"></span></div><ol class="dx-protection-steps"><li data-step="0"><span>01</span><div><strong>Validar ZIP</strong><small>Integridad, estructura y meta.xml</small></div><b>En espera</b></li><li data-step="1"><span>02</span><div><strong>Proteger resource</strong><small>Integración del guardián y puente de licencia</small></div><b>En espera</b></li><li data-step="2"><span>03</span><div><strong>Compilar Lua</strong><small>Bytecode MTA para server y client</small></div><b>En espera</b></li><li data-step="3"><span>04</span><div><strong>Verificar y preparar ZIP</strong><small>Comprobación final y selección del resultado</small></div><b>En espera</b></li></ol><p class="dx-protection-message" role="status" aria-live="polite">Preparando el proceso…</p><div class="dx-protection-error" hidden></div><footer><button type="button" class="dx-protection-close" disabled>Cerrar</button><button type="button" class="dx-protection-finish" hidden>Finalizar</button><button type="button" class="dx-protection-retry" hidden>Reintentar</button></footer></section>';
+    document.body.append(overlay);
+    const rows=[...overlay.querySelectorAll('[data-step]')];
+    const message=overlay.querySelector('.dx-protection-message');
+    const error=overlay.querySelector('.dx-protection-error');
+    const close=()=>overlay.remove();
+    overlay.querySelector('.dx-protection-close').addEventListener('click',close);
+    overlay.querySelector('.dx-protection-finish').addEventListener('click',close);
+    const update=(index,label,detail)=>{
+      rows.forEach((row,i)=>{
+        row.dataset.state=i<index?'done':i===index?'active':'pending';
+        row.querySelector('b').textContent=i<index?'Completado':i===index?'En proceso':'En espera';
+      });
+      overlay.querySelector('.dx-protection-progress-fill').style.width=(Math.max(0,Math.min(4,index))/4*100)+'%';
+      message.textContent=detail||label;
+      overlay.querySelector('.dx-protection-close').disabled=true;
+    };
+    const succeed=()=>{
+      rows.forEach(row=>{row.dataset.state='done';row.querySelector('b').textContent='Completado';});
+      overlay.querySelector('.dx-protection-progress-fill').style.width='100%';
+      message.textContent='ÉXITO: el ZIP protegido está verificado y seleccionado en el formulario.';
+      message.dataset.state='success';
+      overlay.querySelector('.dx-protection-close').disabled=false;
+      overlay.querySelector('.dx-protection-finish').hidden=false;
+    };
+    const fail=(reason)=>{
+      message.textContent='La protección no se completó. El ZIP original no se publicará.';
+      message.dataset.state='error';
+      error.hidden=false;error.textContent=String(reason||'Error desconocido');
+      overlay.querySelector('.dx-protection-close').disabled=false;
+      overlay.querySelector('.dx-protection-retry').hidden=false;
+    };
+    const onRetry=callback=>{
+      const button=overlay.querySelector('.dx-protection-retry');
+      button.addEventListener('click',async()=>{
+        button.disabled=true;button.hidden=true;error.hidden=true;
+        await callback();
+        button.disabled=false;
+      });
+    };
+    return {overlay,update,succeed,fail,onRetry,close};
+  }
+
   function renderProductZipSelection(input,file){
     const selectionRun='selection-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     input.dataset.dripxZipRun=selectionRun;
+    window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file;
     const live=ensureLiveProductZipPreview(input,selectionRun);
-    if(!live)return;
+    if(!live)throw new Error('No se pudo mostrar el ZIP seleccionado en el formulario de Productos.');
     const {form,node}=live;
     node.dataset.state='selected';
-    node.innerHTML='<div class="dx-zip-selection-card">'+
-      '<div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div>'+
-      '<strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong>'+
-      '<small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Listo para iniciar la protección automática</small>'+
-      '<button type="button" class="dx-zip-start" data-dripx-start-protection><span aria-hidden="true">⚙</span> Iniciar protección automática</button>'+
-      '<p class="dx-zip-selection-hint">Al iniciar se ejecutarán todas las fases: validar, proteger, compilar, integrar licencia y verificar el ZIP final. No se publicará hasta que guardes el producto.</p>'+
-    '</div>';
-    setProductZipStatus('ZIP seleccionado correctamente. Pulsa «Iniciar protección automática» para comenzar.','info');
+    node.innerHTML='<div class="dx-zip-selection-card"><div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Archivo listo</small><button type="button" class="dx-zip-start" data-dripx-start-protection>Iniciar protección</button><p class="dx-zip-selection-hint">Se validará, protegerá, compilará y verificará antes de habilitar Guardar producto.</p></div>';
+    setProductZipStatus('ZIP seleccionado: '+file.name+' · '+formatBytes(file.size),'info');
     const start=node.querySelector('[data-dripx-start-protection]');
-    start.addEventListener('click',async()=>{
-      if(start.disabled)return;
-      const currentFile=window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE;
-      if(currentFile!==file){toast('✕ El ZIP seleccionado cambió. Selecciónalo de nuevo.');return;}
-      start.disabled=true;
-      start.innerHTML='<span aria-hidden="true">◌</span> Ejecutando protección automática…';
+    let busy=false,needsResume=false;
+    const run=async()=>{
+      if(busy)return;
+      if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file){toast('El ZIP seleccionado cambió. Selecciónalo de nuevo.');return;}
+      busy=true;start.disabled=true;start.textContent=needsResume?'Reanudando protección…':'Protegiendo ZIP…';
       lockProductSubmit(form,true);
-      const outcome=await previewProductZip(file);
-      const latest=ensureLiveProductZipPreview(document.querySelector('#product-form input[name="file"]'),null);
-      const activeNode=latest?.node||node;
+      const dialog=createProtectionDialog(file);
+      const outcome=await previewProductZip(file,dialog,needsResume);
       if(outcome?.ok){
+        needsResume=false;
+        const active=ensureLiveProductZipPreview(document.querySelector('#product-form input[name="file"]'),null);
+        const activeNode=active?.node||node;
         activeNode.dataset.state='success';
-        const status=latest?.status||document.querySelector('#product-zip-upload-state');
-        if(status){status.dataset.state='success';status.textContent='✓ ÉXITO: el ZIP quedó protegido, compilado, validado y seleccionado para guardar.';}
-        toast('✓ Todo salió bien. El ZIP está seleccionado y listo para guardar el producto.');
-      }else if(outcome?.error){
-        const status=latest?.status||document.querySelector('#product-zip-upload-state');
-        if(status){status.dataset.state='error';status.textContent='✕ PROCESO FALLIDO: '+(outcome.error.message||'No se pudo completar la protección.');}
+        start.textContent='ZIP protegido y seleccionado';
+        start.disabled=true;
+        const status=active?.status||document.querySelector('#product-zip-upload-state');
+        if(status){status.dataset.state='success';status.textContent='ÉXITO: '+outcome.file.name+' · '+formatBytes(outcome.file.size)+' · listo para guardar.';}
+        dialog.succeed();
+        toast('ÉXITO: ZIP protegido, verificado y seleccionado.');
+      }else{
+        needsResume=!!window.__DRIPX_PROTECTION_JOB?.started;
+        busy=false;start.disabled=false;start.textContent=needsResume?'Reintentar / reanudar':'Reintentar protección';
+        lockProductSubmit(form,false);
+        dialog.fail(outcome?.error?.message||'No se pudo completar la protección.');
+        dialog.onRetry(async()=>{dialog.close();await run();});
       }
-    });
+    };
+    start.addEventListener('click',run);
   }
 
-  async function previewProductZip(file){
+  async function previewProductZip(file,dialog,resume=false){
     let input=document.querySelector('#product-form input[name="file"]');
     let form=input?.closest('#product-form');
-    if(!input||!form)return;
-    if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE&&window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
+    if(!input||!form)throw new Error('El formulario de Productos ya no está disponible. Vuelve a abrirlo y selecciona el ZIP.');
+    if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
     const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
     input.dataset.dripxZipRun=runId;
     input.dataset.dripxZipReady='false';
     window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
     window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
     lockProductSubmit(form,true);
-    let live=ensureLiveProductZipPreview(input,runId);
-    if(!live)return;
-    input=live.input;form=live.form;
-    let node=live.node;
-    node.dataset.state='processing';
-    node.innerHTML='<div class="dx-preview-loading">1/4 · Validando ZIP y leyendo meta.xml…</div>';
-    setProductZipStatus('Preparando el resource para protección automática…','processing');
+    const update=(step,label,detail)=>{dialog?.update(step,label,detail);setProductZipStatus(label,'processing');};
     try{
+      update(0,'Validando ZIP y leyendo meta.xml…','Comprobando integridad, estructura y archivos del resource.');
       await getAdminSession();
+      let live=ensureLiveProductZipPreview(input,runId);
+      if(!live)throw new Error('El formulario cambió mientras se validaba el ZIP. Vuelve a seleccionarlo.');
+      input=live.input;form=live.form;
+      const engine=await mountProductZipPipeline(live.node,input,file);
       live=ensureLiveProductZipPreview(input,runId);
-      if(!live)return;
-      input=live.input;form=live.form;node=live.node;
-      lockProductSubmit(form,true);
-      node.dataset.state='processing';
-      node.innerHTML='<div class="dx-preview-loading">1/4 · Validando ZIP y leyendo meta.xml…</div>';
-      setProductZipStatus('Preparando el resource para protección automática…','processing');
-      const engine=await mountProductZipPipeline(node,input,file);
-      live=ensureLiveProductZipPreview(input,runId);
-      if(!live)return;
-      input=live.input;form=live.form;node=engine.closest('#product-zip-preview')||live.node;
-      if(input.dataset.dripxZipRun!==runId)return;
+      if(!live)throw new Error('No se pudo conservar la selección del ZIP.');
+      input=live.input;form=live.form;
       const result=window.DRIPX_ZIP_SCAN_RESULT;
       if(!result||result.file!==file||!Array.isArray(result.files))throw new Error('El lector no devolvió un inventario válido.');
       const rows=result.files.map(item=>{
@@ -471,89 +515,57 @@
         const glyph=compile?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>';
         return '<div class="dx-upload-file '+(compile?'is-compile':'')+'"><span class="dx-upload-file-icon">'+glyph+'</span><span class="dx-upload-file-name">'+escapeHtml(item.path)+'</span><small>'+label+' · '+formatBytes(item.bytes)+'</small></div>';
       }).join('');
-      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="warn">Protección en proceso</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' config/shared</span><span>'+formatBytes(result.expanded)+' descomprimidos</span></div><div class="dx-preview-files">'+rows+'</div><div class="dx-upload-state dx-auto-progress"><span class="dx-auto-step is-active">Analizar</span><span class="dx-auto-step">Proteger</span><span class="dx-auto-step">Compilar</span><span class="dx-auto-step">Preparar ZIP</span></div>';
+      const node=live.node;
+      node.dataset.state='processing';
+      node.innerHTML='<div class="dx-preview-summary"><strong>'+escapeHtml(file.name)+'</strong><span>'+formatBytes(file.size)+' · '+result.files.length+' archivos · '+result.server.length+' server · '+result.client.length+' client</span><b class="warn">Protección en proceso</b></div><div class="dx-preview-grid"><span>'+result.server.length+' Lua server</span><span>'+result.client.length+' Lua client</span><span>'+result.files.filter(x=>x.kind==='config'||x.kind==='shared_lua').length+' config/shared</span><span>'+formatBytes(result.expanded)+' descomprimidos</span></div><div class="dx-preview-files">'+rows+'</div>';
       node.append(engine);
-      if(input.dataset.dripxZipRun!==runId)return;
-      const protect=engine.querySelector('#zip-protect'),compile=engine.querySelector('#zip-compile'),download=engine.querySelector('#zip-download');
-      if(!protect||!compile||!download)throw new Error('Faltan controles del motor de protección.');
-      const compilableLua=result.files.filter(item=>item.path.toLowerCase().endsWith('.lua')&&!['config','shared_lua'].includes(item.kind));
-      if(!compilableLua.length)throw new Error('El ZIP no contiene archivos Lua compilables. Los config y type="shared" se conservan sin compilar.');
-      setProductZipStatus('02/4 · Protegiendo el resource y preparando la validación DRIPX…','processing');
-      node.querySelectorAll('.dx-auto-step')[1]?.classList.add('is-active');
-      if(protect.disabled)throw new Error('El motor no habilitó la protección. Revisa meta.xml y los scripts Lua.');
-      protect.click();
-      await waitForZipState(()=>!compile.disabled,'protección del resource');
-      if(input.dataset.dripxZipRun!==runId)return;
-      setProductZipStatus('03/4 · Compilando automáticamente los Lua seleccionados…','processing');
-      node.querySelectorAll('.dx-auto-step')[1]?.classList.add('is-done');
-      node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-active');
-      if(compile.disabled)throw new Error('La protección no terminó; el ZIP no se puede compilar.');
-      compile.click();
-      await waitForZipState(()=>!download.disabled,'compilación de los scripts Lua');
-      if(input.dataset.dripxZipRun!==runId)return;
-      if(typeof window.DRIPX_INJECT_LICENSE_GUARD!=='function')throw new Error('El módulo de licencia MTA no está integrado en el motor de protección. Recarga la página e inténtalo de nuevo.');
-      await window.DRIPX_INJECT_LICENSE_GUARD();
-      setProductZipStatus('04/4 · Verificando guardián server y puente shared sin secretos…','processing');
-      node.querySelectorAll('.dx-auto-step')[2]?.classList.add('is-done');
-      node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-active');
-      download.click();
-      await waitForZipState(()=>window.__DRIPX_PROCESSED_PRODUCT_FILE instanceof File&&!!window.__DRIPX_PROCESSED_PRODUCT_ZIP&&window.__DRIPX_PROCESSED_PRODUCT_FILE.name===window.__DRIPX_PROCESSED_PRODUCT_ZIP.name,'generación del ZIP protegido');
-      if(input.dataset.dripxZipRun!==runId)return;
+      const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
+      if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function'||typeof actions.resume!=='function')throw new Error('El motor DRIPX no está conectado al formulario de Productos.');
+      const scan=result.files.filter(item=>['server_lua','client_lua'].includes(item.kind)).length;
+      if(resume&&window.__DRIPX_PROTECTION_JOB?.started){
+        update(1,'Reanudando trabajo de protección…','Continuando desde el último paso que el motor dejó completado.');
+        await actions.resume();
+      }else{
+        window.__DRIPX_PROTECTION_JOB={id:crypto.randomUUID(),file,started:true,status:'processing',step:'protect'};
+        update(1,'Protegiendo resource…','Integrando el guardián privado de servidor y el puente shared sin secretos.');
+        const protectedResult=await actions.protect();
+        if(!protectedResult?.productId)throw new Error('El motor no confirmó la protección del resource.');
+        window.__DRIPX_PROTECTION_JOB.step='compile';
+        update(2,'Compilando scripts Lua…','Compilando los scripts server/client a bytecode MTA.');
+        const compiledResult=await actions.compile();
+        if(Number(compiledResult?.compiledCount)!==scan)throw new Error('La compilación no confirmó todos los scripts server/client esperados ('+Number(compiledResult?.compiledCount||0)+'/'+scan+').');
+        window.__DRIPX_PROTECTION_JOB.step='license';
+        update(3,'Verificando licencia y preparando ZIP…','Comprobando el guardián server, el puente shared y el manifiesto MTA.');
+        const licenseResult=await window.DRIPX_INJECT_LICENSE_GUARD();
+        if(licenseResult?.server_license_template!==true||licenseResult?.shared_bridge!==true)throw new Error('No se confirmó la integración segura del módulo de licencia.');
+        window.__DRIPX_PROTECTION_JOB.step='package';
+        await actions.download();
+      }
+      update(3,'Verificando ZIP final…','Comprobando el archivo generado y su asociación con el formulario.');
       const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE;
-      if(!(protectedFile instanceof File)||protectedFile.size===0||!/-DRIPX-protegido\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no se adjuntó al formulario. Selecciona el ZIP y repite la protección.');
+      const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
+      if(!(protectedFile instanceof File)||!packaged||protectedFile.size===0||protectedFile.name!==packaged.name||!/-DRIPX-protegido\\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no quedó vinculado al formulario. No se habilitó la publicación.');
+      if(input.dataset.dripxZipRun!==runId)throw new Error('La selección cambió durante el procesamiento. El resultado no se asociará a otro producto.');
       input.dataset.dripxZipReady='true';
-      delete input.dataset.dripxResourceName;
-      window.__DRIPX_RESOURCE_NAME='';
+      window.__DRIPX_PROTECTION_JOB.status='succeeded';
+      window.__DRIPX_PROTECTION_JOB.step='completed';
       node.dataset.state='success';
-      node.querySelectorAll('.dx-auto-step')[3]?.classList.add('is-done');
       const summary=node.querySelector('.dx-preview-summary b');
       if(summary){summary.className='ok';summary.textContent='Protección DRIPX completada';}
       const fileName=node.querySelector('.dx-preview-summary strong');
       if(fileName)fileName.textContent=protectedFile.name;
-      setProductZipStatus('Protección completada. Al pulsar Guardar/Publicar se subirá únicamente este ZIP protegido junto con el producto.','success');
+      setProductZipStatus('ÉXITO: '+protectedFile.name+' · '+formatBytes(protectedFile.size)+' · seleccionado para guardar.','success');
       void sendProtectedProductLog(file,result,protectedFile);
       lockProductSubmit(form,false);
-      toast('✓ ÉXITO: ZIP protegido, compilado y verificado. Ya está seleccionado para guardar el producto.');
       return {ok:true,file:protectedFile,sourceFile:file,result};
     }catch(error){
-      if(input.dataset.dripxZipRun!==runId)return;
+      if(input?.dataset?.dripxZipRun!==runId)return {ok:false,error};
       input.dataset.dripxZipReady='false';
-      node.dataset.state='error';
-      setProductZipStatus('No se pudo completar la protección. El ZIP original no se publicará: '+(error.message||'Error desconocido'),'error');
-      const steps=node.querySelectorAll('.dx-auto-step');steps.forEach(step=>step.classList.remove('is-active'));
-      console.error('[DRIPX] Automatic product ZIP protection:',error);
-      const failureMessage='✕ NO SE PUDO PROTEGER EL ZIP: '+(error?.message||'Error desconocido.');
-      toast(failureMessage);
-      const retry=document.createElement('button');
-      retry.type='button';retry.className='dx-zip-retry';
-      retry.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/></svg><span>Reanudar proceso</span>';
-      retry.addEventListener('click',async()=>{
-        retry.disabled=true;lockProductSubmit(form,true);
-        try{
-          const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
-          if(typeof actions?.resume!=='function')throw new Error('El motor de reanudación no está disponible. Recarga la página; el ZIP original permanece seleccionado.');
-          setProductZipStatus('Reanudando desde el último paso completado…','processing');
-          await actions.resume();
-          const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE;
-          if(!(protectedFile instanceof File)||!window.__DRIPX_PROCESSED_PRODUCT_ZIP||protectedFile.name!==window.__DRIPX_PROCESSED_PRODUCT_ZIP.name)throw new Error('El ZIP final no pudo adjuntarse al formulario.');
-          input.dataset.dripxZipReady='true';node.dataset.state='success';
-          node.querySelectorAll('.dx-auto-step').forEach(step=>step.classList.add('is-done'));
-          const summary=node.querySelector('.dx-preview-summary b');if(summary){summary.className='ok';summary.textContent='Protección DRIPX completada';}
-          setProductZipStatus('Proceso completado. El formulario y sus datos siguen disponibles para guardar el producto.','success');
-          retry.remove();lockProductSubmit(form,false);
-          toast('ZIP protegido correctamente. Ya puedes guardar el producto.');
-        }catch(retryError){
-          retry.disabled=false;lockProductSubmit(form,false);
-          setProductZipStatus('No se pudo reanudar: '+(retryError?.message||'error desconocido'),'error');
-          console.error('[DRIPX] ZIP resume failed:',retryError);toast(retryError?.message||'No se pudo reanudar el ZIP.');
-        }
-      });
-      node.append(retry);
-      const restart=document.createElement('button');
-      restart.type='button';restart.className='dx-zip-retry dx-zip-restart';
-      restart.innerHTML='<span aria-hidden="true">↻</span><span>Reintentar protección completa</span>';
-      restart.addEventListener('click',async()=>{restart.disabled=true;await previewProductZip(file);});
-      node.append(restart);
+      if(window.__DRIPX_PROTECTION_JOB)window.__DRIPX_PROTECTION_JOB.status='failed';
+      const current=ensureLiveProductZipPreview(input,runId);
+      if(current){current.node.dataset.state='error';}
+      setProductZipStatus('ERROR: no se publicó el ZIP original. '+(error?.message||'Error desconocido.'),'error');
+      console.error('[DRIPX] Protection workflow:',error);
       lockProductSubmit(form,false);
       return {ok:false,error};
     }
