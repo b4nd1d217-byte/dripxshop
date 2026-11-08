@@ -225,8 +225,9 @@
     const client=files.filter(item=>item.kind==='client_lua');
     const compileTargets=entries.filter(entry=>{
       const type=scriptMap.get(entry.name);
-      // Every executable server/client Lua is compiled; shared sources are preserved byte-for-byte.
-      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
+      const inferredShared=!type&&/(^|\/)shared(?:\/|_|[.-])/i.test(entry.name);
+      // Compile every Lua source except shared; DRIPX-CFG.LUA is added after this scan and remains editable.
+      return /\.lua$/i.test(entry.name)&&type!=='shared'&&!inferredShared;
     });
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
