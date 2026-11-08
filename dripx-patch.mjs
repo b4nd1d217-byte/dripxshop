@@ -16,6 +16,16 @@ export async function patchApp(source) {
 
   once("function updateUserUI(){const logged=!!state.user;", "function updateUserUI(){window.DRIPX_IS_ADMIN=!!state.isAdmin;const logged=!!state.user;", 'publish verified admin state to UI layer');
 
+  once("async function loadProducts(){const {data,error}=await db.from('dripx_products').select('*').eq('status','published').order('is_featured',{ascending:false}).order('sort_order',{ascending:true}).order('created_at',{ascending:false});if(error)throw error;state.products=data||[];}",
+       "async function loadProducts(){const {data,error}=await db.from('dripx_products').select('*').eq('status','published').order('is_featured',{ascending:false}).order('sort_order',{ascending:true}).order('created_at',{ascending:false});if(error)throw error;state.products=(data||[]).filter(p=>p.product_type==='plan');}",
+       'public catalogue only lists plans');
+  once("async function loadCategories(){const {data,error}=await db.from('dripx_categories').select('*').eq('active',true).order('sort_order').order('name');if(error)throw error;state.categories=data||[];}",
+       "async function loadCategories(){const {data,error}=await db.from('dripx_categories').select('*').eq('active',true).order('sort_order').order('name');if(error)throw error;state.categories=(data||[]).filter(c=>String(c.slug||'').toLowerCase()==='planes');}",
+       'only the Plans category is selectable');
+  once("const tabs=['pedidos','tickets','resenas','productos','categorias','usuarios','ajustes'];",
+       "const tabs=['pedidos','tickets','resenas','productos','usuarios','ajustes'];",
+       'remove standalone product categories admin tab');
+
   once("Number(p.price_usd)>0?money(p.price_usd):'Consultar'", "Number(p.price_usd)>0?money(p.price_usd):'Gratis'", 'catalogue free price');
   once("Number(p.price_usd)>0?money(p.price_usd):'Consultar precio'", "Number(p.price_usd)>0?money(p.price_usd):'Gratis'", 'detail free price');
 
