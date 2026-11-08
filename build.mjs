@@ -166,7 +166,9 @@ const uploadChecks = [
   [catalogUi.includes('data-dxcm-menu') && catalogUi.includes('dripx_admin_set_catalog_status') && catalogUi.includes('dripx_admin_update_catalog_item'), 'plans and products use three-dot menus with real publish, hide and edit RPCs'],
   [catalogUi.includes("p.category==='Productos'") && catalogUi.includes("p.category==='Planes'") && catalogUi.includes('data-dxcm-form'), 'separate Plans and Products administration lists'],
   [catalogUi.includes('resource_ids') && catalogUi.includes('Aquí no se suben ZIP ni se crean productos nuevos.'), 'plan edit only assigns existing products and never creates ZIP files'],
-  [catalogCss.includes('.dxcm-more') && catalogCss.includes('.dxcm-menu') && catalogCss.includes('.dxcm-modal'), 'compact three-dot menu and premium edit modal styling']
+  [catalogCss.includes('.dxcm-more') && catalogCss.includes('.dxcm-menu') && catalogCss.includes('.dxcm-modal'), 'compact three-dot menu and premium edit modal styling'],
+  [catalogUi.includes("db.storage.from('product-images').createSignedUrl") && catalogUi.includes('catalogImageUrl'), 'admin catalog cards resolve real uploaded product thumbnails'],
+  [patchSource.includes("const expectedCategory=type==='plan'?'Planes':'Productos'") && patchSource.includes('Los planes no admiten archivos ZIP'), 'product creation enforces separate categories and rejects ZIP on plans']
 ];
 const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
 const categoryRouteEnd = uploadUi.indexOf('\n  document.addEventListener', categoryRouteStart);
