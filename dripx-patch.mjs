@@ -435,7 +435,7 @@ export async function patchApp(source) {
        '<select name="product_type"><option value="resource">Producto descargable · ZIP · categoría Productos</option></select>',
        'product form creates downloadable products only');
   const protectionRequired = [
-    'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'DRIPX-CFG.LUA', 'DRIPX_CFG_LICENSE_KEY', 'dripx_server_license.lua', 'DRIPX_LICENSE_EVENT_NAME', 'dripx:license:clientReady',
+    'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'DRIPX-CFG.LUA', 'DRIPX_CFG_LICENSE_KEY', 'dripx_server_license.lua', 'addEvent("dripx:license:ready",false)', 'dripx:license:clientReady',
     "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
     "window.DRIPX_UPLOAD_FILE",
     "async function verifyResourceProductBeforePublish(productId)",
