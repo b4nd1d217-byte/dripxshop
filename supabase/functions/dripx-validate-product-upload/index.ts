@@ -218,7 +218,7 @@ async function validateProduct(req: Request) {
     if(s.type==="shared"&&lower==="dripx_shared_license.lua"){sharedCount++;const bridge=await zip.file(s.src)!.async("string");if(bridge.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")||!bridge.includes("DRIPX_LICENSE_EVENT_NAME"))return json(409,{error:"shared_license_bridge_invalid"});}
     else if(s.type==="shared"&&lower.endsWith(".lua")){const sharedSource=await zip.file(s.src)!.async("string");if(sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER"))return json(409,{error:"resource_shared_source_contains_private_marker",path:s.src});}
     if(s.type==="server"&&lower==="dripx-cfg.lua"){licenseConfigCount++;const cfg=await zip.file(s.src)!.async("string");if(cfg.split("DRIPX_LICENSE_KEY_PLACEHOLDER").length!==2||!cfg.includes('DRIPX_CFG_LICENSE_KEY = "DRIPX_LICENSE_KEY_PLACEHOLDER"')||!cfg.includes('DRIPX_CFG_PRODUCT_ID = "'+productId+'"'))return json(409,{error:"server_license_config_invalid"});}
-    else if(s.type==="server"&&lower==="dripx_server_license.lua"){licenseGuardCount++;const guard=await zip.file(s.src)!.async("string");if(guard.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")||!guard.includes("DRIPX_CFG_LICENSE_KEY")||!guard.includes("DRIPX_CFG_PRODUCT_ID"))return json(409,{error:"server_license_template_invalid"});}
+    else if(s.type==="server"&&lower==="dripx_server_license.luac"){licenseGuardCount++;const guard=await zip.file(s.src)!.async("uint8array");if(!bytecode(guard))return json(422,{error:"server_license_guard_bytecode_invalid"});}
     else if((s.type==="server"||s.type==="client")&&lower.endsWith(".lua"))return json(409,{error:"uncompiled_lua_present",path:s.src});
     if((s.type==="server"||s.type==="client"||s.type==="shared")&&lower.endsWith(".luac")){const bytes=await zip.file(s.src)!.async("uint8array");if(!bytecode(bytes))return json(422,{error:"compiled_bytecode_invalid",path:s.src});compiledCount++;if(s.type==="server")serverCompiledCount++;if(s.type==="shared")sharedCompiledCount++;}
   }
@@ -226,7 +226,7 @@ async function validateProduct(req: Request) {
   if(licenseGuardCount!==1)return json(409,{error:"server_license_guard_missing"});
   if(licenseConfigCount!==1)return json(409,{error:"server_license_config_missing"});
   const configScriptIndex=scripts.findIndex(s=>s.type==="server"&&s.src.toLowerCase()==="dripx-cfg.lua");
-  const guardScriptIndex=scripts.findIndex(s=>s.type==="server"&&s.src.toLowerCase()==="dripx_server_license.lua");
+  const guardScriptIndex=scripts.findIndex(s=>s.type==="server"&&s.src.toLowerCase()==="dripx_server_license.luac");
   if(configScriptIndex<0||guardScriptIndex<0||configScriptIndex>=guardScriptIndex)return json(409,{error:"server_license_config_load_order_invalid"});
   if(archiveFiles.some(e=>["dripx_license.lua","dripx_guard_shared.lua"].includes(e.name.split("/").pop()?.toLowerCase()||"")))return json(409,{error:"legacy_license_module_present"});
 
