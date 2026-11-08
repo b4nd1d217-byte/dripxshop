@@ -449,7 +449,7 @@ export async function patchApp(source) {
     "window.DRIPX_UPLOAD_FILE",
     "async function verifyResourceProductBeforePublish(productId)",
     "async function validateProtectedResourceZip(file)",
-    "El ZIP no ha terminado el proceso automático de protección"
+    "El ZIP todavía no terminó de abrirse"
   ];
   const missingProtection = protectionRequired.filter(fragment => !app.includes(fragment));
   if (app.includes("working.file(shared,sharedText+nl+'-- DRIP X SHOP license binding'+nl+'DRIPX_LICENSE_KEY =")) throw new Error('DRIPX security regression: buyer license key must never be injected into shared code.');
