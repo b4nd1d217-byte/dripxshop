@@ -21,7 +21,8 @@ function imageFor(p){const source=p.image_url||p.catalogImageUrl||'';return sour
 function money(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function row(p){
  const isPlan=p.product_type==='plan',hidden=p.status==='archived',draft=p.status==='draft',linked=isPlan?selectedResources(p.id).length:0;
- const info=isPlan?(esc(p.billing_period||'Periodo sin configurar')+' · '+linked+' productos incluidos'):(p.file_path?'ZIP listo · Descarga MTA:SA':'ZIP pendiente · No publicable');
+ const categoryLabel=categories.find(category=>String(category.slug)===String(p.store_category))?.name||p.store_category||'Sin categoría';
+ const info=isPlan?(esc(p.billing_period||'Periodo sin configurar')+' · '+linked+' productos incluidos'):(esc(categoryLabel)+' · '+(p.file_path?'ZIP listo · MTA:SA':'ZIP pendiente · No publicable'));
  return '<article class="dxcm-row" data-item-id="'+esc(p.id)+'" data-item-type="'+(isPlan?'plan':'resource')+'">'+
   '<div class="dxcm-thumb">'+imageFor(p)+'</div><div class="dxcm-main"><div class="dxcm-title-line"><strong>'+esc(p.title)+'</strong><span class="dxcm-status '+(hidden?'is-hidden':draft?'is-draft':'is-live')+'">'+(hidden?'Oculto':draft?'Borrador':'Publicado')+'</span></div>'+
   '<p>'+esc(p.tagline||p.description||'Sin descripción')+'</p><small>'+info+'</small></div>'+
