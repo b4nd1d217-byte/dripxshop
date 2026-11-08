@@ -67,6 +67,7 @@ const requiredFeatures = [
   'dripx_admin_set_catalog_status',
   'dripx_admin_save_plan_resources',
   'dripx_admin_create_plan',
+  'dripx_admin_update_product_details',
   'dripx_claim_free_product',
   'dripx-validate-product-upload',
   'DRIPX_UPLOAD_FILE',
@@ -89,6 +90,7 @@ const downloadFunction = await readFile('supabase/functions/dripx-license/index.
 const profileMigration = await readFile('supabase/migrations/20261106203640_secure_dripx_profile_column_permissions.sql', 'utf8');
 const privacyMigration = await readFile('supabase/migrations/20261106210000_dripx_public_top_buyers_respect_opt_in.sql', 'utf8');
 const categoryMigration = await readFile('supabase/migrations/20261106224000_dripx_category_integrity.sql', 'utf8');
+const productMediaMigration = await readFile('supabase/migrations/20261108224500_dripx_product_media_category_admin.sql', 'utf8');
 const uploadChecks = [
   [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
   [appText.includes("const configScriptTag='<script src=\"'+configName+'\" type=\"server\" />';") && appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,bridgeScriptTag"), 'private license config is loaded before the server license guard'],
@@ -144,6 +146,8 @@ const uploadChecks = [
   [uploadUi.includes("const anchor=form.querySelector('#resource-file-field')") && uploadUi.includes("node.classList.remove('hidden')") && uploadUi.includes('Panel recuperado'), 'ZIP preview is reattached outside the collapsible input wrapper with a visible recovery fallback'],
   [uploadUi.includes('La publicación guardará el ZIP original') && patchSource.includes("protection_enabled:type==='resource'&&protectedSelection") && patchSource.includes("resource_manifest:type==='resource'?fileManifest:{}"), 'original ZIP remains the default upload; protection status and archive inventory are stored separately'],
   [uploadUi.includes('installDescriptionToolbar'), 'description icon toolbar'],
+  [patchSource.includes("store_category:type==='resource'?String(fd.get('store_category')||'scripts-mta'):'planes'") && uploadUi.includes('ensureProductStoreCategoryField') && uploadUi.includes('name="store_category"'), 'downloadable product stores a selectable storefront category separately from internal product type'],
+  [productMediaMigration.includes('dripx_admin_update_product_details') && productMediaMigration.includes('dripx_is_admin()') && productMediaMigration.includes('store_category=v_category'), 'product category and media updates are admin-only and server-validated'],
   [uploadCss.includes('.dx-zip-retry') && uploadCss.includes('.dx-description-tools'), 'professional upload/editor styling'],
   [uploadUi.includes('function categoryViewActive()') && uploadUi.includes('async function renderCategoryManager(force=false)') && uploadUi.includes('data-dx-category-action="delete"'), 'complete admin category manager with CRUD controls'],
   [uploadUi.includes("const source=inProductForm?activeNames:activeNames.filter(name=>String(name).trim().toLowerCase()==='planes');") && uploadUi.includes('categorySyncAt=0'), 'internal Productos category stays out of public Plans filters'],
