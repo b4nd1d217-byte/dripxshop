@@ -119,7 +119,7 @@ const uploadChecks = [
   [appText.includes('window.__DRIPX_PROCESSED_PRODUCT_FILE=file') && !uploadUi.includes('new DataTransfer()'), 'mobile-safe direct processed File staging without input mutation'],
   [uploadUi.includes("original=input?.files?.[0]") && uploadUi.includes('processed.productId!==window.__DRIPX_PENDING_PRODUCT_ID'), 'submit guard validates original input and staged output'],
   [authBootstrap.includes('sharedSupabaseClient=client') && authBootstrap.includes('return sharedSupabaseClient;'), 'single authenticated Supabase client across app panels'],
-  [zipReader.includes("type==='server'||type==='client'") && !zipReader.includes("type==='server'||type==='client'||type==='shared'"), 'only server/client Lua source is compiled'],
+  [zipReader.includes('const compileTargets=entries.filter') && zipReader.includes("type!=='shared'") && zipReader.includes('configLuaNames.has(entry.name)'), 'all non-shared Lua source including unlisted modules is compiled while config and shared remain untouched'],
   [zipReader.includes("scriptType==='shared'?'shared_lua'"), 'meta.xml-declared shared Lua classification'],
   [zipReader.includes("'dripx_shared_license.lua'") && zipReader.includes("'dripx-cfg.lua'") && zipReader.includes("type==='shared'"), 'shared scripts stay shared and DRIPX modules are reserved'],
   [patchSource.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD') && patchSource.includes("working.file('dripx_shared_license.lua',sharedBridge)"), 'original shared code is gated and the separate public bridge is generated'],
