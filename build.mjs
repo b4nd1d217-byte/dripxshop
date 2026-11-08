@@ -21,6 +21,8 @@ const css = gunzipSync(Buffer.from(cssB64, 'base64'));
 new Script(appText, { filename: 'dist/app.js' });
 new Script(await readFile('auth-bootstrap.js', 'utf8'), { filename: 'auth-bootstrap.js' });
 new Script(await readFile('dripx-enhancements.js', 'utf8'), { filename: 'dripx-enhancements.js' });
+const catalogManager = await readFile('dripx-catalog-manager.js', 'utf8');
+new Script(catalogManager, { filename: 'dripx-catalog-manager.js' });
 const accountPanel = await readFile('dripx-account-panel.js', 'utf8');
 const reviewsPanel = await readFile('dripx-reviews.js', 'utf8');
 new Script(accountPanel, { filename: 'dripx-account-panel.js' });
@@ -34,6 +36,8 @@ await copyFile('index.html', 'dist/index.html');
 await copyFile('config.js', 'dist/config.js');
 await copyFile('auth-bootstrap.js', 'dist/auth-bootstrap.js');
 await copyFile('dripx-enhancements.js', 'dist/dripx-enhancements.js');
+await copyFile('dripx-catalog-manager.js', 'dist/dripx-catalog-manager.js');
+await copyFile('dripx-catalog-manager.css', 'dist/dripx-catalog-manager.css');
 await copyFile('dripx-account-panel.js', 'dist/dripx-account-panel.js');
 await copyFile('dripx-account-panel.css', 'dist/dripx-account-panel.css');
 await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
@@ -47,7 +51,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -59,6 +63,9 @@ const requiredFeatures = [
   'dripx_admin_revoke_user_product',
   'dripx_admin_set_user_suspension',
   'dripx_admin_get_user_audit',
+  'dripx_admin_update_catalog_item',
+  'dripx_admin_set_catalog_status',
+  'dripx_admin_save_plan_resources',
   'dripx_claim_free_product',
   'dripx-validate-product-upload',
   'DRIPX_UPLOAD_FILE',
@@ -73,6 +80,8 @@ const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
 const uploadUi = await readFile('dripx-enhancements.js', 'utf8');
 const uploadCss = await readFile('dripx-enhancements.css', 'utf8');
+const catalogUi = await readFile('dripx-catalog-manager.js', 'utf8');
+const catalogCss = await readFile('dripx-catalog-manager.css', 'utf8');
 const authBootstrap = await readFile('auth-bootstrap.js', 'utf8');
 const uploadValidator = await readFile('supabase/functions/dripx-validate-product-upload/index.ts', 'utf8');
 const downloadFunction = await readFile('supabase/functions/dripx-license/index.ts', 'utf8');
@@ -153,7 +162,11 @@ const uploadChecks = [
   [patchSource.includes('DRIPX_ZIP_INVENTORY') && patchSource.includes('if(protectedSelection)await validateProtectedResourceZip(file)') && patchSource.includes('if(protectedSelection){') && patchSource.includes('await verifyResourceProductBeforePublish(product.id)'), 'only explicitly protected products use the strict MTA upload validator'],
   [downloadFunction.includes('if (product.protection_enabled !== true)') && downloadFunction.includes('new Response(sourceZip') && downloadFunction.includes('product_not_downloadable'), 'unprotected buyer downloads stream the original private ZIP after entitlement verification'],
   [zipReader.includes('SHADER_FILES_MISSING') && uploadUi.includes('No hay shaders'), 'missing shader files are visibly reported without blocking ZIP publication'],
-  [uploadCss.includes('.dx-zip-inspector') && uploadCss.includes('.dx-zip-inspect-row') && uploadCss.includes('.dx-zip-inspect-warning'), 'King-inspired dark archive inspector styles all inventory rows and warning states']
+  [uploadCss.includes('.dx-zip-inspector') && uploadCss.includes('.dx-zip-inspect-row') && uploadCss.includes('.dx-zip-inspect-warning'), 'King-inspired dark archive inspector styles all inventory rows and warning states'],
+  [catalogUi.includes('data-dxcm-menu') && catalogUi.includes('dripx_admin_set_catalog_status') && catalogUi.includes('dripx_admin_update_catalog_item'), 'plans and products use three-dot menus with real publish, hide and edit RPCs'],
+  [catalogUi.includes("p.category==='Productos'") && catalogUi.includes("p.category==='Planes'") && catalogUi.includes('data-dxcm-form'), 'separate Plans and Products administration lists'],
+  [catalogUi.includes('resource_ids') && catalogUi.includes('Los ZIP no se suben'), 'plan edit only assigns existing products and never creates ZIP files'],
+  [catalogCss.includes('.dxcm-more') && catalogCss.includes('.dxcm-menu') && catalogCss.includes('.dxcm-modal'), 'compact three-dot menu and premium edit modal styling']
 ];
 const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
 const categoryRouteEnd = uploadUi.indexOf('\n  document.addEventListener', categoryRouteStart);
