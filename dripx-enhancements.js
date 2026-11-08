@@ -585,9 +585,9 @@
       node.append(engine);
       const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
       if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function'||typeof actions.resume!=='function')throw new Error('El motor DRIPX no está conectado al formulario de Productos.');
-      const scan=result.files.filter(item=>['server_lua','client_lua'].includes(item.kind)).length;
-      const undeclaredLua=result.files.filter(item=>item.kind==='lua_other'&&/\.lua$/i.test(String(item.path||'')));
-      if(undeclaredLua.length)throw new Error('Hay '+undeclaredLua.length+' archivos Lua que no están declarados en meta.xml: '+undeclaredLua.slice(0,8).map(item=>item.path).join(', ')+'. Decláralos como server, client o shared antes de proteger; no se compilan archivos sin clasificación.');
+      const scan=result.files.filter(item=>['server','client'].includes(item.scriptType)&&/\.lua$/i.test(String(item.path||''))).length;
+      const undeclaredLua=result.files.filter(item=>/\.lua$/i.test(String(item.path||''))&&!['server','client','shared'].includes(item.scriptType));
+      if(undeclaredLua.length)throw new Error('Hay '+undeclaredLua.length+' archivos Lua que no están declarados en meta.xml: '+undeclaredLua.slice(0,8).map(item=>item.path).join(', ')+'. Decláralos como server, client o shared antes de proteger.');
       if(resume&&window.__DRIPX_PROTECTION_JOB?.started){
         update(1,'Reanudando trabajo de protección…','Continuando desde el último paso que el motor dejó completado.');
         await actions.resume();
