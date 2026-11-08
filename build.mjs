@@ -66,6 +66,7 @@ const requiredFeatures = [
   'dripx_admin_update_catalog_item',
   'dripx_admin_set_catalog_status',
   'dripx_admin_save_plan_resources',
+  'dripx_admin_create_plan',
   'dripx_claim_free_product',
   'dripx-validate-product-upload',
   'DRIPX_UPLOAD_FILE',
@@ -168,7 +169,10 @@ const uploadChecks = [
   [catalogUi.includes('resource_ids') && catalogUi.includes('Aquí no se suben ZIP ni se crean productos nuevos.'), 'plan edit only assigns existing products and never creates ZIP files'],
   [catalogCss.includes('.dxcm-more') && catalogCss.includes('.dxcm-menu') && catalogCss.includes('.dxcm-modal'), 'compact three-dot menu and premium edit modal styling'],
   [catalogUi.includes("db.storage.from('product-images').createSignedUrl") && catalogUi.includes('catalogImageUrl'), 'admin catalog cards resolve real uploaded product thumbnails'],
-  [patchSource.includes("const expectedCategory=type==='plan'?'Planes':'Productos'") && patchSource.includes('Los planes no admiten archivos ZIP'), 'product creation enforces separate categories and rejects ZIP on plans']
+  [patchSource.includes("const expectedCategory=type==='plan'?'Planes':'Productos'") && patchSource.includes('Los planes no admiten archivos ZIP'), 'product creation enforces separate categories and rejects ZIP on plans'],
+  [catalogUi.includes("db.rpc('dripx_admin_create_plan'") && catalogUi.includes('data-dxcm-section-action="create-plan"'), 'plans are created from the Plans menu through a secure no-ZIP RPC'],
+  [patchSource.includes('Producto descargable · ZIP · categoría Productos') && !appText.includes('<option value="plan">'), 'the downloadable product form cannot create plans'],
+  [catalogCss.includes('.dxcm-section-menu') && catalogUi.includes('data-dxcm-section-action="create-product"'), 'Plans and Products each have a compact create menu']
 ];
 const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
 const categoryRouteEnd = uploadUi.indexOf('\n  document.addEventListener', categoryRouteStart);
