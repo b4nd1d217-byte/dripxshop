@@ -3,7 +3,7 @@ const db=window.DRIPX_SUPABASE_CLIENT;
 window.__DRIPX_CATALOG_MANAGER_ACTIVE=true;
 if(!db)return;
 const ROOT='#dx-catalog-admin';
-let products=[],mappings=[],busy=false,loading=false;
+let products=[],mappings=[],categories=[],busy=false,loading=false;
 const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const notify=message=>{const t=$('#toast');if(t){t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}};
@@ -28,6 +28,7 @@ function row(p){
   '<div class="dxcm-price">'+money(p.price_usd)+'<small>USD</small></div>'+
   '<div class="dxcm-menu-wrap"><button type="button" class="dxcm-more" data-dxcm-menu="'+esc(p.id)+'" aria-label="Opciones de '+esc(p.title)+'">···</button>'+
   '<div class="dxcm-menu" data-dxcm-menu-panel="'+esc(p.id)+'" hidden>'+
+   (isPlan?'':'<button type="button" data-dxcm-action="inspect-zip" data-id="'+esc(p.id)+'" '+(!p.file_path?'disabled':'')+'>▣ Gestionar ZIP · Leer archivos</button>')+
    '<button type="button" data-dxcm-action="status" data-id="'+esc(p.id)+'" data-next="'+(p.status==='published'?'archived':'published')+'">'+(p.status==='published'?'◉ Ocultar':'✓ Publicar')+'</button>'+
    '<button type="button" data-dxcm-action="edit" data-id="'+esc(p.id)+'">✎ Editar configuración</button>'+
   '</div></div></article>';
@@ -50,12 +51,13 @@ async function load(){
   const {data:session,error:sessionError}=await db.auth.getSession();if(sessionError)throw sessionError;
   if(!session?.session?.user?.id)throw new Error('Inicia sesión con Discord para administrar el catálogo.');
   const admin=await db.rpc('dripx_is_admin');if(admin.error)throw admin.error;if(admin.data!==true)throw new Error('Tu cuenta no tiene permisos de administración.');
-  const [p,m]=await Promise.all([
-   db.from('dripx_products').select('id,title,description,price_usd,category,status,product_type,plan_code,billing_period,features,tagline,image_url,image_path,file_path,protection_enabled,sort_order').order('sort_order').order('created_at',{ascending:false}),
-   db.from('dripx_plan_resources').select('plan_product_id,resource_product_id')
+  const [p,m,categoryResult]=await Promise.all([
+   db.from('dripx_products').select('id,title,description,price_usd,category,store_category,status,product_type,plan_code,billing_period,features,tagline,image_url,image_path,video_url,video_path,file_path,protection_enabled,sort_order').order('sort_order').order('created_at',{ascending:false}),
+   db.from('dripx_plan_resources').select('plan_product_id,resource_product_id'),
+   db.from('dripx_categories').select('name,slug,active,sort_order').eq('active',true).order('sort_order',{ascending:true})
   ]);
-  if(p.error)throw p.error;if(m.error)throw m.error;
-  products=p.data||[];mappings=m.data||[];
+  if(p.error)throw p.error;if(m.error)throw m.error;if(categoryResult.error)throw categoryResult.error;
+  products=p.data||[];mappings=m.data||[];categories=categoryResult.data||[];
   await Promise.all(products.map(async item=>{
    if(item.image_url||!item.image_path)return;
    try{const signed=await db.storage.from('product-images').createSignedUrl(item.image_path,3600);if(!signed.error)item.catalogImageUrl=signed.data?.signedUrl||null;}
@@ -88,6 +90,25 @@ function modalOpen(item,creating=false){
    (options?'<div class="dxcm-resource-list">'+options+'</div>':'<div class="dxcm-empty compact"><strong>No hay productos listos para asignar</strong><p>Primero crea y publica los ZIP desde Productos.</p><a href="#admin/productos" data-dxcm-close>Volver al formulario de Productos</a></div>')+'</div>':'<div class="dxcm-product-note"><span>▣</span><div><strong>Archivo descargable</strong><p>El ZIP se gestiona desde el formulario de Productos; esta edición no reemplaza ni modifica el archivo almacenado.</p></div></div>')+
   '<footer><span data-dxcm-save-status>Los cambios se guardan directamente en Supabase.</span><button type="button" class="dxcm-cancel" data-dxcm-close>Cancelar</button><button type="submit" class="dxcm-save">Guardar cambios <span>→</span></button></footer></form>';
  title.textContent=creating?'Crear plan · sin ZIP':(isPlan?'Editar plan · ':'Editar producto · ')+item.title;
+ backdrop.hidden=false;
+}
+async function inspectZip(item){
+ if(!item?.file_path)throw new Error('Este producto no tiene un ZIP almacenado.');
+ if(typeof window.DRIPX_INSPECT_ZIP!=='function')throw new Error('El inspector ZIP no está disponible. Recarga la página y vuelve a intentarlo.');
+ const signed=await db.storage.from('product-files').createSignedUrl(item.file_path,120);
+ if(signed.error)throw signed.error;
+ const response=await fetch(signed.data.signedUrl);
+ if(!response.ok)throw new Error('No se pudo recuperar el ZIP privado ('+response.status+').');
+ const blob=await response.blob();
+ if(!blob.size||blob.size>50*1024*1024)throw new Error('El ZIP está vacío o supera el límite de inspección de 50 MB.');
+ const file=new File([blob],(String(item.title||'resource').replace(/[^a-z0-9_-]+/gi,'_')||'resource')+'.zip',{type:'application/zip'});
+ const scan=await window.DRIPX_INSPECT_ZIP(file);
+ if(!scan||!Array.isArray(scan.files))throw new Error('El inspector no devolvió un inventario válido.');
+ const body=$(ROOT+' [data-dxcm-body]'),title=$(ROOT+' #dxcm-modal-title'),backdrop=$(ROOT+' [data-dxcm-modal]');
+ if(!body||!title||!backdrop)throw new Error('No se encontró el panel de gestión ZIP.');
+ const rows=scan.files.map(file=>'<div class="dxcm-zip-file"><strong>'+esc(file.path||file.name||'Archivo')+'</strong><small>'+esc(file.kind||file.type||'Archivo')+' · '+Number(file.bytes||file.size||0).toLocaleString('es-DO')+' bytes</small></div>').join('');
+ body.innerHTML='<div class="dxcm-zip-manager"><div class="dxcm-zip-summary"><strong>'+esc(item.title)+'</strong><span>'+scan.files.length+' archivos detectados</span><span>'+(scan.server?.length||0)+' server · '+(scan.client?.length||0)+' client</span></div><p>Inventario del ZIP privado. Los archivos se leen sin ejecutarse.</p><div class="dxcm-zip-files">'+(rows||'<p>El ZIP no contiene archivos.</p>')+'</div><footer><span>ZIP original conservado en Supabase Storage.</span><button type="button" class="dxcm-cancel" data-dxcm-close>Cerrar</button></footer></div>';
+ title.textContent='Gestión del ZIP · '+item.title;
  backdrop.hidden=false;
 }
 async function setStatus(id,status,button){
@@ -142,6 +163,7 @@ document.addEventListener('click',async e=>{
  const sectionMenu=e.target.closest('[data-dxcm-section-menu]');if(sectionMenu){e.preventDefault();e.stopImmediatePropagation();const id=sectionMenu.dataset.dxcmSectionMenu;document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);const menu=$('[data-dxcm-section-menu-panel="'+CSS.escape(id)+'"]');if(menu)menu.hidden=false;return;}
  const sectionAction=e.target.closest('[data-dxcm-section-action]');if(sectionAction){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);if(sectionAction.dataset.dxcmSectionAction==='create-plan'){modalOpen({id:'',product_type:'plan',title:'',description:'',price_usd:'0.00',tagline:'',image_url:'',plan_code:'',billing_period:'monthly',features:[]},true);return;}if(sectionAction.dataset.dxcmSectionAction==='create-product'){const form=$('#product-form');if(!form){notify('No se encontró el formulario de creación de Productos.');return;}const type=form.querySelector('select[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}const category=form.querySelector('select[name="category"],select[id*="categor" i]');if(category){const opt=[...category.options].find(o=>normalize(o.value)==='productos');if(opt)category.value=opt.value;}form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="title"]')?.focus({preventScroll:true});return;}}
  const action=e.target.closest('[data-dxcm-action]');if(action){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);
+  if(action.dataset.dxcmAction==='inspect-zip'){const item=products.find(p=>String(p.id)===String(action.dataset.id));if(item){try{await inspectZip(item);}catch(error){notify(error.message||'No se pudo inspeccionar el ZIP.');}}return;}
   if(action.dataset.dxcmAction==='status'){const item=products.find(p=>String(p.id)===String(action.dataset.id));const next=action.dataset.next;
    if(next==='archived'&&!confirm('¿Ocultar "'+(item?.title||'este elemento')+'" del catálogo público? Los registros y accesos existentes se conservarán.'))return;
    await setStatus(action.dataset.id,next,action);
