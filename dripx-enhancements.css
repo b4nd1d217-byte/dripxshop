@@ -307,3 +307,14 @@
 .dx-protection-dialog>footer .dx-protection-finish{border-color:rgba(0,199,255,.5);background:linear-gradient(110deg,#00bde9,#087fae);color:#03131d}
 .dx-protection-dialog>footer .dx-protection-retry{border-color:rgba(0,199,255,.35);color:#8deaff}
 @media(max-width:520px){.dx-protection-overlay{padding:9px;align-items:end}.dx-protection-dialog{max-height:92dvh;border-radius:17px;padding:15px}.dx-protection-steps li{grid-template-columns:30px minmax(0,1fr);gap:8px}.dx-protection-steps li>b{grid-column:2}.dx-protection-dialog>footer button{flex:1}}
+
+
+/* ZIP selection recovery — never let a stale/hidden parent conceal the selected file card. */
+#app #product-form #product-zip-preview:not([hidden]){display:grid!important;visibility:visible!important;opacity:1!important;position:relative;z-index:1;min-width:0;width:100%;margin:14px 0;overflow:visible}
+#app #product-form #product-zip-preview.hidden{display:grid!important}
+#app #product-form #product-zip-upload-state:not([hidden]){display:block!important;visibility:visible!important;min-height:34px;margin:8px 0 2px;padding:9px 11px;border-radius:9px;font-size:11px}
+#app #product-form #resource-file-field{display:block;min-width:0}
+#app #product-form #resource-file-field.hidden{display:none!important}
+#app #product-form .dx-zip-selection-card{width:100%;min-width:0;box-sizing:border-box}
+#app #product-form .dx-zip-selection-name{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+#app #product-form .dx-zip-start{touch-action:manipulation}
