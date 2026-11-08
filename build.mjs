@@ -165,7 +165,7 @@ const uploadChecks = [
   [uploadCss.includes('.dx-zip-inspector') && uploadCss.includes('.dx-zip-inspect-row') && uploadCss.includes('.dx-zip-inspect-warning'), 'King-inspired dark archive inspector styles all inventory rows and warning states'],
   [catalogUi.includes('data-dxcm-menu') && catalogUi.includes('dripx_admin_set_catalog_status') && catalogUi.includes('dripx_admin_update_catalog_item'), 'plans and products use three-dot menus with real publish, hide and edit RPCs'],
   [catalogUi.includes("p.category==='Productos'") && catalogUi.includes("p.category==='Planes'") && catalogUi.includes('data-dxcm-form'), 'separate Plans and Products administration lists'],
-  [catalogUi.includes('resource_ids') && catalogUi.includes('Los ZIP no se suben'), 'plan edit only assigns existing products and never creates ZIP files'],
+  [catalogUi.includes('resource_ids') && catalogUi.includes('Aquí no se suben ZIP ni se crean productos nuevos.'), 'plan edit only assigns existing products and never creates ZIP files'],
   [catalogCss.includes('.dxcm-more') && catalogCss.includes('.dxcm-menu') && catalogCss.includes('.dxcm-modal'), 'compact three-dot menu and premium edit modal styling']
 ];
 const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
