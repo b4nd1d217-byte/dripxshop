@@ -401,7 +401,6 @@ async function downloadOwnedProduct(req: Request) {
   const tags = metaText.match(/<script\b[^>]*>/gi) || [];
   if (!tags.length) return json(409, { error: "resource_scripts_missing" });
   const scriptRefs = new Set<string>();
-  const sharedBridges: string[] = [];
   const serverLicenseGuards: string[] = [];
   const serverLicenseConfigs: string[] = [];
   let compiledCount = 0, serverCompiledCount = 0, sharedCompiledCount = 0;
@@ -418,11 +417,10 @@ async function downloadOwnedProduct(req: Request) {
     const entry = available.get(key);
     if (!entry) return json(422, { error: "resource_meta_script_missing", path: src });
     const lower = src.toLowerCase();
-    if (type === "shared" && lower === "dripx_shared_license.lua") {
-      sharedBridges.push(src);
-    } else if (type === "shared" && lower.endsWith(".lua")) {
+    if (type === "shared" && lower.endsWith(".lua")) {
       const sharedSource = await entry.async("string");
-      if (sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")) {
+      if (sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
+          || sharedSource.includes("DRIPX_SHARED_LICENSE_GATED_PAYLOAD")) {
         return json(409, { error: "resource_shared_source_contains_private_marker", path: src });
       }
     } else if (type === "shared" && lower.endsWith(".luac")) {
@@ -447,19 +445,11 @@ async function downloadOwnedProduct(req: Request) {
     }
   }
 
-  if (sharedBridges.length !== 1) return json(409, { error: "resource_shared_license_bridge_missing" });
   if (serverLicenseGuards.length !== 1) {
     return json(409, { error: "resource_server_license_guard_missing" });
   }
   if (serverLicenseConfigs.length !== 1) {
     return json(409, { error: "resource_server_license_config_missing" });
-  }
-  const sharedBridge = zip.file(sharedBridges[0]);
-  if (!sharedBridge) return json(409, { error: "resource_shared_license_bridge_missing" });
-  const sharedText = await sharedBridge.async("string");
-  if (sharedText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-      || !sharedText.includes("DRIPX_LICENSE_EVENT_NAME")) {
-    return json(409, { error: "resource_shared_license_bridge_invalid" });
   }
 
   // The delivered ZIP is a single generic release shared by all authorized buyers.
