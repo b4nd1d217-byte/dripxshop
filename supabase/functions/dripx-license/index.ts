@@ -149,48 +149,6 @@ async function verifyExpandedZip(bytes: Uint8Array) {
   });
 }
 
-async function compileMtaLicenseGuard(source: string, filename = "dripx_server_license.lua"): Promise<Uint8Array> {
-  if (!source.trim() || new TextEncoder().encode(source).byteLength > 256 * 1024) {
-    throw new Error("license_guard_source_invalid");
-  }
-  const form = new FormData();
-  form.set("compile", "1");
-  form.set("debug", "0");
-  form.set("obfuscate", "3");
-  form.set("Submit", "Submit");
-  form.set("luasource", new Blob([source], { type: "text/plain" }), filename);
-  let lastError = "mta_compiler_unavailable";
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const response = await fetch("https://luac.mtasa.com/index.php", {
-        method: "POST",
-        body: form,
-        headers: { "user-agent": "DRIP-X-SHOP-License-Compiler/1.0" },
-        signal: AbortSignal.timeout(14000),
-      });
-      if (!response.ok) {
-        lastError = "mta_compiler_http_" + response.status;
-        if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 3) throw new Error(lastError);
-      } else {
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        const prefix = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 240))).trim();
-        if (prefix.startsWith("ERROR")) throw new Error("mta_compiler_rejected_license_guard");
-        if (!isMtaBytecode(bytes)) {
-          lastError = bytes.length ? "mta_license_guard_bytecode_invalid" : "mta_license_guard_empty";
-          if (attempt === 3) throw new Error(lastError);
-        } else return bytes;
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error.message.slice(0, 160) : "mta_compiler_network_error";
-      if (attempt === 3 || !/mta_compiler_http_(429|500|502|503|504)|timeout|network|fetch/i.test(lastError)) {
-        throw new Error("license_guard_compile_failed:" + lastError);
-      }
-    }
-    await new Promise(resolve => setTimeout(resolve, 350 * attempt));
-  }
-  throw new Error("license_guard_compile_failed:" + lastError);
-}
-
 async function downloadOwnedProduct(req: Request) {
   const base = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "");
   const anon = publicKey(), service = serviceKey();
@@ -358,13 +316,8 @@ async function downloadOwnedProduct(req: Request) {
   }
 
   const accountLicense = await callRpc("dripx_internal_get_account_license", { p_user_id: user.id });
-  const licenseKey = String(accountLicense?.license_key || "");
-  const aclAccount = String(accountLicense?.authorized_account_name || "");
-  if (accountLicense?.status !== "active" || !/^DRIPX-[A-F0-9]{48}$/.test(licenseKey)) {
+  if (accountLicense?.status !== "active") {
     return json(409, { error: "account_license_not_ready" });
-  }
-  if (aclAccount && !/^[A-Za-z0-9_.-]{1,64}$/.test(aclAccount)) {
-    return json(409, { error: "acl_account_name_invalid" });
   }
 
   let zip: JSZip;
@@ -441,7 +394,7 @@ async function downloadOwnedProduct(req: Request) {
   if (!tags.length) return json(409, { error: "resource_scripts_missing" });
   const scriptRefs = new Set<string>();
   const sharedBridges: string[] = [];
-  const serverLicenseTemplates: string[] = [];
+  const serverLicenseGuards: string[] = [];
   const serverLicenseConfigs: string[] = [];
   let compiledCount = 0, serverCompiledCount = 0, sharedCompiledCount = 0;
   for (const tag of tags) {
@@ -472,8 +425,10 @@ async function downloadOwnedProduct(req: Request) {
     }
     if (type === "server" && lower === "dripx-cfg.lua") {
       serverLicenseConfigs.push(src);
-    } else if (type === "server" && lower === "dripx_server_license.lua") {
-      serverLicenseTemplates.push(src);
+    } else if (type === "server" && lower === "dripx_server_license.luac") {
+      const guardBytes = await entry.async("uint8array");
+      if (!isMtaBytecode(guardBytes)) return json(422, { error: "resource_server_license_guard_bytecode_invalid" });
+      serverLicenseGuards.push(src);
     } else if ((type === "server" || type === "client") && lower.endsWith(".lua")) {
       return json(409, { error: "resource_uncompiled_lua_present", path: src });
     } else if ((type === "server" || type === "client") && lower.endsWith(".luac")) {
@@ -485,8 +440,8 @@ async function downloadOwnedProduct(req: Request) {
   }
 
   if (sharedBridges.length !== 1) return json(409, { error: "resource_shared_license_bridge_missing" });
-  if (serverLicenseTemplates.length !== 1) {
-    return json(409, { error: "resource_server_license_template_missing" });
+  if (serverLicenseGuards.length !== 1) {
+    return json(409, { error: "resource_server_license_guard_missing" });
   }
   if (serverLicenseConfigs.length !== 1) {
     return json(409, { error: "resource_server_license_config_missing" });
@@ -500,85 +455,51 @@ async function downloadOwnedProduct(req: Request) {
   if (!sharedBridge) return json(409, { error: "resource_shared_license_bridge_missing" });
   const sharedText = await sharedBridge.async("string");
   if (sharedText.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-      || !sharedText.includes("DRIPX_LICENSE_EVENT_NAME")
-      || sharedText.includes(licenseKey)) {
+      || !sharedText.includes("DRIPX_LICENSE_EVENT_NAME")) {
     return json(409, { error: "resource_shared_license_bridge_invalid" });
   }
-  const guardPath = serverLicenseTemplates[0];
-  const guardEntry = zip.file(guardPath);
-  if (!guardEntry) return json(409, { error: "resource_server_license_template_missing" });
-  const guardSource = await guardEntry.async("string");
-  const placeholder = "DRIPX_LICENSE_KEY_PLACEHOLDER";
-  if (guardSource.includes(placeholder)
-      || !guardSource.includes("DRIPX_CFG_LICENSE_KEY")
-      || !guardSource.includes("DRIPX_CFG_PRODUCT_ID")) {
-    return json(409, { error: "resource_server_license_template_invalid" });
-  }
+
+  // The delivered ZIP is a single generic release shared by all authorized buyers.
+  // The buyer enters their own account key into the editable DRIPX-CFG.LUA on their MTA server.
   const configPath = serverLicenseConfigs[0];
   const configEntry = zip.file(configPath);
   if (!configEntry) return json(409, { error: "resource_server_license_config_missing" });
   const configSource = await configEntry.async("string");
+  const placeholder = "DRIPX_LICENSE_KEY_PLACEHOLDER";
   if (configSource.split(placeholder).length !== 2
       || !configSource.includes('DRIPX_CFG_LICENSE_KEY = "' + placeholder + '"')
       || !configSource.includes('DRIPX_CFG_PRODUCT_ID = "' + productId + '"')) {
     return json(409, { error: "resource_server_license_config_invalid" });
   }
-  const personalizedConfig = configSource.replace(placeholder, licenseKey);
-  if (personalizedConfig.split(licenseKey).length !== 2) {
-    return json(409, { error: "resource_server_license_config_personalization_invalid" });
+
+  const guardPath = serverLicenseGuards[0];
+  const guardEntry = zip.file(guardPath);
+  if (!guardEntry) return json(409, { error: "resource_server_license_guard_missing" });
+  const guardBytes = await guardEntry.async("uint8array");
+  if (!isMtaBytecode(guardBytes)) {
+    return json(422, { error: "resource_server_license_guard_bytecode_invalid" });
   }
-  // Only the in-memory buyer ZIP receives the private key; both private server modules become bytecode before delivery.
-  const personalizedSource = guardSource;
-  let compiledGuard: Uint8Array, compiledConfig: Uint8Array;
-  try {
-    compiledConfig = await compileMtaLicenseGuard(personalizedConfig, "DRIPX-CFG.LUA");
-    compiledGuard = await compileMtaLicenseGuard(personalizedSource, "dripx_server_license.lua");
-  } catch (error) {
-    console.error("[DRIPX] Personalized MTA server module compilation failed:", error instanceof Error ? error.message : "unknown");
-    return json(502, { error: "license_server_module_compilation_failed", reason: error instanceof Error ? error.message : "mta_compiler_unavailable" });
+
+  const configTagIndex = tags.findIndex(tag =>
+    xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === configPath.toLowerCase()
+  );
+  const guardTagIndex = tags.findIndex(tag =>
+    xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === guardPath.toLowerCase()
+  );
+  if (configTagIndex < 0 || guardTagIndex < 0 || configTagIndex >= guardTagIndex) {
+    return json(409, { error: "resource_server_license_config_load_order_invalid" });
   }
-  const compiledConfigPath = configPath.replace(/\.lua$/i, ".luac");
-  const compiledGuardPath = guardPath.replace(/\.lua$/i, ".luac");
-  if (compiledConfigPath === configPath || compiledGuardPath === guardPath || zip.file(compiledConfigPath) || zip.file(compiledGuardPath)) {
-    return json(409, { error: "resource_server_license_output_conflict" });
-  }
-  zip.file(compiledConfigPath, compiledConfig);
-  zip.file(compiledGuardPath, compiledGuard);
-  zip.remove(configPath);
-  zip.remove(guardPath);
-  let replacedGuardMetaRef = 0, replacedConfigMetaRef = 0;
-  const metaReplacement = metaText.replace(/<script\b[^>]*>/gi, tag => {
-    let src = xmlAttribute(tag, "src").trim();
-    if (src.startsWith("./")) src = src.slice(2);
-    if (src === guardPath) {
-      replacedGuardMetaRef++;
-      return tag.replace(/(\bsrc\s*=\s*)(["'])[^"']*\2/i, "$1\"" + compiledGuardPath + "\"");
-    }
-    if (src === configPath) {
-      replacedConfigMetaRef++;
-      return tag.replace(/(\bsrc\s*=\s*)(["'])[^"']*\2/i, "$1\"" + compiledConfigPath + "\"");
-    }
-    return tag;
-  });
-  if (replacedGuardMetaRef !== 1 || replacedConfigMetaRef !== 1) return json(409, { error: "resource_server_license_meta_update_failed" });
-  zip.file("meta.xml", metaReplacement);
-  const output = await zip.generateAsync({
-    type: "uint8array",
-    compression: "DEFLATE",
-    compressionOptions: { level: 6 },
-  });
-  if (output.byteLength > 220 * 1024 * 1024) {
-    return json(413, { error: "personalized_zip_output_too_large" });
-  }
+
   const safeName = String(product.title || "DRIPX-resource")
     .replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 64) || "DRIPX-resource";
-  return new Response(output, {
+  return new Response(sourceZip, {
     status: 200,
     headers: {
       ...CORS_HEADERS,
       "content-type": "application/zip",
-      "content-disposition": "attachment; filename=\"" + safeName + "-DRIPX.zip\"",
-      "content-length": String(output.byteLength),
+      "content-disposition": "attachment; filename=\"" + safeName + ".zip\"",
+      "content-length": String(sourceZip.byteLength),
+      "x-dripx-package": "generic-v1",
     },
   });
 }
