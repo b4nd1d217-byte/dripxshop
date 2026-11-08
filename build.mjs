@@ -171,7 +171,7 @@ const uploadChecks = [
   [catalogUi.includes("db.storage.from('product-images').createSignedUrl") && catalogUi.includes('catalogImageUrl'), 'admin catalog cards resolve real uploaded product thumbnails'],
   [patchSource.includes("const expectedCategory=type==='plan'?'Planes':'Productos'") && patchSource.includes('Los planes no admiten archivos ZIP'), 'product creation enforces separate categories and rejects ZIP on plans'],
   [catalogUi.includes("db.rpc('dripx_admin_create_plan'") && catalogUi.includes('data-dxcm-section-action="create-plan"'), 'plans are created from the Plans menu through a secure no-ZIP RPC'],
-  [patchSource.includes('Producto descargable · ZIP · categoría Productos') && !appText.includes('<option value="plan">'), 'the downloadable product form cannot create plans'],
+  [patchSource.includes('Producto descargable · ZIP · categoría Productos') && appText.includes('<select name="product_type"><option value="resource">Producto descargable · ZIP · categoría Productos</option></select>'), 'the downloadable product form cannot create plans'],
   [catalogCss.includes('.dxcm-section-menu') && catalogUi.includes('data-dxcm-section-action="create-product"'), 'Plans and Products each have a compact create menu']
 ];
 const categoryRouteStart = uploadUi.indexOf('function syncCategoryRouteFromHash(){');
