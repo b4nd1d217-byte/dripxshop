@@ -157,6 +157,10 @@ document.addEventListener('change',e=>{
 document.addEventListener('submit',async e=>{
  const form=e.target.closest('[data-dxcm-form]');if(!form)return;e.preventDefault();e.stopImmediatePropagation();await saveForm(form);
 },true);
+document.addEventListener('click',e=>{
+ if(!e.target.closest('.dxcm-menu-wrap'))document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);
+ if(!e.target.closest('.dxcm-section-menu-wrap'))document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);
+},false);
 function ensure(){
  const existing=$(ROOT);
  if(!activeView()){existing?.remove();document.querySelector('#dx-plan-resource-manager')?.remove();return;}
