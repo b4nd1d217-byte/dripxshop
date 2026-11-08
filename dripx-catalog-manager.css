@@ -32,3 +32,15 @@
 .dxcm-section-menu[hidden]{display:none!important}
 .dxcm-section-menu button{display:block;width:100%;padding:10px;border:0;border-radius:8px;background:transparent;color:#d9edf8;text-align:left;font-size:10px;cursor:pointer}
 .dxcm-section-menu button:hover{background:rgba(0,199,255,.1);color:#78defb}
+
+.dxcm-zip-manager{display:grid;gap:14px}
+.dxcm-zip-summary{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.dxcm-zip-summary strong{flex:1 1 100%;font-size:15px}
+.dxcm-zip-summary span{font-size:12px;color:#9bb4c5;background:rgba(0,199,255,.08);border:1px solid rgba(0,199,255,.18);padding:7px 10px;border-radius:9px}
+.dxcm-zip-files{display:grid;gap:7px;max-height:48vh;overflow:auto}
+.dxcm-zip-file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border:1px solid rgba(133,174,202,.14);border-radius:10px;background:rgba(7,18,29,.72)}
+.dxcm-zip-file strong{font-size:12px;overflow-wrap:anywhere;color:#e6f5ff}
+.dxcm-zip-file small{font-size:11px;color:#87a2b5;text-align:right}
+.dxcm-zip-manager footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:12px;border-top:1px solid rgba(133,174,202,.16)}
+.dxcm-zip-manager footer span{font-size:11px;color:#88a4b8}
+@media(max-width:560px){.dxcm-zip-file{grid-template-columns:1fr}.dxcm-zip-file small{text-align:left}.dxcm-zip-manager footer{align-items:flex-start;flex-direction:column}}
