@@ -491,7 +491,7 @@
         if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file){toast('El ZIP seleccionado cambió. Selecciónalo de nuevo.');return;}
         busy=true;
         button.disabled=true;
-        button.textContent=needsResume?'Reanudando protección…':'Proteger Lua (opcional)…';
+        button.textContent=needsResume?'Reanudando trabajo…':'Trabajando · protegiendo y compilando…';
         lockProductSubmit(form,true);
         const dialog=createProtectionDialog(file);
         let outcome;
@@ -538,7 +538,7 @@
         (warnings?'<div class="dx-zip-inspector-warnings">'+warnings+'</div>':'<div class="dx-zip-inspector-clean">ZIP legible. Se muestran todos los archivos. No se requiere compilación para publicar.</div>')+
         '<div class="dx-zip-inspector-files-head"><strong>Contenido completo del ZIP</strong><span>'+scan.files.length+' elementos</span></div>'+
         '<div class="dx-zip-inspector-files">'+(rows||'<div class="dx-zip-inspector-empty">El ZIP está vacío. No hay archivos que mostrar.</div>')+'</div>'+
-        '<div class="dx-zip-inspector-actions"><button type="button" class="dx-zip-start" data-dripx-start-protection>Proteger / compilar Lua (opcional)</button><p>La publicación guardará el ZIP original. Proteger es una acción separada y solo debe usarse cuando quieras compilar scripts MTA.</p></div>'+
+        '<div class="dx-zip-inspector-actions"><button type="button" class="dx-zip-start" data-dripx-start-protection>Trabajar · Proteger y compilar Lua</button><p>Al pulsar Trabajar se inyecta la validación de licencia, se conserva el shared como shared y se compilan los Lua no-shared. La publicación solo continúa si el ZIP protegido supera las verificaciones.</p></div>'+
       '</div>';
       node.querySelectorAll('.dx-zip-inspector-file-name').forEach(el=>{el.setAttribute('title',el.textContent||'');});
       bindProtectionButton(node.querySelector('[data-dripx-start-protection]'));
