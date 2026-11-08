@@ -453,6 +453,12 @@ export async function patchApp(source) {
   }
 
 
+  // Enforce the plans-only storefront even if the upstream admin template changes whitespace.
+  app = app.replace(/const tabs=\['pedidos','tickets','resenas','productos','categorias','usuarios','ajustes'\]/g,
+    "const tabs=['pedidos','tickets','resenas','productos','usuarios','ajustes']");
+  once('<select name="product_type"><option value="resource">Producto descargable</option><option value="plan">Plan de protección</option></select>',
+       '<select name="product_type"><option value="plan">Plan de acceso</option><option value="resource">Producto interno para asignar a planes</option></select>',
+       'plan is the default product type');
   const protectionRequired = [
     'DRIPX_LICENSE_KEY_PLACEHOLDER', 'DRIPX_PRODUCT_ID:', 'DRIPX-CFG.LUA', 'DRIPX_CFG_LICENSE_KEY', 'dripx_server_license.lua', 'DRIPX_LICENSE_EVENT_NAME', 'dripx:license:clientReady',
     "window.DRIPX_PRODUCT_PROTECTION_ACTIONS",
