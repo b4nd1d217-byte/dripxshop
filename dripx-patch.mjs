@@ -313,7 +313,7 @@ export async function patchApp(source) {
     const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
     if(protect)protect.disabled=true;if(compile)compile.disabled=false;if(download)download.disabled=true;
     const status=document.querySelector('#zip-status');if(status)status.textContent='Protección integrada · '+serverNames.length+' server y '+clientNames.length+' client preparados para compilar a LUAC · '+sharedNames.length+' shared conservados como shared · clave reservada al servidor.';
-    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,protectedSharedFiles:sharedNames.length,serverLicenseTemplate:guardName};
+    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,protectedSharedFiles:sharedNames.length,serverLicenseTemplate:guardName,sharedBridge:true};
   }
   async function compileZip(){
     const b=state.zipBuild;
