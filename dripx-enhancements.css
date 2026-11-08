@@ -546,3 +546,9 @@
  .dx-plan-assign-footer{align-items:stretch;flex-direction:column}
  .dx-plan-assign-footer .btn{justify-content:center;width:100%}
 }
+
+/* Dedicated storefront category selector for downloadable product creation */
+#product-form .dx-product-store-category-field{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:14px;border:1px solid rgba(0,199,255,.22);border-radius:14px;background:rgba(0,199,255,.045)}
+#product-form .dx-product-store-category-field>span{font-weight:700;color:#e8f8ff}
+#product-form .dx-product-store-category-field select{width:100%;min-height:44px;border:1px solid rgba(0,199,255,.28);border-radius:10px;background:#081522;color:#eaf7ff;padding:10px 12px}
+#product-form .dx-product-store-category-field small{color:#8fa8ba;line-height:1.45}
