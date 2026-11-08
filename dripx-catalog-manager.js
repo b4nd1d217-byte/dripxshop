@@ -108,7 +108,7 @@ async function inspectZip(item){
  const body=$(ROOT+' [data-dxcm-body]'),title=$(ROOT+' #dxcm-modal-title'),backdrop=$(ROOT+' [data-dxcm-modal]');
  if(!body||!title||!backdrop)throw new Error('No se encontró el panel de gestión ZIP.');
  const rows=scan.files.map(file=>'<div class="dxcm-zip-file"><strong>'+esc(file.path||file.name||'Archivo')+'</strong><small>'+esc(file.kind||file.type||'Archivo')+' · '+Number(file.bytes||file.size||0).toLocaleString('es-DO')+' bytes</small></div>').join('');
- body.innerHTML='<div class="dxcm-zip-manager"><div class="dxcm-zip-summary"><strong>'+esc(item.title)+'</strong><span>'+scan.files.length+' archivos detectados</span><span>'+(scan.server?.length||0)+' server · '+(scan.client?.length||0)+' client</span></div><p>Inventario del ZIP privado. Los archivos se leen sin ejecutarse.</p><div class="dxcm-zip-files">'+(rows||'<p>El ZIP no contiene archivos.</p>')+'</div><footer><span>ZIP original conservado en Supabase Storage.</span><button type="button" class="dxcm-cancel" data-dxcm-close>Cerrar</button></footer></div>';
+ body.innerHTML='<div class="dxcm-zip-manager"><div class="dxcm-zip-summary"><strong>'+esc(item.title)+'</strong><span>'+scan.files.length+' archivos detectados</span><span>'+(scan.server?.length||0)+' server · '+(scan.client?.length||0)+' client</span></div><p>Inventario del ZIP privado. Los archivos se leen sin ejecutarse.</p><div class="dxcm-zip-files">'+(rows||'<p>El ZIP no contiene archivos.</p>')+'</div><footer><span>ZIP original conservado en Supabase Storage.</span><button type="button" class="dxcm-cancel" data-dxcm-close>Cerrar</button><button type="button" class="dxcm-save" data-dxcm-replace-zip data-id="'+esc(item.id)+'">Reemplazar ZIP <span>→</span></button></footer></div>';
  title.textContent='Gestión del ZIP · '+item.title;
  backdrop.hidden=false;
 }
@@ -168,11 +168,27 @@ async function saveForm(form){
  finally{busy=false;if(button)button.disabled=false;}
 }
 document.addEventListener('click',async e=>{
+ const replaceZip=e.target.closest('[data-dxcm-replace-zip]');
+ if(replaceZip){
+  e.preventDefault();e.stopImmediatePropagation();
+  const item=products.find(p=>String(p.id)===String(replaceZip.dataset.id)),form=$('#product-form');
+  if(!item||!form){notify('No se encontró el producto o el formulario de carga.');return;}
+  window.__DRIPX_REPLACE_PRODUCT_ID=item.id;
+  const set=(name,value)=>{const input=form.querySelector('[name="'+name+'"]');if(input){input.value=value??'';input.dispatchEvent(new Event('change',{bubbles:true}));}};
+  const type=form.querySelector('[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}
+  set('title',item.title);set('description',item.description);set('price_usd',item.price_usd);set('category','Productos');set('image_url',item.image_url);set('video_url',item.video_url);set('store_category',item.store_category||'scripts-mta');
+  const zipInput=form.querySelector('input[name="file"]');if(zipInput)zipInput.value='';
+  const modal=$(ROOT+' [data-dxcm-modal]');if(modal)modal.hidden=true;
+  form.scrollIntoView({behavior:'smooth',block:'center'});
+  form.querySelector('input[name="file"]')?.focus({preventScroll:true});
+  notify('Modo reemplazo activado. Selecciona el ZIP nuevo, pulsa Trabajar y guarda para actualizar este mismo producto sin cambiar su ID ni sus licencias.');
+  return;
+ }
  const reload=e.target.closest('[data-dxcm-reload]');if(reload){e.preventDefault();await load();return;}
  const close=e.target.closest('[data-dxcm-close]');if(close){const m=$(ROOT+' [data-dxcm-modal]');if(m)m.hidden=true;return;}
  const more=e.target.closest('[data-dxcm-menu]');if(more){e.preventDefault();e.stopImmediatePropagation();const id=more.dataset.dxcmMenu;document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);const panel=$('[data-dxcm-menu-panel="'+CSS.escape(id)+'"]');if(panel)panel.hidden=false;return;}
  const sectionMenu=e.target.closest('[data-dxcm-section-menu]');if(sectionMenu){e.preventDefault();e.stopImmediatePropagation();const id=sectionMenu.dataset.dxcmSectionMenu;document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);const menu=$('[data-dxcm-section-menu-panel="'+CSS.escape(id)+'"]');if(menu)menu.hidden=false;return;}
- const sectionAction=e.target.closest('[data-dxcm-section-action]');if(sectionAction){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);if(sectionAction.dataset.dxcmSectionAction==='create-plan'){modalOpen({id:'',product_type:'plan',title:'',description:'',price_usd:'0.00',tagline:'',image_url:'',plan_code:'',billing_period:'monthly',features:[]},true);return;}if(sectionAction.dataset.dxcmSectionAction==='create-product'){const form=$('#product-form');if(!form){notify('No se encontró el formulario de creación de Productos.');return;}const type=form.querySelector('select[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}const category=form.querySelector('select[name="category"],select[id*="categor" i]');if(category){const opt=[...category.options].find(o=>normalize(o.value)==='productos');if(opt)category.value=opt.value;}form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="title"]')?.focus({preventScroll:true});return;}}
+ const sectionAction=e.target.closest('[data-dxcm-section-action]');if(sectionAction){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);if(sectionAction.dataset.dxcmSectionAction==='create-plan'){modalOpen({id:'',product_type:'plan',title:'',description:'',price_usd:'0.00',tagline:'',image_url:'',plan_code:'',billing_period:'monthly',features:[]},true);return;}if(sectionAction.dataset.dxcmSectionAction==='create-product'){window.__DRIPX_REPLACE_PRODUCT_ID=null;const form=$('#product-form');if(!form){notify('No se encontró el formulario de creación de Productos.');return;}const type=form.querySelector('select[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}const category=form.querySelector('select[name="category"],select[id*="categor" i]');if(category){const opt=[...category.options].find(o=>normalize(o.value)==='productos');if(opt)category.value=opt.value;}form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="title"]')?.focus({preventScroll:true});return;}}
  const action=e.target.closest('[data-dxcm-action]');if(action){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);
   if(action.dataset.dxcmAction==='inspect-zip'){const item=products.find(p=>String(p.id)===String(action.dataset.id));if(item){try{await inspectZip(item);}catch(error){notify(error.message||'No se pudo inspeccionar el ZIP.');}}return;}
   if(action.dataset.dxcmAction==='status'){const item=products.find(p=>String(p.id)===String(action.dataset.id));const next=action.dataset.next;
