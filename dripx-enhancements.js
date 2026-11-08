@@ -895,13 +895,8 @@
     }catch{}
   }
   function categoryViewActive(){
-    const hash=String(location.hash||'').toLowerCase();
-    let saved=false;
-    try{saved=window.sessionStorage?.getItem('dripx.admin.tab')==='categorias';}catch{}
-    return /^#admin\/categorias?(?:$|[/?])/.test(hash)
-      || /(?:[?&])tab=categorias?(?:&|$)/.test(hash)
-      || window.__DRIPX_CATEGORY_TAB_ACTIVE===true
-      || saved;
+    // La administración de categorías queda deshabilitada: el catálogo opera únicamente con Planes.
+    return false;
   }
   function categoryIconMarkup(value){
     const key=String(value||'package').toLowerCase();
@@ -1230,8 +1225,39 @@
     scheduleCategoryManager(false);
   }
 
+  function adminProductsTabIsActive(){
+    if(/^#admin\/productos(?:$|[/?])/i.test(String(location.hash||'')))return true;
+    if(!isAdminRoute())return false;
+    if(window.__DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true)return true;
+    try{if(window.sessionStorage?.getItem('dripx.admin.tab')==='productos')return true;}catch{}
+    const nodes=[...document.querySelectorAll('#app button.active,#app a.active,#app button.is-active,#app a.is-active,#app [role="tab"][aria-selected="true"],#app [data-admin-tab].active,#app [data-tab].active,#app a[aria-current="page"]')];
+    return nodes.some(node=>/productos?|planes/i.test([node.getAttribute('data-admin-tab'),node.getAttribute('data-tab'),node.getAttribute('aria-label'),node.textContent].filter(Boolean).join(' ')));
+  }
   function isAdminProductsRoute(){
-    return /^#admin\/productos(?:$|[/?])/i.test(String(location.hash||''));
+    return /^#admin\/productos(?:$|[/?])/i.test(String(location.hash||''))||(isAdminRoute()&&adminProductsTabIsActive());
+  }
+  function installAdminProductsTabTracker(){
+    if(window.__DRIPX_ADMIN_PRODUCTS_TAB_TRACKER)return;
+    window.__DRIPX_ADMIN_PRODUCTS_TAB_TRACKER=true;
+    const setActive=(active)=>{
+      window.__DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=!!active;
+      try{if(active)window.sessionStorage?.setItem('dripx.admin.tab','productos');else window.sessionStorage?.removeItem('dripx.admin.tab');}catch{}
+      if(active){schedulePlanResourceManager();scheduleUserPlanManager();}
+      else{document.querySelector('#dx-plan-resource-manager')?.remove();document.querySelector('#dx-user-plan-manager')?.remove();}
+    };
+    document.addEventListener('click',event=>{
+      if(!isAdminRoute())return;
+      const control=event.target.closest('#app button,#app a,#app [role="tab"]');
+      if(!control||control.closest('#dx-plan-resource-manager,#dx-user-plan-manager'))return;
+      const label=[control.getAttribute('data-admin-tab'),control.getAttribute('data-admin-route'),control.getAttribute('data-tab'),control.getAttribute('data-route'),control.getAttribute('aria-label'),control.textContent,control.getAttribute('href')].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if(/productos?|planes/.test(label))setActive(true);
+      else if(/pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label))setActive(false);
+    },true);
+    window.addEventListener('hashchange',()=>{
+      if(!/^#admin\/?$/i.test(String(location.hash||''))&&!/^#admin\/(?:productos|planes)(?:$|[/?])/i.test(String(location.hash||'')))setActive(false);
+    });
+    if(/^#admin\/(?:productos|planes)(?:$|[/?])/i.test(String(location.hash||'')))setActive(true);
+    else if(/^#admin\/?$/i.test(String(location.hash||''))&&adminProductsTabIsActive())setActive(true);
   }
   let planResourceTimer=0,planResourceLoading=false;
   function schedulePlanResourceManager(){
@@ -1705,7 +1731,7 @@
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
+    syncCategoryOptions(true);markAdminView();installAdminProductsTabTracker();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
