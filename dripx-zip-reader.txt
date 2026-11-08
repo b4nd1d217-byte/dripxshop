@@ -288,3 +288,151 @@
     build.licenseInjected=true;
     return {server_license_template:true,shared_bridge:true,compiled_shared_count:(build.shared||[]).length,product_id:build.productId};
   };
+
+  // Independent, non-destructive inventory. This does not invent or inject meta.xml
+  // and does not require MTA scripts, shaders, or compiler-compatible Lua.
+  window.DRIPX_INSPECT_ZIP = async function inspectOriginalZip(file) {
+    const LIMITS = { compressed: 50_000_000, files: 3000, entries: 6000, entry: 100 * 1024 * 1024, expanded: 200 * 1024 * 1024, meta: 2 * 1024 * 1024 };
+    if (!(file instanceof File) || !/\.zip$/i.test(String(file.name || "")) || !file.size) {
+      throw new Error("Selecciona un archivo .zip con contenido.");
+    }
+    if (file.size > LIMITS.compressed) throw new Error("El ZIP supera el límite de 50 MB de almacenamiento.");
+    if (!window.JSZip) throw new Error("No se pudo cargar JSZip para leer el archivo.");
+    const archive = await JSZip.loadAsync(file, { checkCRC32: true, createFolders: false });
+    const all = Object.values(archive.files || {});
+    if (all.length > LIMITS.entries) throw new Error("El ZIP contiene demasiadas entradas.");
+    const entries = all.filter(entry => !entry.dir);
+    if (entries.length > LIMITS.files) throw new Error("El ZIP supera el límite de 3.000 archivos.");
+    const seen = new Set();
+    let expanded = 0;
+    const files = [];
+    let metaEntry = null;
+    const shaderExtensions = new Set(["fx", "hlsl", "glsl"]);
+    const configExtensions = new Set(["cfg", "ini", "conf", "json", "xml", "yaml", "yml", "toml", "properties"]);
+    for (const entry of entries) {
+      const info = entry;
+      const original = String(info.unsafeOriginalName ?? entry.name ?? "");
+      let path = original.replace(/^(?:\.\/)+/, "");
+      if (!path || path.length > 1024 || path.startsWith("/") || path.includes("\\") ||
+          /^[A-Za-z]:/.test(path) || /[\u0000-\u001f\u007f]/.test(path) ||
+          path.split("/").some(part => !part || part === "." || part === ".." || part.length > 255)) {
+        throw new Error("El ZIP contiene una ruta insegura o no compatible: " + original);
+      }
+      path = path.normalize("NFC");
+      if (original !== entry.name && original.replace(/^(?:\.\/)+/, "") !== entry.name) {
+        throw new Error("El ZIP contiene nombres ambiguos o alterados: " + original);
+      }
+      const key = path.toLowerCase();
+      if (seen.has(key)) throw new Error("El ZIP contiene archivos duplicados: " + path);
+      seen.add(key);
+      const modeRaw = info.unixPermissions;
+      const mode = typeof modeRaw === "string" ? parseInt(modeRaw, 8) : Number(modeRaw || 0);
+      if (Number.isFinite(mode) && (mode & 0o170000) === 0o120000) {
+        throw new Error("El ZIP contiene un enlace simbólico no permitido: " + path);
+      }
+      const bytes = Number(entry._data?.uncompressedSize ?? entry._data?.length ?? 0);
+      if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > LIMITS.entry) {
+        throw new Error("El tamaño indicado para " + path + " no es válido.");
+      }
+      expanded += bytes;
+      if (!Number.isSafeInteger(expanded) || expanded > LIMITS.expanded) {
+        throw new Error("El ZIP supera 200 MB descomprimidos.");
+      }
+      const base = path.split("/").pop() || "";
+      const ext = (base.includes(".") ? base.split(".").pop() : "").toLowerCase();
+      let kind = "file";
+      if (base.toLowerCase() === "meta.xml") {
+        kind = "meta";
+        if (!metaEntry) metaEntry = { entry, path, bytes };
+      } else if (shaderExtensions.has(ext)) {
+        kind = "shader";
+      } else if (ext === "lua" || ext === "luac") {
+        kind = ext === "luac" ? "compiled_lua" : "lua";
+      } else if (configExtensions.has(ext) ||
+          /^(config|settings|options|language|locale)(?:[._-].*)?\.lua$/i.test(base) ||
+          /(^|\/)(config|configs|settings)(\/|$)/i.test(path)) {
+        kind = "config";
+      }
+      files.push({ path, bytes, extension: ext, kind });
+    }
+    // JSZip's CRC option verifies entries during load; force a content read as a
+    // second guard so corrupt archives fail, while valid non-MTA ZIPs remain valid.
+    for (const entry of entries) {
+      const bytes = await entry.async("uint8array");
+      if (!(bytes instanceof Uint8Array)) throw new Error("No se pudo leer el archivo " + entry.name + ".");
+    }
+    const metaCandidates = files.filter(item => item.kind === "meta");
+    const rootMeta = metaCandidates.find(item => item.path.toLowerCase() === "meta.xml") || null;
+    const warnings = [];
+    let metaState = "found";
+    if (!metaCandidates.length) {
+      metaState = "missing";
+      warnings.push({
+        code: "META_XML_MISSING",
+        message: "No se encontró meta.xml. El ZIP se abre y puede publicarse/descargarse; MTA:SA no podrá arrancar el resource hasta que se añada."
+      });
+    } else if (!rootMeta) {
+      metaState = "nested";
+      warnings.push({
+        code: "META_XML_NOT_ROOT",
+        message: "Se encontró meta.xml dentro de una carpeta, no en la raíz. Se muestran todos los archivos y no se bloquea la carga."
+      });
+    } else if (metaCandidates.length > 1) {
+      metaState = "multiple";
+      warnings.push({
+        code: "META_XML_MULTIPLE",
+        message: "Se encontraron varios archivos meta.xml. El inventario se muestra completo; revisa cuál debe ser el manifiesto del resource."
+      });
+    }
+    if (rootMeta) {
+      if (rootMeta.bytes > LIMITS.meta) {
+        metaState = "too_large";
+        warnings.push({ code: "META_XML_TOO_LARGE", message: "meta.xml supera 2 MB; se conserva como archivo, pero no se analiza su contenido." });
+      } else {
+        try {
+          const text = await rootMeta.entry.async("string");
+          if (/<!DOCTYPE|<!ENTITY/i.test(text)) {
+            metaState = "unsafe";
+            warnings.push({ code: "META_XML_UNSAFE", message: "meta.xml contiene declaraciones XML externas. Se muestra el ZIP sin interpretar ese manifiesto." });
+          } else {
+            const parsed = new DOMParser().parseFromString(text, "application/xml");
+            if (parsed.querySelector("parsererror") || parsed.documentElement?.tagName?.toLowerCase() !== "meta") {
+              metaState = "invalid";
+              warnings.push({ code: "META_XML_INVALID", message: "meta.xml no contiene XML MTA válido. El inventario y la carga del ZIP no se bloquean." });
+            }
+          }
+        } catch {
+          metaState = "invalid";
+          warnings.push({ code: "META_XML_UNREADABLE", message: "No se pudo interpretar meta.xml. El archivo permanece en el inventario y el ZIP no se bloquea." });
+        }
+      }
+    }
+    const shaderCount = files.filter(item => item.kind === "shader").length;
+    if (!shaderCount) {
+      warnings.push({
+        code: "SHADER_FILES_MISSING",
+        message: "No se encontraron archivos shader (.fx, .hlsl o .glsl). La ausencia de shaders no impide abrir, guardar ni descargar el ZIP."
+      });
+    }
+    const counts = {
+      total: files.length,
+      lua: files.filter(item => item.kind === "lua").length,
+      compiledLua: files.filter(item => item.kind === "compiled_lua").length,
+      config: files.filter(item => item.kind === "config").length,
+      shaders: shaderCount,
+      meta: metaCandidates.length
+    };
+    const manifest = {
+      inspector: "dripx-king-style-inventory-v1",
+      source_filename: file.name,
+      source_bytes: file.size,
+      expanded_bytes: expanded,
+      files: files.map(item => ({ path: item.path, bytes: item.bytes, kind: item.kind, extension: item.extension })),
+      counts,
+      meta: { state: metaState, path: rootMeta?.path || metaCandidates[0]?.path || null },
+      warnings
+    };
+    const result = { file, archive, entries, files, expanded, counts, metaState, metaPath: rootMeta?.path || null, warnings, manifest };
+    window.DRIPX_ZIP_INVENTORY = result;
+    return result;
+  };
