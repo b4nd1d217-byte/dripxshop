@@ -599,7 +599,8 @@
         window.__DRIPX_PROTECTION_JOB.step='compile';
         update(2,'Compilando scripts Lua…','Compilando todos los Lua no-shared a bytecode MTA.');
         const compiledResult=await actions.compile();
-        const expectedCompiled=scan+1;\n        if(Number(compiledResult?.compiledCount)!==expectedCompiled)throw new Error('La compilación no confirmó los '+scan+' Lua declarados y el guardián DRIPX ('+Number(compiledResult?.compiledCount||0)+'/'+expectedCompiled+').');
+        const expectedCompiled=scan+1;
+        if(Number(compiledResult?.compiledCount)!==expectedCompiled)throw new Error('La compilación no confirmó los '+scan+' Lua declarados y el guardián DRIPX ('+Number(compiledResult?.compiledCount||0)+'/'+expectedCompiled+').');
         window.__DRIPX_PROTECTION_JOB.step='package';
         update(3,'Guardando paquete genérico…','El guardián DRIPX ya quedó compilado una sola vez en este ZIP. La Key no se incrusta al descargar.');
         await actions.download();
