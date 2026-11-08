@@ -78,13 +78,14 @@ function modalOpen(item,creating=false){
   '<label class="dxcm-resource-choice"><input type="checkbox" name="resource_ids" value="'+esc(r.id)+'" '+(assigned.has(String(r.id))?'checked':'')+'><span class="dxcm-resource-icon">'+((r.image_url||r.catalogImageUrl)&&/^https:\/\//i.test(r.image_url||r.catalogImageUrl)?'<img src="'+esc(r.image_url||r.catalogImageUrl)+'" alt="">':'▣')+'</span><span class="dxcm-resource-copy"><strong>'+esc(r.title)+'</strong><small>Producto publicado · ZIP disponible</small></span><i>'+(assigned.has(String(r.id))?'Incluido':'Disponible')+'</i></label>'
  ).join('');
  const duration=['monthly','yearly','lifetime'].map(v=>'<option value="'+v+'" '+(String(item.billing_period||'monthly')===v?'selected':'')+'>'+(v==='monthly'?'Mensual · 30 días aprox.':v==='yearly'?'Anual · 1 año':'Permanente · sin vencimiento')+'</option>').join('');
+ const categoryOptions=categories.filter(c=>!['planes','productos'].includes(String(c.slug||'').toLowerCase())).map(c=>'<option value="'+esc(c.slug)+'" '+(String(item.store_category||'scripts-mta')===String(c.slug)?'selected':'')+'>'+esc(c.name)+'</option>').join('');
  body.innerHTML='<form class="dxcm-edit-form" data-dxcm-form '+(creating?'data-dxcm-create-plan="true"':'data-item-id="'+esc(item.id)+'"')+' data-item-type="'+(isPlan?'plan':'resource')+'">'+
   '<div class="dxcm-form-grid"><label class="wide">Nombre<input name="title" maxlength="100" required value="'+esc(item.title)+'"></label>'+
   '<label>Precio (USD)<input name="price_usd" type="number" min="0" max="100000" step="0.01" required value="'+esc(item.price_usd)+'"></label>'+
   '<label>Imagen URL (HTTPS)<input name="image_url" type="url" placeholder="https://…" value="'+esc(item.image_url||'')+'"></label>'+
   '<label class="wide">Frase corta<input name="tagline" maxlength="180" value="'+esc(item.tagline||'')+'" placeholder="Resumen breve para la tarjeta"></label>'+
   '<label class="wide">Descripción<textarea name="description" rows="4" maxlength="8000">'+esc(item.description||'')+'</textarea></label>'+
-  (isPlan?'<label>Código del plan<input name="plan_code" maxlength="40" pattern="[a-z0-9_-]{2,40}" required value="'+esc(item.plan_code||'')+'"></label><label>Duración<select name="billing_period">'+duration+'</select></label><label class="wide">Características<textarea name="features" rows="4" placeholder="Una característica por línea">'+esc((Array.isArray(item.features)?item.features:[]).join('\n'))+'</textarea></label>':'<div class="dxcm-fixed-category"><small>CATEGORÍA</small><strong>Productos</strong><span>Este recurso se mantiene separado de los planes.</span></div>')+
+  (isPlan?'<label>Código del plan<input name="plan_code" maxlength="40" pattern="[a-z0-9_-]{2,40}" required value="'+esc(item.plan_code||'')+'"></label><label>Duración<select name="billing_period">'+duration+'</select></label><label class="wide">Características<textarea name="features" rows="4" placeholder="Una característica por línea">'+esc((Array.isArray(item.features)?item.features:[]).join('\n'))+'</textarea></label>':'<label>Categoría del producto<select name="store_category" required>'+categoryOptions+'</select></label><label>Vídeo URL (HTTPS)<input name="video_url" type="url" placeholder="https://…" value="'+esc(item.video_url||'')+'"></label><div class="dxcm-fixed-category"><small>TIPO INTERNO</small><strong>Producto descargable · ZIP</strong><span>Este recurso permanece separado de los planes.</span></div>')+
   '</div>'+
   (isPlan?'<div class="dxcm-assign"><header><div><small>CONTENIDO DEL PLAN</small><h4>Productos incluidos</h4><p>Selecciona productos ya creados y publicados. Aquí no se suben ZIP ni se crean productos nuevos.</p></div><span>'+options.length+'</span></header>'+
    (options?'<div class="dxcm-resource-list">'+options+'</div>':'<div class="dxcm-empty compact"><strong>No hay productos listos para asignar</strong><p>Primero crea y publica los ZIP desde Productos.</p><a href="#admin/productos" data-dxcm-close>Volver al formulario de Productos</a></div>')+'</div>':'<div class="dxcm-product-note"><span>▣</span><div><strong>Archivo descargable</strong><p>El ZIP se gestiona desde el formulario de Productos; esta edición no reemplaza ni modifica el archivo almacenado.</p></div></div>')+
@@ -154,10 +155,10 @@ async function saveForm(form){
   if(result.error)throw result.error;
   if(type==='resource'){
    const details=await db.rpc('dripx_admin_update_product_details',{
-    p_product_id:id,p_store_category:String(currentItem?.store_category||'scripts-mta'),
-    p_image_url:imageUrl||null,p_video_url:currentItem?.video_url||null,
+    p_product_id:id,p_store_category:String(fd.get('store_category')||currentItem?.store_category||'scripts-mta'),
+    p_image_url:imageUrl||null,p_video_url:String(fd.get('video_url')||'').trim()||null,
     p_image_path:imageUrl?null:(currentItem?.image_path||null),
-    p_video_path:currentItem?.video_path||null
+    p_video_path:String(fd.get('video_url')||'').trim()?null:(currentItem?.video_path||null)
    });
    if(details.error)throw details.error;
   }
