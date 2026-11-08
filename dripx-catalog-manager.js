@@ -17,7 +17,7 @@ function activeView(){
 function planProducts(){return products.filter(p=>p.product_type==='plan'&&p.category==='Planes');}
 function resourceProducts(){return products.filter(p=>p.product_type==='resource'&&p.category==='Productos');}
 function selectedResources(planId){return mappings.filter(m=>String(m.plan_product_id)===String(planId)).map(m=>String(m.resource_product_id));}
-function imageFor(p){return p.image_url&&/^https:\/\//i.test(p.image_url)?'<img src="'+esc(p.image_url)+'" alt="" loading="lazy">':'<span class="dxcm-art">'+(p.product_type==='plan'?'✦':'▣')+'</span>';}
+function imageFor(p){const source=p.image_url||p.catalogImageUrl||'';return source&&/^https:\/\//i.test(source)?'<img src="'+esc(source)+'" alt="" loading="lazy">':'<span class="dxcm-art">'+(p.product_type==='plan'?'✦':'▣')+'</span>';}
 function money(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function row(p){
  const isPlan=p.product_type==='plan',hidden=p.status==='archived',draft=p.status==='draft',linked=isPlan?selectedResources(p.id).length:0;
@@ -56,6 +56,11 @@ async function load(){
   ]);
   if(p.error)throw p.error;if(m.error)throw m.error;
   products=p.data||[];mappings=m.data||[];
+  await Promise.all(products.map(async item=>{
+   if(item.image_url||!item.image_path)return;
+   try{const signed=await db.storage.from('product-images').createSignedUrl(item.image_path,3600);if(!signed.error)item.catalogImageUrl=signed.data?.signedUrl||null;}
+   catch(error){console.warn('[DRIPX] No se pudo cargar la miniatura:',item.id,error?.message||error);}
+  }));
   // Keep internal items strictly separated; other legacy categories do not leak into these lists.
   products=products.filter(p=>(p.product_type==='plan'&&p.category==='Planes')||(p.product_type==='resource'&&p.category==='Productos'));
   render();
@@ -68,7 +73,7 @@ function modalOpen(item){
  const isPlan=item.product_type==='plan';
  const assigned=new Set(selectedResources(item.id));
  const options=resourceProducts().filter(r=>r.status==='published'&&!!r.file_path).map(r=>
-  '<label class="dxcm-resource-choice"><input type="checkbox" name="resource_ids" value="'+esc(r.id)+'" '+(assigned.has(String(r.id))?'checked':'')+'><span class="dxcm-resource-icon">'+(r.image_url&&/^https:\/\//i.test(r.image_url)?'<img src="'+esc(r.image_url)+'" alt="">':'▣')+'</span><span class="dxcm-resource-copy"><strong>'+esc(r.title)+'</strong><small>Producto publicado · ZIP disponible</small></span><i>'+(assigned.has(String(r.id))?'Incluido':'Disponible')+'</i></label>'
+  '<label class="dxcm-resource-choice"><input type="checkbox" name="resource_ids" value="'+esc(r.id)+'" '+(assigned.has(String(r.id))?'checked':'')+'><span class="dxcm-resource-icon">'+((r.image_url||r.catalogImageUrl)&&/^https:\/\//i.test(r.image_url||r.catalogImageUrl)?'<img src="'+esc(r.image_url||r.catalogImageUrl)+'" alt="">':'▣')+'</span><span class="dxcm-resource-copy"><strong>'+esc(r.title)+'</strong><small>Producto publicado · ZIP disponible</small></span><i>'+(assigned.has(String(r.id))?'Incluido':'Disponible')+'</i></label>'
  ).join('');
  const duration=['monthly','yearly','lifetime'].map(v=>'<option value="'+v+'" '+(String(item.billing_period||'monthly')===v?'selected':'')+'>'+(v==='monthly'?'Mensual · 30 días aprox.':v==='yearly'?'Anual · 1 año':'Permanente · sin vencimiento')+'</option>').join('');
  body.innerHTML='<form class="dxcm-edit-form" data-dxcm-form data-item-id="'+esc(item.id)+'" data-item-type="'+(isPlan?'plan':'resource')+'">'+
@@ -145,7 +150,7 @@ function ensure(){
  if(!existing){
   document.querySelector('#dx-plan-resource-manager')?.remove();
   const host=document.createElement('section');host.id='dx-catalog-admin';host.className='dxcm-shell';
-  const app=$('#app');if(app)app.append(host);
+  const app=$('#app');if(app)app.prepend(host);
   load();
  }
 }
