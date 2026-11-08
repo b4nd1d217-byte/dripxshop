@@ -267,8 +267,8 @@ async function downloadOwnedProduct(req: Request) {
   if (!product || !["published", "archived"].includes(String(product.status))) {
     return json(404, { error: "product_not_available" });
   }
-  if (product.product_type !== "resource" || product.protection_enabled !== true) {
-    return json(409, { error: "product_not_protected" });
+  if (product.product_type !== "resource") {
+    return json(409, { error: "product_not_downloadable" });
   }
 
   // Entitlements without an order remain valid for explicit admin grants and free products.
@@ -320,16 +320,6 @@ async function downloadOwnedProduct(req: Request) {
     return json(409, { error: "protected_file_path_invalid" });
   }
 
-  const accountLicense = await callRpc("dripx_internal_get_account_license", { p_user_id: user.id });
-  const licenseKey = String(accountLicense?.license_key || "");
-  const aclAccount = String(accountLicense?.authorized_account_name || "");
-  if (accountLicense?.status !== "active" || !/^DRIPX-[A-F0-9]{48}$/.test(licenseKey)) {
-    return json(409, { error: "account_license_not_ready" });
-  }
-  if (aclAccount && !/^[A-Za-z0-9_.-]{1,64}$/.test(aclAccount)) {
-    return json(409, { error: "acl_account_name_invalid" });
-  }
-
   const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
   const storageResponse = await fetch(base + "/storage/v1/object/product-files/" + encodedPath, {
     headers: { apikey: service, authorization: "Bearer " + service },
@@ -349,6 +339,32 @@ async function downloadOwnedProduct(req: Request) {
       error: "product_zip_expansion_invalid",
       reason: error instanceof Error ? error.message : "invalid_zip_expansion",
     });
+  }
+
+  // Unprotected products are delivered byte-for-byte from the private bucket.
+  // Ownership was already checked above; no MTA manifest or compiler is required.
+  if (product.protection_enabled !== true) {
+    const safeName = String(product.title || "DRIPX-resource")
+      .replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 64) || "DRIPX-resource";
+    return new Response(sourceZip, {
+      status: 200,
+      headers: {
+        ...CORS_HEADERS,
+        "content-type": "application/zip",
+        "content-disposition": "attachment; filename=\"" + safeName + ".zip\"",
+        "content-length": String(sourceZip.byteLength),
+      },
+    });
+  }
+
+  const accountLicense = await callRpc("dripx_internal_get_account_license", { p_user_id: user.id });
+  const licenseKey = String(accountLicense?.license_key || "");
+  const aclAccount = String(accountLicense?.authorized_account_name || "");
+  if (accountLicense?.status !== "active" || !/^DRIPX-[A-F0-9]{48}$/.test(licenseKey)) {
+    return json(409, { error: "account_license_not_ready" });
+  }
+  if (aclAccount && !/^[A-Za-z0-9_.-]{1,64}$/.test(aclAccount)) {
+    return json(409, { error: "acl_account_name_invalid" });
   }
 
   let zip: JSZip;
