@@ -714,10 +714,12 @@
     const orderApproved=orderId=>!orderId||approvedOrderIds.has(String(orderId));
     const activePlans=allPlans.filter(plan=>plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now)&&orderApproved(plan.order_id));
     const maps=activePlans.length?await client.from('dripx_plan_resources').select('plan_product_id,resource_product_id').in('plan_product_id',[...new Set(activePlans.map(p=>p.product_id))]):{data:[],error:null};
-    if(maps.error)throw maps.error;
+    const userPlanMaps=activePlans.length?await client.from('dripx_user_plan_resources').select('user_plan_id,resource_product_id').in('user_plan_id',activePlans.map(p=>p.id)):{data:[],error:null};
+    if(maps.error)throw maps.error;if(userPlanMaps.error)throw userPlanMaps.error;
     const directRows=entitlements.filter(row=>orderApproved(row.order_id));
     const directIds=new Set(directRows.map(x=>String(x.product_id))),planSources=new Map();
     for(const m of maps.data||[]){const plan=activePlans.find(p=>String(p.product_id)===String(m.plan_product_id));if(!plan)continue;const id=String(m.resource_product_id);if(!planSources.has(id))planSources.set(id,[]);planSources.get(id).push(plan);}
+    for(const m of userPlanMaps.data||[]){const plan=activePlans.find(p=>String(p.id)===String(m.user_plan_id));if(!plan)continue;const id=String(m.resource_product_id);if(!planSources.has(id))planSources.set(id,[]);planSources.get(id).push(plan);}
     const ids=[...new Set([...directIds,...planSources.keys()])];
     const productRes=ids.length?await client.from('dripx_products').select('id,title,description,product_type,file_path,price_usd,resource_name,image_url,version,status').in('id',ids).eq('status','published').eq('product_type','resource'):{data:[],error:null};
     if(productRes.error)throw productRes.error;
@@ -733,9 +735,11 @@
     const planCards=allPlans.map(plan=>{
       const p=Array.isArray(plan.dripx_products)?plan.dripx_products[0]:plan.dripx_products,order=plan.order_id?orderMap.get(String(plan.order_id)):null;
       const active=plan.active===true&&(!plan.expires_at||new Date(plan.expires_at).getTime()>now)&&orderApproved(plan.order_id);
-      const count=(maps.data||[]).filter(m=>String(m.plan_product_id)===String(plan.product_id)).length;
+      const count=(maps.data||[]).filter(m=>String(m.plan_product_id)===String(plan.product_id)).length+(userPlanMaps.data||[]).filter(m=>String(m.user_plan_id)===String(plan.id)).length;
       const inv=order?.status==='approved'?'<button type="button" class="btn secondary" data-dx-invoice="'+escapeHtml(order.id)+'">'+iconMarkup('file')+' Factura</button>':'<button type="button" class="btn secondary" disabled>'+iconMarkup('file')+' Factura pendiente</button>';
-      return '<article class="order-card dx-owned-plan" data-dripx-plan-id="'+escapeHtml(plan.id)+'" data-dripx-plan-expires="'+escapeHtml(plan.expires_at||'')+'"><header><div><strong>'+escapeHtml(p?.title||plan.plan_code||'Plan')+'</strong><br><small class="muted">Plan adquirido · '+(plan.expires_at?'hasta '+new Date(plan.expires_at).toLocaleDateString('es-DO'):'sin vencimiento')+'</small></div><span class="status '+(active?'approved':'muted')+'">'+(active?'Activo':'Finalizado')+'</span></header><p class="muted">'+escapeHtml(p?.description||'Acceso temporal a recursos seleccionados de la tienda.')+'</p><small class="dx-owned-access">'+count+' recursos incluidos · '+(active?'se revocan al vencer':'acceso no vigente')+'</small><div class="order-actions">'+inv+'</div></article>';
+      const canRenew=active&&!!plan.expires_at&&new Date(plan.expires_at).getTime()<=now+24*60*60*1000;
+      const renew=canRenew?'<button type="button" class="btn primary" data-dx-renew-plan="'+escapeHtml(plan.id)+'">↻ Renovar por ticket</button>':'';
+      return '<article class="order-card dx-owned-plan" data-dripx-plan-id="'+escapeHtml(plan.id)+'" data-dripx-plan-expires="'+escapeHtml(plan.expires_at||'')+'"><header><div><strong>'+escapeHtml(p?.title||plan.plan_code||'Plan')+'</strong><br><small class="muted">Plan adquirido · '+(plan.expires_at?'hasta '+new Date(plan.expires_at).toLocaleDateString('es-DO'):'sin vencimiento')+'</small></div><span class="status '+(active?'approved':'muted')+'">'+(active?'Activo':'Finalizado')+'</span></header><p class="muted">'+escapeHtml(p?.description||'Acceso temporal a recursos seleccionados de la tienda.')+'</p><small class="dx-owned-access">'+count+' recursos incluidos · '+(active?'se revocan al vencer':'acceso no vigente')+'</small><div class="order-actions">'+inv+renew+'</div></article>';
     }).join('');
     const purchaseHistory=orders.map(order=>{
       const lines=items.filter(item=>String(item.order_id)===String(order.id));
@@ -1250,7 +1254,7 @@
       if(mappingsResult.error)throw mappingsResult.error;
       const products=productsResult.data||[];
       const plans=products.filter(p=>p.product_type==='plan');
-      const resources=products.filter(p=>p.product_type==='resource'&&p.status==='published'&&p.protection_enabled===true&&!!p.file_path);
+      const resources=products.filter(p=>p.product_type==='resource'&&p.status==='published'&&!!p.file_path);
       const mapped=new Set((mappingsResult.data||[]).map(row=>String(row.plan_product_id)+'::'+String(row.resource_product_id)));
       const app=document.querySelector('#app');if(!app)return;
       panel=document.querySelector('#dx-plan-resource-manager');
@@ -1632,10 +1636,76 @@
     parent.insertBefore(wrap,field);wrap.append(toolbar,field);
     field.classList.add('dx-description-input');
   }
+
+  let userPlanManagerTimer=0,userPlanManagerBusy=false;
+  const userPlanCache=new Map();
+  function userPlanRemaining(expiry,active){
+    if(!active)return 'Retirado';if(!expiry)return 'Sin vencimiento';
+    const ms=new Date(expiry).getTime()-Date.now();if(!Number.isFinite(ms)||ms<=0)return 'Vencido';
+    const total=Math.floor(ms/60000),days=Math.floor(total/1440),hours=Math.floor((total%1440)/60),mins=total%60;
+    const clock='h'+hours+':'+String(mins).padStart(2,'0');return days?'d'+days+' '+clock:clock;
+  }
+  function updateUserPlanClocks(){document.querySelectorAll('[data-dx-up-clock]').forEach(n=>n.textContent=userPlanRemaining(n.dataset.expiresAt,n.dataset.active==='true'));}
+  function scheduleUserPlanManager(){clearTimeout(userPlanManagerTimer);if(!isAdminProductsRoute()||window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-user-plan-manager')?.remove();return;}userPlanManagerTimer=setTimeout(()=>renderUserPlanManager(),180);}
+  async function renderUserPlanManager(force=false){
+    let panel=document.querySelector('#dx-user-plan-manager');
+    if(!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
+    if(userPlanManagerBusy||panel?.dataset.loaded==='1'&&!force)return;userPlanManagerBusy=true;
+    try{
+      await getAdminSession();
+      const pr=await client.from('dripx_user_plans').select('id,user_id,product_id,plan_code,order_id,starts_at,expires_at,active,admin_transferred').order('created_at',{ascending:false});
+      if(pr.error)throw pr.error;const plans=pr.data||[],uids=[...new Set(plans.map(x=>x.user_id))],pids=[...new Set(plans.map(x=>x.product_id))];
+      const [ur,pp,rr,mr]=await Promise.all([
+        uids.length?client.from('dripx_profiles').select('user_id,display_name,discord_id,avatar_url,active').in('user_id',uids):{data:[],error:null},
+        pids.length?client.from('dripx_products').select('id,title').in('id',pids):{data:[],error:null},
+        client.from('dripx_products').select('id,title,file_path,product_type,status').eq('product_type','resource').eq('status','published').not('file_path','is',null).order('title'),
+        plans.length?client.from('dripx_user_plan_resources').select('user_plan_id,resource_product_id').in('user_plan_id',plans.map(x=>x.id)):{data:[],error:null}
+      ]);
+      for(const x of [ur,pp,rr,mr])if(x.error)throw x.error;
+      const users=new Map((ur.data||[]).map(x=>[String(x.user_id),x])),products=new Map((pp.data||[]).map(x=>[String(x.id),x]));
+      const individual=new Map();for(const x of mr.data||[]){if(!individual.has(String(x.user_plan_id)))individual.set(String(x.user_plan_id),[]);individual.get(String(x.user_plan_id)).push(String(x.resource_product_id));}
+      window.__DRIPX_USER_PLAN_PROFILES=ur.data||[];window.__DRIPX_USER_PLAN_RESOURCES=rr.data||[];userPlanCache.clear();
+      for(const p of plans)userPlanCache.set(String(p.id),{...p,profile:users.get(String(p.user_id))||{},product:products.get(String(p.product_id))||{},individualIds:individual.get(String(p.id))||[]});
+      const rows=plans.map(p=>{
+        const u=users.get(String(p.user_id))||{},product=products.get(String(p.product_id))||{},active=p.active===true&&(!p.expires_at||new Date(p.expires_at).getTime()>Date.now());
+        const avatar=u.avatar_url?'<img src="'+escapeHtml(u.avatar_url)+'" alt="">':'<span class="dx-up-avatar-fallback">'+escapeHtml((u.display_name||'U').slice(0,1).toUpperCase())+'</span>';
+        return '<article class="dx-up-row"><div class="dx-up-user">'+avatar+'<div><strong>'+escapeHtml(u.display_name||'Usuario')+'</strong><small>'+escapeHtml(u.discord_id||'Cuenta Discord')+'</small></div></div><div class="dx-up-plan"><strong>'+escapeHtml(product.title||p.plan_code||'Plan')+'</strong><small>'+escapeHtml(p.plan_code||'')+(p.admin_transferred?' · Transferido':'')+'</small></div><div class="dx-up-time"><strong class="dx-up-clock '+(active?'is-active':'is-inactive')+'" data-dx-up-clock data-expires-at="'+escapeHtml(p.expires_at||'')+'" data-active="'+String(p.active===true)+'">'+escapeHtml(userPlanRemaining(p.expires_at,p.active===true))+'</strong><small>'+(active?'Tiempo restante':'Estado')+'</small></div><div class="dx-up-actions"><button type="button" class="dx-up-more" data-dx-up-menu="'+escapeHtml(p.id)+'" aria-label="Más opciones">···</button><div class="dx-up-menu" data-dx-up-menu-panel="'+escapeHtml(p.id)+'" hidden><button type="button" data-dx-up-action="edit" data-plan-id="'+escapeHtml(p.id)+'">✎ Editar</button><button type="button" data-dx-up-action="transfer" data-plan-id="'+escapeHtml(p.id)+'">⇄ Transferir</button><button type="button" class="is-danger" data-dx-up-action="remove" data-plan-id="'+escapeHtml(p.id)+'">⌫ Remover</button></div></div></article>';
+      }).join('');
+      const app=document.querySelector('#app');if(!app)return;
+      panel=document.querySelector('#dx-user-plan-manager')||document.createElement('section');panel.id='dx-user-plan-manager';panel.className='dx-user-plan-manager';
+      panel.innerHTML='<header class="dx-up-head"><div><span class="dx-admin-kicker">SUSCRIPCIONES / CONTROL</span><h2>Usuarios con planes obtenidos</h2><p>Cuenta regresiva en vivo. Edita accesos, agrega tiempo o transfiere sin salir de Productos.</p></div><button type="button" class="dx-up-refresh" data-dx-up-refresh>↻ Actualizar</button></header><div class="dx-up-summary"><span><b>'+plans.length+'</b> registros</span><span><b>'+plans.filter(p=>p.active&&(!p.expires_at||new Date(p.expires_at).getTime()>Date.now())).length+'</b> vigentes</span></div>'+(rows?'<div class="dx-up-list">'+rows+'</div>':'<div class="dx-up-empty">Todavía no hay usuarios con planes registrados.</div>')+'<div class="dx-up-modal-backdrop" data-dx-up-modal hidden><section class="dx-up-modal" role="dialog" aria-modal="true"><header><div><small>GESTIÓN DE PLAN</small><h3 data-dx-up-title>Administrar plan</h3></div><button type="button" data-dx-up-close aria-label="Cerrar">×</button></header><div data-dx-up-body></div></section></div>';
+      panel.dataset.loaded='1';if(!panel.isConnected)app.append(panel);updateUserPlanClocks();
+    }catch(err){panel=document.querySelector('#dx-user-plan-manager')||document.createElement('section');panel.id='dx-user-plan-manager';panel.className='dx-user-plan-manager';panel.dataset.loaded='error';panel.innerHTML='<p class="dx-up-error">'+escapeHtml(err.message||'No se pudieron cargar los planes.')+'</p><button type="button" data-dx-up-refresh>↻ Reintentar</button>';if(!panel.isConnected)document.querySelector('#app')?.append(panel);}
+    finally{userPlanManagerBusy=false;}
+  }
+  function upModal(){const p=document.querySelector('#dx-user-plan-manager');return {back:p?.querySelector('[data-dx-up-modal]'),body:p?.querySelector('[data-dx-up-body]'),title:p?.querySelector('[data-dx-up-title]')};}
+  function closeUpModal(){const m=upModal();if(m.back)m.back.hidden=true;document.querySelectorAll('.dx-up-menu').forEach(x=>x.hidden=true);}
+  function openUpModal(id,kind){
+    const p=userPlanCache.get(String(id));if(!p)throw new Error('No se encontró el plan.');const m=upModal();if(!m.back||!m.body)throw new Error('No se encontró la ventana.');
+    const title=p.product.title||p.plan_code||'Plan',name=p.profile.display_name||'usuario';
+    if(kind==='remove')m.body.innerHTML='<p>¿Seguro que deseas remover <b>'+escapeHtml(title)+'</b> de <b>'+escapeHtml(name)+'</b>? Sus accesos temporales serán revocados.</p><div class="dx-up-modal-actions"><button data-dx-up-close class="dx-up-secondary">Cancelar</button><button data-dx-up-remove="'+escapeHtml(id)+'" class="dx-up-danger">Remover</button></div>';
+    else if(kind==='transfer'){const targets=(window.__DRIPX_USER_PLAN_PROFILES||[]).filter(x=>x.active&&String(x.user_id)!==String(p.user_id));m.body.innerHTML='<p>El destinatario recibirá el mismo plan y la misma fecha de vencimiento; no se reinicia el contador.</p><label>Usuario de destino<select data-dx-up-target><option value="">Selecciona usuario</option>'+targets.map(x=>'<option value="'+escapeHtml(x.user_id)+'">'+escapeHtml(x.display_name||'Usuario')+(x.discord_id?' · '+escapeHtml(x.discord_id):'')+'</option>').join('')+'</select></label><div class="dx-up-modal-actions"><button data-dx-up-close class="dx-up-secondary">Cancelar</button><button data-dx-up-transfer="'+escapeHtml(id)+'" class="dx-up-primary">Transferir</button></div>';}
+    else {const selected=new Set(p.individualIds||[]),items=window.__DRIPX_USER_PLAN_RESOURCES||[];m.body.innerHTML='<p>Productos adicionales solo para este usuario. Los accesos generales del plan no se modifican.</p><div class="dx-up-resource-list">'+(items.length?items.map(x=>'<label><input type="checkbox" data-dx-up-resource="'+escapeHtml(x.id)+'" '+(selected.has(String(x.id))?'checked':'')+'><span>'+escapeHtml(x.title)+'</span></label>').join(''):'<p>No hay productos publicados con ZIP.</p>')+'</div><div class="dx-up-modal-actions"><button data-dx-up-close class="dx-up-secondary">Cancelar</button><button data-dx-up-save="'+escapeHtml(id)+'" class="dx-up-primary">Guardar productos</button></div><div class="dx-up-time-form"><h4>Agregar tiempo</h4><div><input type="number" min="1" max="31536000" value="30" data-dx-up-amount><select data-dx-up-unit><option value="days">Días</option><option value="hours">Horas</option><option value="seconds">Segundos</option></select><button data-dx-up-add-time="'+escapeHtml(id)+'" class="dx-up-primary">Aceptar</button></div><small>Se suma al vencimiento actual o desde ahora si ya venció.</small></div>';}
+    m.title.textContent=kind==='remove'?'Confirmar retirada':kind==='transfer'?'Transferir plan':'Editar plan · '+name;m.back.hidden=false;
+  }
+  async function reloadUp(){const p=document.querySelector('#dx-user-plan-manager');if(p)p.dataset.loaded='0';await renderUserPlanManager(true);}
+  document.addEventListener('click',async ev=>{
+    const menu=ev.target.closest('[data-dx-up-menu]');if(menu){ev.preventDefault();ev.stopImmediatePropagation();const id=menu.dataset.dxUpMenu;const target=[...document.querySelectorAll('[data-dx-up-menu-panel]')].find(x=>x.dataset.dxUpMenuPanel===id);document.querySelectorAll('.dx-up-menu').forEach(x=>x.hidden=true);if(target)target.hidden=false;return;}
+    const action=ev.target.closest('[data-dx-up-action]');if(action){ev.preventDefault();ev.stopImmediatePropagation();openUpModal(action.dataset.planId,action.dataset.dxUpAction);return;}
+    if(ev.target.closest('[data-dx-up-close]')){ev.preventDefault();closeUpModal();return;}
+    if(ev.target.closest('[data-dx-up-refresh]')){ev.preventDefault();await reloadUp();return;}
+    const save=ev.target.closest('[data-dx-up-save]');if(save){ev.preventDefault();save.disabled=true;try{await getAdminSession();const ids=[...document.querySelectorAll('[data-dx-up-resource]:checked')].map(x=>x.dataset.dxUpResource);const {error}=await client.rpc('dripx_admin_set_user_plan_resources',{p_user_plan_id:save.dataset.dxUpSave,p_resource_product_ids:ids});if(error)throw error;toast('Productos guardados para este usuario.');await reloadUp();closeUpModal();}catch(err){toast(err.message||'No se pudieron guardar.');save.disabled=false;}return;}
+    const time=ev.target.closest('[data-dx-up-add-time]');if(time){ev.preventDefault();time.disabled=true;try{await getAdminSession();const amount=Number(document.querySelector('[data-dx-up-amount]')?.value),unit=document.querySelector('[data-dx-up-unit]')?.value;if(!Number.isInteger(amount)||amount<1)throw new Error('Indica una cantidad válida.');const {data,error}=await client.rpc('dripx_admin_add_user_plan_time',{p_user_plan_id:time.dataset.dxUpAddTime,p_amount:amount,p_unit:unit});if(error)throw error;toast('Tiempo agregado · vence '+new Date(data).toLocaleString('es-DO'));await reloadUp();closeUpModal();}catch(err){toast(err.message||'No se pudo agregar tiempo.');time.disabled=false;}return;}
+    const transfer=ev.target.closest('[data-dx-up-transfer]');if(transfer){ev.preventDefault();transfer.disabled=true;try{await getAdminSession();const target=document.querySelector('[data-dx-up-target]')?.value;if(!target)throw new Error('Selecciona un usuario.');const {error}=await client.rpc('dripx_admin_transfer_user_plan',{p_user_plan_id:transfer.dataset.dxUpTransfer,p_target_user_id:target});if(error)throw error;toast('Plan transferido conservando el vencimiento.');await reloadUp();closeUpModal();}catch(err){toast(err.message||'No se pudo transferir.');transfer.disabled=false;}return;}
+    const remove=ev.target.closest('[data-dx-up-remove]');if(remove){ev.preventDefault();remove.disabled=true;try{await getAdminSession();const {error}=await client.rpc('dripx_admin_remove_user_plan',{p_user_plan_id:remove.dataset.dxUpRemove});if(error)throw error;toast('Plan removido y accesos revocados.');await reloadUp();closeUpModal();}catch(err){toast(err.message||'No se pudo remover.');remove.disabled=false;}}
+  },true);
+  document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-dx-renew-plan]');if(!b)return;ev.preventDefault();ev.stopImmediatePropagation();b.disabled=true;try{const {data,error}=await client.rpc('customer_request_plan_renewal',{p_user_plan_id:b.dataset.dxRenewPlan});if(error)throw error;toast(data?.message||'Solicitud de renovación creada.');await renderOwnedProducts();}catch(err){toast(err.message||'No se pudo renovar.');b.disabled=false;}},true);
+  function installUserPlanManagerObserver(){if(window.__DRIPX_USER_PLAN_MANAGER_OBSERVER)return;const root=document.querySelector('#app');if(!root)return;const ob=new MutationObserver(()=>scheduleUserPlanManager());ob.observe(root,{childList:true,subtree:true});window.__DRIPX_USER_PLAN_MANAGER_OBSERVER=ob;if(!window.__DRIPX_PLAN_CLOCK_TIMER)window.__DRIPX_PLAN_CLOCK_TIMER=setInterval(updateUserPlanClocks,1000);scheduleUserPlanManager();}
+
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
+    syncCategoryOptions(true);markAdminView();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
