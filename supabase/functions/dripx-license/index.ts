@@ -400,6 +400,10 @@ async function downloadOwnedProduct(req: Request) {
   const available = new Map(archiveFiles.map(entry => [entry.name.normalize("NFC").toLowerCase(), entry]));
   const tags = metaText.match(/<script\b[^>]*>/gi) || [];
   if (!tags.length) return json(409, { error: "resource_scripts_missing" });
+  const hasLegacySharedBridge = tags.some(tag =>
+    (xmlAttribute(tag, "type").trim().toLowerCase() || "server") === "shared"
+    && xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === "dripx_shared_license.lua"
+  );
   const scriptRefs = new Set<string>();
   const serverLicenseGuards: string[] = [];
   const serverLicenseConfigs: string[] = [];
@@ -417,10 +421,16 @@ async function downloadOwnedProduct(req: Request) {
     const entry = available.get(key);
     if (!entry) return json(422, { error: "resource_meta_script_missing", path: src });
     const lower = src.toLowerCase();
-    if (type === "shared" && lower.endsWith(".lua")) {
+    if (type === "shared" && lower === "dripx_shared_license.lua") {
+      const bridgeSource = await entry.async("string");
+      if (bridgeSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
+          || !bridgeSource.includes("DRIPX_LICENSE_EVENT_NAME")) {
+        return json(409, { error: "resource_legacy_shared_bridge_invalid", path: src });
+      }
+    } else if (type === "shared" && lower.endsWith(".lua")) {
       const sharedSource = await entry.async("string");
       if (sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")
-          || sharedSource.includes("DRIPX_SHARED_LICENSE_GATED_PAYLOAD")) {
+          || (sharedSource.includes("DRIPX_SHARED_LICENSE_GATED_PAYLOAD") && !hasLegacySharedBridge)) {
         return json(409, { error: "resource_shared_source_contains_private_marker", path: src });
       }
     } else if (type === "shared" && lower.endsWith(".luac")) {
