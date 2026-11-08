@@ -422,7 +422,7 @@ async function downloadOwnedProduct(req: Request) {
       sharedBridges.push(src);
     } else if (type === "shared" && lower.endsWith(".lua")) {
       const sharedSource = await entry.async("string");
-      if (sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER") || sharedSource.includes(licenseKey)) {
+      if (sharedSource.includes("DRIPX_LICENSE_KEY_PLACEHOLDER")) {
         return json(409, { error: "resource_shared_source_contains_private_marker", path: src });
       }
     } else if (type === "shared" && lower.endsWith(".luac")) {
