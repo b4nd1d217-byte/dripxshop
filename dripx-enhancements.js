@@ -1267,10 +1267,10 @@
             ? '<div class="dx-plan-resource-options">'+resources.map(resource=>
                 '<label><input type="checkbox" data-dx-plan-resource="'+escapeHtml(resource.id)+'" '+(mapped.has(String(plan.id)+'::'+String(resource.id))?'checked':'')+'><span>'+escapeHtml(resource.title)+'</span></label>'
               ).join('')+'</div>'
-            : '<p class="muted">No hay resources publicados con ZIP protegido. Primero crea un producto de tipo Resource y publica su ZIP desde esta misma sección.</p>')+
+            : '<p class="muted">No hay productos descargables publicados con ZIP. Crea un producto interno y publica su archivo desde Productos para poder asignarlo a un plan.</p>')+
           '<p class="dx-plan-resource-status" data-dx-plan-status role="status"></p></article>'
       ).join('');
-      panel.innerHTML='<header class="dx-plan-resource-manager-head"><div><span class="dx-admin-kicker">ACCESOS TEMPORALES</span><h2>Recursos incluidos en cada plan</h2><p>Marca los resources protegidos que incluye cada plan. El sistema comprobará la compra y su vencimiento en cada descarga y validación MTA.</p></div></header>'+
+      panel.innerHTML='<header class="dx-plan-resource-manager-head"><div><span class="dx-admin-kicker">ACCESOS TEMPORALES</span><h2>Productos incluidos en cada plan</h2><p>Selecciona los productos descargables que incluye cada plan. El acceso se concede cuando se aprueba la compra y se retira al vencer la suscripción.</p></div></header>'+
         (planMarkup||'<p class="muted">Todavía no hay productos de tipo Plan para configurar.</p>');
       panel.dataset.loaded='1';
       if(!panel.isConnected)app.append(panel);
