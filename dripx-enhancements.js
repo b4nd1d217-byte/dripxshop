@@ -585,7 +585,7 @@
       node.append(engine);
       const actions=window.DRIPX_PRODUCT_PROTECTION_ACTIONS;
       if(!actions||typeof actions.protect!=='function'||typeof actions.compile!=='function'||typeof actions.download!=='function'||typeof actions.resume!=='function')throw new Error('El motor DRIPX no está conectado al formulario de Productos.');
-      const scan=result.files.filter(item=>['server_lua','client_lua'].includes(item.kind)).length;
+      const scan=result.files.filter(item=>['server_lua','client_lua','lua_other'].includes(item.kind)).length;
       if(resume&&window.__DRIPX_PROTECTION_JOB?.started){
         update(1,'Reanudando trabajo de protección…','Continuando desde el último paso que el motor dejó completado.');
         await actions.resume();
@@ -595,7 +595,7 @@
         const protectedResult=await actions.protect();
         if(!protectedResult?.productId)throw new Error('El motor no confirmó la protección del resource.');
         window.__DRIPX_PROTECTION_JOB.step='compile';
-        update(2,'Compilando scripts Lua…','Compilando los scripts server/client a bytecode MTA.');
+        update(2,'Compilando scripts Lua…','Compilando todos los Lua no-shared a bytecode MTA.');
         const compiledResult=await actions.compile();
         if(Number(compiledResult?.compiledCount)!==scan)throw new Error('La compilación no confirmó todos los scripts server/client esperados ('+Number(compiledResult?.compiledCount||0)+'/'+scan+').');
         window.__DRIPX_PROTECTION_JOB.step='license';
