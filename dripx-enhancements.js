@@ -452,7 +452,7 @@
     if(!live)throw new Error('No se pudo mostrar el ZIP seleccionado en el formulario de Productos.');
     const {form,node}=live;
     node.dataset.state='selected';
-    node.innerHTML='<div class="dx-zip-selection-card"><div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Archivo listo</small><button type="button" class="dx-zip-start" data-dripx-start-protection>Iniciar protección</button><p class="dx-zip-selection-hint">Se validará, protegerá, compilará y verificará antes de habilitar Guardar producto.</p></div>';
+    node.innerHTML='<div class="dx-zip-selection-card"><div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Archivo listo</small><button type="button" class="dx-zip-start" data-dripx-start-protection>Iniciar protección automática</button><p class="dx-zip-selection-hint">Se validará, protegerá, compilará y verificará antes de habilitar Guardar producto.</p></div>';
     setProductZipStatus('ZIP seleccionado: '+file.name+' · '+formatBytes(file.size),'info');
     const start=node.querySelector('[data-dripx-start-protection]');
     let busy=false,needsResume=false;
