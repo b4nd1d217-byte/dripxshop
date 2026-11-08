@@ -880,7 +880,7 @@
 
 
   async function ensureProductStoreCategoryField(){
-    const form=document.querySelector('#product-form');if(!form||!client)return;
+    const form=document.querySelector('#product-form');if(!form||!client||form.dataset.dripxStoreCategoryReady==='1')return;
     const internal=form.querySelector('select[name="category"]');if(!internal)return;
     const internalLabel=internal.closest('label')||internal.parentElement;
     if(internalLabel){internal.value='Productos';internalLabel.style.display='none';}
@@ -893,7 +893,7 @@
       select.replaceChildren();rows.forEach(row=>{const option=document.createElement('option');option.value=row.slug;option.textContent=row.name;select.append(option);});
       if(rows.some(row=>row.slug===previous))select.value=previous;else if(rows.length)select.value=rows[0].slug;
       if(!rows.length)throw new Error('No hay categorías activas para productos.');
-    }catch(error){console.warn('[DRIPX] Categoría de producto:',error);const select=field.querySelector('select');if(select&&!select.options.length){const option=document.createElement('option');option.value='scripts-mta';option.textContent='Scripts MTA';select.append(option);}}
+    }catch(error){console.warn('[DRIPX] Categoría de producto:',error);const select=field.querySelector('select');if(select&&!select.options.length){const option=document.createElement('option');option.value='scripts-mta';option.textContent='Scripts MTA';select.append(option);}form.dataset.dripxStoreCategoryReady='1';}
   }
 
   const DRIPX_CATEGORY_ICONS=['package','code-2','shield-check','layers-3','star','box','gamepad-2','wrench','zap','file-code-2'];
