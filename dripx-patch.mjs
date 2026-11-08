@@ -454,8 +454,7 @@ export async function patchApp(source) {
 
 
   // Rename the existing admin products section as Plans without changing its internal route key.
-  app = app.replace(/(productos\\s*:\\s*['"][^'"]*)Productos([^'"]*['"])/g, '$1Planes$2');
-  app = app.replace(/(data-admin-tab=['"]productos['"][^>]*>)([^<]*)Productos([^<]*)(<\\/)/g, '$1$2Planes$3$4');
+  app = app.replace(/(productos\s*:\s*['"][^'"]*)Productos([^'"]*['"])/g, '$1Planes$2');
 
   // Enforce the plans-only storefront even if the upstream admin template changes whitespace.
   app = app.replace(/const tabs=\['pedidos','tickets','resenas','productos','categorias','usuarios','ajustes'\]/g,
