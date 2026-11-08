@@ -173,7 +173,7 @@ export async function patchApp(source) {
     const guardName='dripx_server_license.lua',configName='DRIPX-CFG.LUA';
     if(working.file(guardName)||working.file(configName)||working.file('dripx-cfg.lua'))throw new Error('El resource ya contiene un nombre reservado por DRIP X SHOP: '+configName+' o '+guardName+'.');
     if(working.file('dripx_shared_license.lua'))throw new Error('El resource ya contiene el nombre reservado dripx_shared_license.lua.');
-    const sharedNames=(b.shared||[]).map(x=>x.name),sharedPayloads=[];
+    const sharedNames=(b.shared||[]).map(x=>x.name);
     for(const name of sharedNames){
       const file=working.file(name);if(!file)throw new Error('Falta el script shared: '+name);
       if(name.toLowerCase().endsWith('.luac')){
@@ -183,9 +183,7 @@ export async function patchApp(source) {
       }
       if(!name.toLowerCase().endsWith('.lua'))throw new Error('El shared '+name+' no es un .lua fuente ni un .luac MTA válido.');
       const source=await file.async('string');
-      if(source.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD')||source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||source.includes('DRIPX_LICENSE_EVENT_NAME'))throw new Error('El shared '+name+' ya contiene marcas DRIPX o una clave antigua.');
-      const wrapped=['local DRIPX_SHARED_LICENSE_GATED_PAYLOAD=function(...)',source,'end','if type(triggerServerEvent)==="function" then','  addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_SHARED_LICENSE_GATED_PAYLOAD(...) end)','else','  addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_SHARED_LICENSE_GATED_PAYLOAD(...) end)','end'].join(nl);
-      sharedPayloads.push({name,source:wrapped,originalSource:source});
+      if(source.includes('DRIPX_LICENSE_KEY_PLACEHOLDER')||source.includes('DRIPX_SHARED_LICENSE_GATED_PAYLOAD'))throw new Error('El shared '+name+' contiene un marcador privado DRIPX. No se modifica ni se compila ningún shared.');
     }
     const serverNames=b.server.map(x=>x.name),clientNames=b.client.map(x=>x.name);
     const serverPayloads=[],clientPayloads=[];
@@ -203,7 +201,6 @@ export async function patchApp(source) {
       if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
       clientPayloads.push({name,source:'if not DRIPX_CLIENT_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:clientReady",true) DRIPX_CLIENT_LICENSE_EVENT_REGISTERED=true end'+nl+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) if not DRIPX_CLIENT_START_REPLAYED then DRIPX_CLIENT_START_REPLAYED=true setTimer(function() triggerEvent("onClientResourceStart",resourceRoot,getThisResource()) end,50,1) end end)'+nl});
     }
-    for(const item of sharedPayloads)working.file(item.name,item.source);
     const metaFile=working.file(b.metaName);if(!metaFile)throw new Error('No se encuentra meta.xml.');
     let meta=await metaFile.async('string');
     if(/DRIPX_PRODUCT_ID:/i.test(meta))throw new Error('meta.xml ya contiene un ID DRIPX.');
@@ -268,20 +265,11 @@ export async function patchApp(source) {
       '  end)',
       '  if not queued then dripxSchedule(60000) end',
       'end',
+      'addEvent("dripx:license:ready",false)',
       'addEventHandler("onResourceStart",resourceRoot,function() if DRIPX_STARTING then return end DRIPX_STARTING=true dripxValidate("activate") end)',
       'addEventHandler("onPlayerResourceStart",root,function(resource) if resource==getThisResource() and DRIPX_VALIDATED and isElement(source) then triggerClientEvent(source,"dripx:license:clientReady",resourceRoot) end end)',
       'addEventHandler("onResourceStop",resourceRoot,function() if isTimer(DRIPX_TIMER) then killTimer(DRIPX_TIMER) end end)'
     ].join(nl);
-    const sharedBridge=[
-      '-- DRIP X SHOP · puente público de licencia (sin secretos)',
-      'DRIPX_LICENSE_EVENT_NAME = "dripx:license:clientReady"',
-      'if type(triggerServerEvent)=="function" then',
-      '  if not DRIPX_LICENSE_EVENT_REGISTERED then addEvent(DRIPX_LICENSE_EVENT_NAME,true) DRIPX_LICENSE_EVENT_REGISTERED=true end',
-      'else',
-      '  if not DRIPX_SERVER_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:ready",false) DRIPX_SERVER_LICENSE_EVENT_REGISTERED=true end',
-      'end'
-    ].join(nl);
-    working.file('dripx_shared_license.lua',sharedBridge);
     for(const item of serverPayloads)working.file(item.name,item.source);
     for(const item of clientPayloads)working.file(item.name,item.source);
     working.file(configName,configSource);
@@ -303,7 +291,6 @@ export async function patchApp(source) {
     }
     const configScriptTag='<script src="'+configName+'" type="server" />';
     const guardScriptTag='<script src="'+guardName+'" type="server" />';
-    const bridgeScriptTag='<script src="dripx_shared_license.lua" type="shared" />';
     const scriptTagCount=(meta.match(/<script\b/gi)||[]).length;
     const originalScriptTags=[...meta.matchAll(/<script\b[^>]*\/>/gi)].map(match=>match[0]);
     if(originalScriptTags.length!==scriptTagCount)throw new Error('meta.xml contiene etiquetas script no compatibles o no válidas.');
@@ -312,16 +299,16 @@ export async function patchApp(source) {
     const otherScriptTags=originalScriptTags.filter(tag=>scriptType(tag)!=='shared');
     const withoutScripts=meta.replace(/<script\b[^>]*\/>/gi,'');
     const metaClose=/<\/meta\s*>/i.exec(withoutScripts);if(!metaClose)throw new Error('No se pudo finalizar meta.xml.');
-    const orderedScripts=[configScriptTag,guardScriptTag,bridgeScriptTag,...sharedScriptTags,...otherScriptTags].join(nl)+nl;
+    const orderedScripts=[configScriptTag,guardScriptTag,...sharedScriptTags,...otherScriptTags].join(nl)+nl;
     meta=withoutScripts.slice(0,metaClose.index)+orderedScripts+withoutScripts.slice(metaClose.index);
     const close=/<\/meta\s*>/i.exec(meta);if(!close)throw new Error('No se pudo finalizar meta.xml.');
     meta=meta.slice(0,close.index)+'<!-- DRIPX_PRODUCT_ID: '+productId+' -->'+nl+meta.slice(close.index);
     working.file(b.metaName,meta);
-    b.zip=working;b.productId=productId;b.protected=true;b.compiled=false;b.compiledFiles=[];b.sharedOriginalSources=new Map(sharedPayloads.map(item=>[item.name,item.originalSource]));b.sharedFallbackFiles=[];b.licenseInjected=true;b.finalBlobSize=0;
+    b.zip=working;b.productId=productId;b.protected=true;b.compiled=false;b.compiledFiles=[];b.sharedFilesPreserved=true;b.licenseInjected=true;b.finalBlobSize=0;
     const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
     if(protect)protect.disabled=true;if(compile)compile.disabled=false;if(download)download.disabled=true;
     const status=document.querySelector('#zip-status');if(status)status.textContent='Protección integrada · '+serverNames.length+' server y '+clientNames.length+' client preparados para compilar a LUAC · '+sharedNames.length+' shared conservados como shared · clave reservada al servidor.';
-    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,protectedSharedFiles:sharedNames.length,serverLicenseTemplate:guardName,sharedBridge:true};
+    return {productId,protectedServerFiles:serverNames.length,protectedClientFiles:clientNames.length,protectedSharedFiles:sharedNames.length,serverLicenseTemplate:guardName,sharedFilesPreserved:true};
   }
   async function compileZip(){
     const b=state.zipBuild;
@@ -371,19 +358,6 @@ export async function patchApp(source) {
       };
       let {response,result}=await compileSource(source);
       if(!response?.ok||!result?.compiled_base64){
-        const originalShared=b.sharedOriginalSources?.get(name);
-        if(originalShared&&response?.status===422){
-          const fallback=await compileSource(originalShared);
-          if(fallback.response?.ok&&fallback.result?.compiled_base64){
-            response=fallback.response;result=fallback.result;
-            b.sharedFallbackFiles=[...new Set([...(b.sharedFallbackFiles||[]),name])];
-            console.warn('[DRIPX] Shared compilado sin envoltura de activación por incompatibilidad del wrapper:',name);
-          }else{
-            response=fallback.response||response;result=fallback.result||result;
-          }
-        }
-      }
-      if(!response?.ok||!result?.compiled_base64){
         const reason=String(result?.detail||result?.error||('HTTP '+(response?.status||'desconocido')));
         console.error('[DRIPX][COMPILER]',{file:name,status:response?.status,error:reason,sourceBytes:new TextEncoder().encode(source).length});
         throw new Error('No se pudo compilar '+name+' ('+(response?.status||'sin respuesta')+'): '+reason+'. El avance anterior se conservó; puedes reintentar.');
@@ -393,12 +367,14 @@ export async function patchApp(source) {
       catch{throw new Error('El compilador devolvió datos dañados para '+name+'.');}
       if(bytes.length<4||bytes[0]!==0x1c||bytes[1]!==0x4d||bytes[2]!==0x76||bytes[3]!==0x62)throw new Error('La salida no es bytecode MTA válido: '+name);
       const output=name.slice(0,-4)+'.luac';
-      const original=b.scriptSrcByFile?.get(name);
-      if(!original)throw new Error('No existe una referencia meta.xml para el script '+name+'.');
-      const at=meta.indexOf(original);
-      if(at<0)throw new Error('meta.xml ya no contiene la referencia original de '+name+'.');
-      const compiledPath=original.slice(0,-4)+'.luac';
-      const nextMeta=meta.slice(0,at)+compiledPath+meta.slice(at+original.length);
+      const original=b.scriptSrcByFile?.get(name)||null;
+      let nextMeta=meta;
+      if(original){
+        const at=meta.indexOf(original);
+        if(at<0)throw new Error('meta.xml ya no contiene la referencia original de '+name+'.');
+        const compiledPath=original.slice(0,-4)+'.luac';
+        nextMeta=meta.slice(0,at)+compiledPath+meta.slice(at+original.length);
+      }
       if(working.file(output))throw new Error('Ya existe el destino compilado '+output+'. No se sobrescribió ningún archivo.');
       working.file(output,bytes);
       working.remove(name);
@@ -415,10 +391,7 @@ export async function patchApp(source) {
     b.zip=working;b.metaText=meta;b.compiledFiles=[...completed];b.compiled=true;
     const protect=document.querySelector('#zip-protect'),compile=document.querySelector('#zip-compile'),download=document.querySelector('#zip-download');
     if(protect)protect.disabled=true;if(compile)compile.disabled=true;if(download)download.disabled=false;
-    const fallbackFiles=b.sharedFallbackFiles||[];
-     const st=document.querySelector('#zip-status');if(st)st.textContent=fallbackFiles.length
-       ? 'Compilación MTA completada · '+completed.size+' scripts verificados · '+fallbackFiles.length+' shared compilado(s) en modo compatibilidad; la lógica sensible debe permanecer en server.'
-       : 'Compilación MTA completada · '+completed.size+' scripts verificados.';
+    const st=document.querySelector('#zip-status');if(st)st.textContent='Compilación MTA completada · '+completed.size+' Lua no-shared verificados. Los shared originales se conservaron sin cambios.';
     return {compiledCount:completed.size};
   }
   async function downloadProtectedZip(){
