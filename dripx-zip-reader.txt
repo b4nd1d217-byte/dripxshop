@@ -226,7 +226,8 @@
     const configLuaNames=new Set(files.filter(item=>item.kind==='config').map(item=>item.path));
     const compileTargets=entries.filter(entry=>{
       const type=scriptMap.get(entry.name);
-      return /\.lua$/i.test(entry.name)&&type!=='shared'&&!configLuaNames.has(entry.name);
+      // Compile only executable Lua explicitly declared in meta.xml. Shared is never compiled.
+      return /\.lua$/i.test(entry.name)&&(type==='server'||type==='client');
     });
     const serverEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='server'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
