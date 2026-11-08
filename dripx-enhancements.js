@@ -1762,10 +1762,80 @@
   document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-dx-renew-plan]');if(!b)return;ev.preventDefault();ev.stopImmediatePropagation();b.disabled=true;try{const {data,error}=await client.rpc('customer_request_plan_renewal',{p_user_plan_id:b.dataset.dxRenewPlan});if(error)throw error;toast(data?.message||'Solicitud de renovación creada.');await renderOwnedProducts();}catch(err){toast(err.message||'No se pudo renovar.');b.disabled=false;}},true);
   function installUserPlanManagerObserver(){if(window.__DRIPX_USER_PLAN_MANAGER_OBSERVER)return;const root=document.querySelector('#app');if(!root)return;const ob=new MutationObserver(()=>scheduleUserPlanManager());ob.observe(root,{childList:true,subtree:true});window.__DRIPX_USER_PLAN_MANAGER_OBSERVER=ob;if(!window.__DRIPX_PLAN_CLOCK_TIMER)window.__DRIPX_PLAN_CLOCK_TIMER=setInterval(updateUserPlanClocks,1000);scheduleUserPlanManager();}
 
+  function productFieldWrapper(control){
+    if(!control)return null;
+    return control.closest('label,.form-group,.form-field,.field,.form-row,.input-group')||control.parentElement;
+  }
+  function syncProductTypeLayout(form){
+    if(!form||form.id!=='product-form')return;
+    const type=form.querySelector('select[name="product_type"]');
+    if(!type)return;
+    const isPlan=String(type.value||'plan')==='plan';
+    const category=form.querySelector('select[name="category"],select[id*="categor" i]');
+    const file=form.querySelector('input[name="file"],#resource-zip');
+    const fileWrap=productFieldWrapper(file);
+    if(fileWrap){
+      fileWrap.hidden=isPlan;
+      fileWrap.setAttribute('aria-hidden',String(isPlan));
+      fileWrap.classList.toggle('dx-product-field-hidden',isPlan);
+    }
+    form.querySelectorAll('.dx-product-engine,.dx-product-zip-preview,.dx-staging-panel,#product-zip-preview,#product-zip-upload-state,#zip-status,#zip-file-list,#zip-protect,#zip-compile,#zip-download,.dx-upload-progress').forEach(node=>{
+      node.hidden=isPlan;
+      node.setAttribute('aria-hidden',String(isPlan));
+    });
+    ['plan_code','billing_period','features'].forEach(name=>{
+      const control=form.querySelector('[name="'+name+'"]');
+      const wrap=productFieldWrapper(control);
+      if(wrap){wrap.hidden=!isPlan;wrap.setAttribute('aria-hidden',String(!isPlan));}
+    });
+    if(category){
+      category.classList.add('dx-product-category-select');
+      const wanted=isPlan?'Planes':'Productos';
+      const option=Array.from(category.options).find(item=>String(item.value||'').trim().toLowerCase()===wanted.toLowerCase());
+      if(option&&category.value!==option.value)category.value=option.value;
+    }
+    const hint=form.querySelector('[data-dx-product-type-hint]')||document.createElement('div');
+    hint.dataset.dxProductTypeHint='';
+    hint.className='dx-product-type-guidance '+(isPlan?'is-plan':'is-resource');
+    hint.innerHTML=isPlan
+      ?'<span>✦</span><div><strong>Plan de acceso · sin archivos</strong><small>Configura el precio, la duración y las características. Los ZIP no pertenecen al plan; se vinculan desde Configuración de planes.</small></div>'
+      :'<span>▣</span><div><strong>Producto descargable · categoría Productos</strong><small>Este recurso se crea aquí, con su ZIP y su imagen. Una vez publicado aparecerá en el configurador para incluirlo en los planes.</small></div>';
+    if(!hint.isConnected){
+      const parent=type.closest('label,.form-group,.form-field,.field,.form-row')||type.parentElement;
+      parent?.insertAdjacentElement('afterend',hint);
+    }
+    Array.from(type.options).forEach(option=>{
+      if(option.value==='plan')option.textContent='Plan de acceso · sin ZIP';
+      if(option.value==='resource')option.textContent='Producto descargable · ZIP';
+    });
+    if(isPlan&&file){
+      if(file.value)file.value='';
+      window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
+      window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
+      window.__DRIPX_PENDING_PRODUCT_ID=null;
+      const status=form.querySelector('#product-zip-upload-state');
+      if(status)status.textContent='Los planes no almacenan ZIP. Los recursos se administran como productos independientes.';
+    }
+    form.dataset.dripxProductTypeLayout='1';
+  }
+  function installProductTypeLayout(){
+    const sync=()=>{const form=document.querySelector('#product-form');if(form)syncProductTypeLayout(form);};
+    document.addEventListener('change',event=>{
+      if(event.target.matches('#product-form select[name="product_type"]'))syncProductTypeLayout(event.target.closest('#product-form'));
+    },true);
+    const root=document.querySelector('#app');
+    if(root&&!root.dataset.dxProductTypeObserver){
+      root.dataset.dxProductTypeObserver='1';
+      const observer=new MutationObserver(()=>sync());
+      observer.observe(root,{childList:true,subtree:true});
+    }
+    sync();
+  }
+
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
-    syncCategoryOptions(true);markAdminView();installAdminProductsTabTracker();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
+    syncCategoryOptions(true);installProductTypeLayout();markAdminView();installAdminProductsTabTracker();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
     cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
