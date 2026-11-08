@@ -1567,6 +1567,8 @@
       if(button){button.disabled=false;delete button.dataset.dripxLoading;}
     }
   }
+  window.DRIPX_DOWNLOAD_OWNED_PRODUCT=downloadOwnedProduct;
+
   document.addEventListener('click',async event=>{
     const copy=event.target.closest('[data-dripx-copy-license]');
     if(copy){
