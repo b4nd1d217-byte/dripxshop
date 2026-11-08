@@ -454,11 +454,6 @@ async function downloadOwnedProduct(req: Request) {
   if (serverLicenseConfigs.length !== 1) {
     return json(409, { error: "resource_server_license_config_missing" });
   }
-  const configTagIndex = tags.findIndex(tag => xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === "dripx-cfg.lua");
-  const guardTagIndex = tags.findIndex(tag => xmlAttribute(tag, "src").trim().replace(/^\.\//, "").toLowerCase() === "dripx_server_license.lua");
-  if (configTagIndex < 0 || guardTagIndex < 0 || configTagIndex >= guardTagIndex) {
-    return json(409, { error: "resource_server_license_config_load_order_invalid" });
-  }
   const sharedBridge = zip.file(sharedBridges[0]);
   if (!sharedBridge) return json(409, { error: "resource_shared_license_bridge_missing" });
   const sharedText = await sharedBridge.async("string");
