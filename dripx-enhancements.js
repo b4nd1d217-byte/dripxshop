@@ -260,21 +260,29 @@
     });
   }
   function ensureLiveProductZipPreview(inputHint,runId){
-    const form=document.getElementById('product-form')||inputHint?.closest?.('#product-form');
-    const input=form?.querySelector('input[name="file"]')||(inputHint?.isConnected?inputHint:null);
-    if(!form||!input||!input.isConnected)return null;
+    const hinted=inputHint?.matches?.('input[type="file"]')?inputHint:null;
+    const form=document.getElementById('product-form')||hinted?.closest?.('#product-form');
+    const input=hinted&&hinted.closest('#product-form')?hinted:(form?.querySelector('#resource-file-field input[type="file"]')||form?.querySelector('input[name="file"]'));
+    if(!form||!input||!input.isConnected||!form.contains(input))return null;
     const activeRun=String(input.dataset.dripxZipRun||'');
     if(activeRun&&runId&&activeRun!==runId)return null;
     if(runId)input.dataset.dripxZipRun=runId;
     let node=form.querySelector('#product-zip-preview');
+    const anchor=form.querySelector('#resource-file-field')||input.closest('label')||input.parentElement||form;
     if(!node){
-      node=document.createElement('div');
+      node=document.createElement('section');
       node.id='product-zip-preview';
       node.className='dx-product-zip-preview';
-      const anchor=input.closest('label')||input.parentElement||input;
-      anchor.insertAdjacentElement('afterend',node);
     }
-    if(!node.isConnected||!form.contains(node))return null;
+    // Keep the preview outside the collapsible file-field wrapper so admin
+    // form changes cannot hide it or detach it with the native input label.
+    if(anchor?.parentElement&&node.previousElementSibling!==anchor)anchor.insertAdjacentElement('afterend',node);
+    else if(!form.contains(node))form.append(node);
+    if(!node.isConnected||!form.contains(node))form.append(node);
+    node.hidden=false;
+    node.classList.remove('hidden');
+    node.removeAttribute('aria-hidden');
+    node.setAttribute('aria-live','polite');
     let status=form.querySelector('#product-zip-upload-state');
     if(!status){
       status=document.createElement('div');
@@ -282,8 +290,10 @@
       status.className='dx-upload-state';
       status.setAttribute('role','status');
       status.setAttribute('aria-live','polite');
-      node.insertAdjacentElement('afterend',status);
     }
+    if(node.nextElementSibling!==status)node.insertAdjacentElement('afterend',status);
+    status.hidden=false;
+    status.classList.remove('hidden');
     return {form,input,node,status};
   }
 
@@ -448,12 +458,22 @@
     const selectionRun='selection-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     input.dataset.dripxZipRun=selectionRun;
     window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file;
+    window.__DRIPX_SELECTED_PRODUCT_ZIP_META={name:file.name,size:file.size,lastModified:file.lastModified||0,selectedAt:Date.now()};
     const live=ensureLiveProductZipPreview(input,selectionRun);
-    if(!live)throw new Error('No se pudo mostrar el ZIP seleccionado en el formulario de Productos.');
-    const {form,node}=live;
+    if(!live)throw new Error('No se encontró el formulario activo para mostrar el ZIP. Abre Administración → Productos y vuelve a seleccionar el archivo.');
+    const {form,node,status}=live;
     node.dataset.state='selected';
-    node.innerHTML='<div class="dx-zip-selection-card"><div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Archivo listo</small><button type="button" class="dx-zip-start" data-dripx-start-protection>Iniciar protección automática</button><p class="dx-zip-selection-hint">Se validará, protegerá, compilará y verificará antes de habilitar Guardar producto.</p></div>';
-    setProductZipStatus('ZIP seleccionado: '+file.name+' · '+formatBytes(file.size),'info');
+    node.hidden=false;
+    node.classList.remove('hidden');
+    node.innerHTML='<div class="dx-zip-selection-card">'+
+      '<div class="dx-zip-selection-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><span class="dx-zip-selection-status">ARCHIVO SELECCIONADO</span></div>'+
+      '<strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong>'+
+      '<small class="dx-zip-selection-meta">'+formatBytes(file.size)+' · MTA:SA · Pendiente de protección</small>'+
+      '<button type="button" class="dx-zip-start" data-dripx-start-protection>Iniciar protección automática</button>'+
+      '<p class="dx-zip-selection-hint">El archivo se analizará primero. Después de completar la protección, pulsa Guardar producto para subir el ZIP protegido a Supabase.</p>'+
+    '</div>';
+    if(status){status.dataset.state='info';status.textContent='Archivo detectado: '+file.name+' · '+formatBytes(file.size)+'. Todavía no se ha subido a Supabase.';}
+    lockProductSubmit(form,true);
     const start=node.querySelector('[data-dripx-start-protection]');
     let busy=false,needsResume=false;
     const run=async()=>{
@@ -462,27 +482,32 @@
       busy=true;start.disabled=true;start.textContent=needsResume?'Reanudando protección…':'Protegiendo ZIP…';
       lockProductSubmit(form,true);
       const dialog=createProtectionDialog(file);
-      const outcome=await previewProductZip(file,dialog,needsResume);
+      let outcome;
+      try{outcome=await previewProductZip(file,dialog,needsResume);}
+      catch(error){outcome={ok:false,error};}
       if(outcome?.ok){
         needsResume=false;
         const active=ensureLiveProductZipPreview(document.querySelector('#product-form input[name="file"]'),null);
         const activeNode=active?.node||node;
         activeNode.dataset.state='success';
-        start.textContent='ZIP protegido y seleccionado';
+        start.textContent='ZIP protegido · listo para guardar';
         start.disabled=true;
-        const status=active?.status||document.querySelector('#product-zip-upload-state');
-        if(status){status.dataset.state='success';status.textContent='ÉXITO: '+outcome.file.name+' · '+formatBytes(outcome.file.size)+' · listo para guardar.';}
+        const liveStatus=active?.status||status||document.querySelector('#product-zip-upload-state');
+        if(liveStatus){liveStatus.dataset.state='success';liveStatus.textContent='PROTECCIÓN COMPLETADA: '+outcome.file.name+' · '+formatBytes(outcome.file.size)+'. Aún falta pulsar Guardar producto para almacenarlo en Supabase.';}
         dialog.succeed();
-        toast('ÉXITO: ZIP protegido, verificado y seleccionado.');
+        toast('Protección completada. Guarda el producto para subir el ZIP protegido.');
       }else{
         needsResume=!!window.__DRIPX_PROTECTION_JOB?.started;
         busy=false;start.disabled=false;start.textContent=needsResume?'Reintentar / reanudar':'Reintentar protección';
         lockProductSubmit(form,false);
         dialog.fail(outcome?.error?.message||'No se pudo completar la protección.');
         dialog.onRetry(async()=>{dialog.close();await run();});
+        const liveStatus=document.querySelector('#product-form #product-zip-upload-state')||status;
+        if(liveStatus){liveStatus.dataset.state='error';liveStatus.textContent='ERROR DE PROTECCIÓN: '+(outcome?.error?.message||'No se pudo completar el proceso.');}
       }
     };
     start.addEventListener('click',run);
+    return live;
   }
 
   async function previewProductZip(file,dialog,resume=false){
@@ -571,26 +596,59 @@
     }
   }
 
-  document.addEventListener('change',event=>{
-    if(event.target?.matches('#product-form input[name="file"]')){
-      const input=event.target,file=input.files?.[0];
-      if(!file)return;
-      if(!String(file.name||'').toLowerCase().endsWith('.zip')){
-        window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=null;
-        input.dataset.dripxZipReady='false';
-        setProductZipStatus('Selecciona un archivo .zip válido.','error');
-        toast('✕ El archivo del producto debe tener extensión .zip.');
-        return;
-      }
-      window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file;
+  function handleProductZipSelection(event){
+    const input=event.target;
+    if(!input?.matches?.('input[type="file"]'))return;
+    const form=input.closest('#product-form');
+    if(!form)return;
+    const accept=String(input.getAttribute('accept')||'').toLowerCase();
+    const isProductZip=input.name==='file'||!!input.closest('#resource-file-field')||accept.includes('.zip')||accept.includes('application/zip');
+    if(!isProductZip)return;
+    const file=input.files?.[0];
+    if(!file)return;
+    if(window.__DRIPX_LAST_SELECTED_ZIP_INPUT===input&&window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE===file)return;
+    window.__DRIPX_LAST_SELECTED_ZIP_INPUT=input;
+    if(!/\.zip$/i.test(String(file.name||''))){
+      window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=null;
+      window.__DRIPX_SELECTED_PRODUCT_ZIP_META=null;
       window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
       window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
-      window.__DRIPX_PENDING_PRODUCT_ID=null;
       input.dataset.dripxZipReady='false';
-      lockProductSubmit(input.closest('#product-form'),true);
-      renderProductZipSelection(input,file);
+      let bad=ensureLiveProductZipPreview(input,null);
+      if(bad){
+        bad.node.dataset.state='error';
+        bad.node.innerHTML='<div class="dx-zip-selection-card"><strong>Formato no válido</strong><p class="dx-zip-selection-hint">Selecciona un archivo con extensión .zip.</p></div>';
+        bad.status.dataset.state='error';bad.status.textContent='El archivo seleccionado no termina en .zip.';
+      }
+      lockProductSubmit(form,true);
+      toast('El archivo del producto debe ser un ZIP.');
+      return;
     }
-  });
+    window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file;
+    window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
+    window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
+    window.__DRIPX_PENDING_PRODUCT_ID=null;
+    input.dataset.dripxZipReady='false';
+    lockProductSubmit(form,true);
+    try{
+      renderProductZipSelection(input,file);
+      console.info('[DRIPX] ZIP seleccionado y mini panel montado',{name:file.name,size:file.size});
+    }catch(error){
+      console.error('[DRIPX] No se pudo montar el mini panel ZIP:',error);
+      const host=form.querySelector('#resource-file-field')||form;
+      let fallback=form.querySelector('#product-zip-preview');
+      if(!fallback){fallback=document.createElement('section');fallback.id='product-zip-preview';fallback.className='dx-product-zip-preview';host.insertAdjacentElement('afterend',fallback);}
+      fallback.hidden=false;fallback.classList.remove('hidden');fallback.dataset.state='error';
+      fallback.innerHTML='<div class="dx-zip-selection-card"><strong>ZIP detectado · Panel recuperado</strong><small>'+escapeHtml(file.name)+' · '+formatBytes(file.size)+'</small><p class="dx-zip-selection-hint">'+escapeHtml(error?.message||'Error al montar el panel.')+'</p><button type="button" class="dx-zip-start" data-dripx-start-protection>Reintentar montaje</button></div>';
+      fallback.querySelector('[data-dripx-start-protection]')?.addEventListener('click',()=>{try{renderProductZipSelection(input,file);}catch(retryError){toast(retryError?.message||'No se pudo recuperar el panel ZIP.');}});
+    }
+  }
+  // Capture-phase delegation survives dynamic admin form replacement and
+  // third-party listeners that stop bubbling. Keep input as a mobile fallback.
+  document.addEventListener('change',handleProductZipSelection,true);
+  document.addEventListener('input',handleProductZipSelection,true);
+  window.__DRIPX_ZIP_SELECTION_BRIDGE_READY=true;
+
   function ensureOwnedProductsTab(){
     const tabs=document.querySelector('.profile-tabs');if(!tabs)return;
     let button=tabs.querySelector('[data-dripx-owned-products]');
