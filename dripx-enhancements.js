@@ -831,7 +831,7 @@
     if(!client||categorySyncPromise||(!force&&Date.now()-categorySyncAt<45000))return categorySyncPromise;
     const selects=Array.from(document.querySelectorAll('#app select')).filter(select=>{
       const meta=[select.id,select.name,select.className,select.getAttribute('aria-label'),select.getAttribute('data-filter')].join(' ');
-      return /categor/i.test(meta);
+      return /categor/i.test(meta)&&select.name!=='store_category';
     });
     if(!selects.length)return;
     categorySyncPromise=(async()=>{
@@ -878,6 +878,23 @@
     finally{categorySyncPromise=null;}
   }
 
+
+  async function ensureProductStoreCategoryField(){
+    const form=document.querySelector('#product-form');if(!form||!client)return;
+    const internal=form.querySelector('select[name="category"]');if(!internal)return;
+    const internalLabel=internal.closest('label')||internal.parentElement;
+    if(internalLabel){internal.value='Productos';internalLabel.style.display='none';}
+    let field=form.querySelector('[data-dx-store-category-field]');
+    if(!field){field=document.createElement('label');field.className='dx-product-store-category-field';field.dataset.dxStoreCategoryField='1';field.innerHTML='<span>Categoría del producto</span><select name="store_category" required></select><small>Categoría visible en la tienda. El tipo interno seguirá siendo Producto descargable.</small>';(internalLabel?.parentElement||form).insertBefore(field,internalLabel?.nextSibling||null);}
+    try{
+      const {data,error}=await client.from('dripx_categories').select('name,slug,active,sort_order').eq('active',true).order('sort_order',{ascending:true});if(error)throw error;
+      const select=field.querySelector('select[name="store_category"]'),previous=select.value||'scripts-mta';
+      const rows=(data||[]).filter(row=>row.slug&&!['planes','productos'].includes(String(row.slug).toLowerCase()));
+      select.replaceChildren();rows.forEach(row=>{const option=document.createElement('option');option.value=row.slug;option.textContent=row.name;select.append(option);});
+      if(rows.some(row=>row.slug===previous))select.value=previous;else if(rows.length)select.value=rows[0].slug;
+      if(!rows.length)throw new Error('No hay categorías activas para productos.');
+    }catch(error){console.warn('[DRIPX] Categoría de producto:',error);const select=field.querySelector('select');if(select&&!select.options.length){const option=document.createElement('option');option.value='scripts-mta';option.textContent='Scripts MTA';select.append(option);}}
+  }
 
   const DRIPX_CATEGORY_ICONS=['package','code-2','shield-check','layers-3','star','box','gamepad-2','wrench','zap','file-code-2'];
   let categoryManagerLoading=false;
@@ -1530,7 +1547,7 @@
     },true);
   }
   const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);syncCatalogOwnership(false);clearLegacyZipStaging();installCategoryAuthLifecycle();syncCategoryManagerVisibility();
+    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);void ensureProductStoreCategoryField();syncCatalogOwnership(false);clearLegacyZipStaging();installCategoryAuthLifecycle();syncCategoryManagerVisibility();
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
   });
   function removeStandaloneProtectionAdminEntry(root=document){
