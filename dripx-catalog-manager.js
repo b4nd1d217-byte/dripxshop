@@ -1,5 +1,6 @@
 (()=>{'use strict';
 const db=window.DRIPX_SUPABASE_CLIENT;
+window.__DRIPX_CATALOG_MANAGER_ACTIVE=true;
 if(!db)return;
 const ROOT='#dx-catalog-admin';
 let products=[],mappings=[],busy=false,loading=false;
