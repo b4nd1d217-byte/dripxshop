@@ -1269,6 +1269,7 @@
   }
   async function renderPlanResourceManager(){
     let panel=document.querySelector('#dx-plan-resource-manager');
+    if(window.__DRIPX_CATALOG_MANAGER_ACTIVE){panel?.remove();return;}
     if(!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
     if(planResourceLoading||panel?.dataset.loaded==='1')return;
     planResourceLoading=true;
@@ -1367,6 +1368,7 @@
     const app=document.querySelector('#app');if(!app||app.dataset.dxPlanResourceObserver==='1')return;
     app.dataset.dxPlanResourceObserver='1';
     const observer=new MutationObserver(()=>{
+      if(window.__DRIPX_CATALOG_MANAGER_ACTIVE){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
       if(isAdminProductsRoute()&&window.DRIPX_IS_ADMIN===true){
         const panel=document.querySelector('#dx-plan-resource-manager');
         if(!panel||panel.dataset.loaded!=='1')schedulePlanResourceManager();
