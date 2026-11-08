@@ -161,6 +161,14 @@ export async function patchApp(source) {
     const b=state.zipBuild;
     if(!b?.zip)throw new Error('Selecciona el ZIP original.');
     if(b.protected)throw new Error('Este ZIP ya fue protegido.');
+    const inputMeta=new DOMParser().parseFromString(String(b.metaText||''),'application/xml');
+    if(inputMeta.querySelector('parsererror'))throw new Error('meta.xml no se puede interpretar antes de proteger el recurso.');
+    const precompiledScripts=[...inputMeta.querySelectorAll('script')].filter(node=>{
+      const type=(node.getAttribute('type')||'server').trim().toLowerCase();
+      const src=String(node.getAttribute('src')||'').trim();
+      return ['server','client','shared'].includes(type)&&/\.luac$/i.test(src);
+    }).map(node=>String(node.getAttribute('src')||''));
+    if(precompiledScripts.length)throw new Error('No se pueden proteger scripts que ya llegan compilados porque no es posible poner su código detrás de la licencia. Sube los Lua fuente (.lua) para estos archivos: '+precompiledScripts.slice(0,8).join(', '));
     const working=b.zip,productId=b.productId||crypto.randomUUID(),nl=String.fromCharCode(10);
     const guardName='dripx_server_license.lua',configName='DRIPX-CFG.LUA';
     if(working.file(guardName)||working.file(configName)||working.file('dripx-cfg.lua'))throw new Error('El resource ya contiene un nombre reservado por DRIP X SHOP: '+configName+' o '+guardName+'.');
