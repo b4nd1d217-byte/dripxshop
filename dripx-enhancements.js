@@ -488,16 +488,16 @@
   async function previewProductZip(file,dialog,resume=false){
     let input=document.querySelector('#product-form input[name="file"]');
     let form=input?.closest('#product-form');
-    if(!input||!form)throw new Error('El formulario de Productos ya no está disponible. Vuelve a abrirlo y selecciona el ZIP.');
-    if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
     const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
-    input.dataset.dripxZipRun=runId;
-    input.dataset.dripxZipReady='false';
-    window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
-    window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
-    lockProductSubmit(form,true);
     const update=(step,label,detail)=>{dialog?.update(step,label,detail);setProductZipStatus(label,'processing');};
     try{
+      if(!input||!form)throw new Error('El formulario de Productos ya no está disponible. Vuelve a abrirlo y selecciona el ZIP.');
+      if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
+      input.dataset.dripxZipRun=runId;
+      input.dataset.dripxZipReady='false';
+      window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
+      window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
+      lockProductSubmit(form,true);
       update(0,'Validando ZIP y leyendo meta.xml…','Comprobando integridad, estructura y archivos del resource.');
       await getAdminSession();
       let live=ensureLiveProductZipPreview(input,runId);
