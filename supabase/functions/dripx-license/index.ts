@@ -315,9 +315,17 @@ async function downloadOwnedProduct(req: Request) {
     });
   }
 
-  const accountLicense = await callRpc("dripx_internal_get_account_license", { p_user_id: user.id });
-  if (accountLicense?.status !== "active") {
+  const accountLicenses = await readRows(
+    "account_licenses?user_id=eq." + encodeURIComponent(user.id)
+      + "&select=status,bound_server_ip,bound_server_port&limit=1",
+    service,
+  );
+  const accountLicense = accountLicenses[0];
+  if (accountLicenses.length !== 1 || accountLicense?.status !== "active") {
     return json(409, { error: "account_license_not_ready" });
+  }
+  if (!accountLicense.bound_server_ip || !accountLicense.bound_server_port) {
+    return json(409, { error: "server_binding_required" });
   }
 
   let zip: JSZip;
