@@ -849,7 +849,9 @@
       for(const select of selects){
         if(!select.isConnected||select.multiple)continue;
         const inProductForm=!!select.closest('#product-form');
-        const source=activeNames;
+        // Productos is an internal resource category: it belongs in the admin product form,
+        // never in the plans-only public storefront filters.
+        const source=inProductForm?activeNames:activeNames.filter(name=>String(name).trim().toLowerCase()==='planes');
         const current=select.value;
         const first=select.options[0];
         const firstText=String(first?.textContent||'').trim();
@@ -1273,40 +1275,72 @@
     try{
       await getAdminSession();
       const [productsResult,mappingsResult]=await Promise.all([
-        client.from('dripx_products').select('id,title,product_type,status,plan_code,billing_period,protection_enabled,file_path').order('created_at',{ascending:false}),
+        client.from('dripx_products').select('id,title,product_type,status,category,plan_code,billing_period,protection_enabled,file_path,image_url').order('created_at',{ascending:false}),
         client.from('dripx_plan_resources').select('plan_product_id,resource_product_id')
       ]);
       if(productsResult.error)throw productsResult.error;
       if(mappingsResult.error)throw mappingsResult.error;
       const products=productsResult.data||[];
       const plans=products.filter(p=>p.product_type==='plan');
-      const resources=products.filter(p=>p.product_type==='resource'&&p.status==='published'&&!!p.file_path);
+      // Only already-published, downloadable resources created in the Productos category
+      // can be assigned. This manager never creates a product or uploads a ZIP.
+      const resources=products.filter(p=>p.product_type==='resource'&&p.status==='published'&&!!p.file_path&&String(p.category||'').trim().toLowerCase()==='productos');
       const mapped=new Set((mappingsResult.data||[]).map(row=>String(row.plan_product_id)+'::'+String(row.resource_product_id)));
+      const publishedPlans=plans.filter(p=>p.status==='published').length;
+      const assignedTotal=plans.reduce((sum,plan)=>sum+resources.filter(r=>mapped.has(String(plan.id)+'::'+String(r.id))).length,0);
       const app=document.querySelector('#app');if(!app)return;
       panel=document.querySelector('#dx-plan-resource-manager');
       if(!panel){panel=document.createElement('section');panel.id='dx-plan-resource-manager';panel.className='dx-plan-resource-manager';}
-      const planMarkup=plans.map(plan=>
-        '<article class="dx-plan-resource-card" data-dx-plan-card="'+escapeHtml(plan.id)+'">'+
-          '<header><div><strong>'+escapeHtml(plan.title||plan.plan_code||'Plan')+'</strong><small>'+escapeHtml(plan.plan_code||'')+' · '+escapeHtml(plan.billing_period||'periodo no especificado')+'</small></div>'+
-          '<button type="button" class="btn primary" data-dx-plan-save="'+escapeHtml(plan.id)+'">Guardar</button></header>'+
-          (resources.length
-            ? '<div class="dx-plan-resource-options">'+resources.map(resource=>
-                '<label><input type="checkbox" data-dx-plan-resource="'+escapeHtml(resource.id)+'" '+(mapped.has(String(plan.id)+'::'+String(resource.id))?'checked':'')+'><span>'+escapeHtml(resource.title)+'</span></label>'
-              ).join('')+'</div>'
-            : '<p class="muted">No hay productos descargables publicados con ZIP. Crea un producto interno y publica su archivo desde Productos para poder asignarlo a un plan.</p>')+
-          '<p class="dx-plan-resource-status" data-dx-plan-status role="status"></p></article>'
-      ).join('');
-      panel.innerHTML='<header class="dx-plan-resource-manager-head"><div><span class="dx-admin-kicker">ACCESOS TEMPORALES</span><h2>Recursos incluidos en cada plan</h2><p>Selecciona los productos descargables que incluye cada plan. El acceso se concede cuando se aprueba la compra y se retira al vencer la suscripción.</p></div></header>'+
-        (planMarkup||'<p class="muted">Todavía no hay productos de tipo Plan para configurar.</p>');
+      const planMarkup=plans.map((plan,index)=>{
+        const assigned=resources.filter(resource=>mapped.has(String(plan.id)+'::'+String(resource.id))).length;
+        const image=/^https:\/\//i.test(String(plan.image_url||''))?'<img src="'+escapeHtml(plan.image_url)+'" alt="" loading="lazy">':'<span class="dx-plan-config-art">✦</span>';
+        const options=resources.length
+          ?'<div class="dx-plan-resource-options">'+resources.map(resource=>{
+             const selected=mapped.has(String(plan.id)+'::'+String(resource.id));
+             const resourceImage=/^https:\/\//i.test(String(resource.image_url||''))?'<img src="'+escapeHtml(resource.image_url)+'" alt="" loading="lazy">':'<span class="dx-plan-resource-mini-art">▣</span>';
+             return '<label class="dx-plan-resource-item" data-resource-label="'+escapeHtml(String(resource.title||'').toLowerCase())+'">'+
+               '<input type="checkbox" data-dx-plan-resource="'+escapeHtml(resource.id)+'" '+(selected?'checked':'')+'>'+
+               resourceImage+'<span><strong>'+escapeHtml(resource.title||'Producto descargable')+'</strong><small>ZIP publicado · categoría Productos</small></span><i>'+(selected?'Incluido':'Disponible')+'</i></label>';
+           }).join('')+'</div>'
+          :'<div class="dx-plan-resource-empty"><span class="dx-plan-resource-empty-icon">▣</span><strong>Aún no hay productos descargables</strong><p>Primero crea y publica los recursos en <b>Administración → Productos</b>, usando la categoría <b>Productos</b>. Después aparecerán aquí para asignarlos.</p><a href="#admin/productos">Ir a Productos <span>↗</span></a></div>';
+        return '<article class="dx-plan-config-card" data-dx-plan-card="'+escapeHtml(plan.id)+'">'+
+          '<header class="dx-plan-config-head"><div class="dx-plan-config-identity">'+image+'<div><small>PLAN '+String(index+1).padStart(2,'0')+' · '+escapeHtml(plan.plan_code||'SIN CÓDIGO')+'</small><h3>'+escapeHtml(plan.title||'Plan sin nombre')+'</h3><p>'+escapeHtml(plan.billing_period||'Periodo por configurar')+' · '+(plan.status==='published'?'Publicado':'Borrador / archivado')+'</p></div></div>'+
+          '<span class="dx-plan-published '+(plan.status==='published'?'is-live':'is-draft')+'">'+(plan.status==='published'?'Publicado':'No publicado')+'</span></header>'+
+          '<div class="dx-plan-config-stats"><div><small>RECURSOS INCLUIDOS</small><strong data-dx-plan-count>'+assigned+'</strong><span>de '+resources.length+' disponibles</span></div><div><small>ACCESO</small><strong>Temporal</strong><span>según vigencia del plan</span></div><div><small>ARCHIVOS DEL PLAN</small><strong>Ninguno</strong><span>los ZIP pertenecen al producto</span></div></div>'+
+          '<div class="dx-plan-assign-head"><div><span>CONTENIDO DEL PLAN</span><h4>Productos incluidos</h4><p>Marca los productos existentes que recibirá el comprador al activar este plan.</p></div>'+
+          (resources.length?'<label class="dx-plan-assign-search">⌕ <input type="search" data-dx-plan-search placeholder="Buscar producto…"></label>':'')+'</div>'+
+          options+
+          '<footer class="dx-plan-assign-footer"><span data-dx-plan-status role="status">Los cambios no se aplican hasta guardar.</span><button type="button" class="btn primary" data-dx-plan-save="'+escapeHtml(plan.id)+'">Guardar asignación <span>→</span></button></footer>'+
+        '</article>';
+      }).join('');
+      panel.innerHTML='<div class="dx-plan-control-hero"><div class="dx-plan-control-brand"><span class="dx-plan-control-icon">✦</span><div><span class="dx-admin-kicker">DRIP X · ACCESOS Y SUSCRIPCIONES</span><h2>Configuración de planes</h2><p>Define qué productos descargables recibe cada plan. Este panel solo vincula recursos existentes: no crea productos ni acepta archivos ZIP.</p></div></div><div class="dx-plan-control-metrics"><div><strong>'+plans.length+'</strong><span>Planes</span></div><div><strong>'+publishedPlans+'</strong><span>Publicados</span></div><div><strong>'+resources.length+'</strong><span>Productos disponibles</span></div><div><strong>'+assignedTotal+'</strong><span>Asignaciones</span></div></div></div>'+
+        '<div class="dx-plan-workflow-note"><span>01</span><div><strong>Crea tus productos aparte</strong><p>Ve a Administración → Productos, selecciona “Producto descargable” y categoría “Productos”. Sube su ZIP, revisa el contenido y publícalo.</p></div><span class="dx-plan-workflow-arrow">→</span><a href="#admin/productos">Abrir Productos</a></div>'+
+        '<div class="dx-plan-config-list">'+(planMarkup||'<div class="dx-plan-no-plans"><span>✦</span><h3>No hay planes para configurar</h3><p>Crea primero un plan de acceso. Los planes no llevan ZIP; solo definen precio, duración y los productos incluidos.</p><a href="#admin/productos">Abrir administración de productos</a></div>')+'</div>';
       panel.dataset.loaded='1';
       if(!panel.isConnected)app.append(panel);
     }catch(error){
       panel=document.querySelector('#dx-plan-resource-manager');
       if(!panel){const app=document.querySelector('#app');if(!app)return;panel=document.createElement('section');panel.id='dx-plan-resource-manager';panel.className='dx-plan-resource-manager';app.append(panel);}
-      panel.dataset.loaded='1';
-      panel.innerHTML='<p class="dx-admin-error">'+escapeHtml(error.message||'No se pudieron cargar los recursos de los planes.')+'</p>';
+      panel.dataset.loaded='error';
+      panel.innerHTML='<div class="dx-plan-config-error"><strong>No se pudo cargar la configuración</strong><p>'+escapeHtml(error.message||'Error consultando los planes y productos.')+'</p><button type="button" data-dx-plan-retry>Reintentar</button></div>';
     }finally{planResourceLoading=false;}
   }
+  document.addEventListener('input',event=>{
+    const search=event.target.closest('[data-dx-plan-search]');if(!search)return;
+    const card=search.closest('[data-dx-plan-card]'),query=String(search.value||'').trim().toLowerCase();
+    card?.querySelectorAll('[data-resource-label]').forEach(row=>{row.hidden=!!query&&!String(row.dataset.resourceLabel||'').includes(query);});
+  },true);
+  document.addEventListener('change',event=>{
+    const checkbox=event.target.closest('[data-dx-plan-resource]');if(!checkbox)return;
+    const card=checkbox.closest('[data-dx-plan-card]');if(!card)return;
+    const count=card.querySelectorAll('[data-dx-plan-resource]:checked').length;
+    const node=card.querySelector('[data-dx-plan-count]');if(node)node.textContent=String(count);
+    const label=checkbox.closest('label');const state=label?.querySelector('i');if(state)state.textContent=checkbox.checked?'Incluido':'Disponible';
+    const status=card.querySelector('[data-dx-plan-status]');if(status)status.textContent='Hay cambios sin guardar.';
+  },true);
+  document.addEventListener('click',event=>{
+    const retry=event.target.closest('[data-dx-plan-retry]');if(retry){event.preventDefault();const p=document.querySelector('#dx-plan-resource-manager');if(p)p.dataset.loaded='0';renderPlanResourceManager();return;}
+  },true);
   document.addEventListener('click',async event=>{
     const button=event.target.closest('[data-dx-plan-save]');
     if(!button)return;
