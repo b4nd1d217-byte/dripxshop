@@ -25,6 +25,8 @@ const accountPanel = await readFile('dripx-account-panel.js', 'utf8');
 const reviewsPanel = await readFile('dripx-reviews.js', 'utf8');
 new Script(accountPanel, { filename: 'dripx-account-panel.js' });
 new Script(reviewsPanel, { filename: 'dripx-reviews.js' });
+const userAdminPanel = await readFile('dripx-user-admin.js', 'utf8');
+new Script(userAdminPanel, { filename: 'dripx-user-admin.js' });
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
@@ -36,6 +38,8 @@ await copyFile('dripx-account-panel.js', 'dist/dripx-account-panel.js');
 await copyFile('dripx-account-panel.css', 'dist/dripx-account-panel.css');
 await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
 await copyFile('dripx-reviews.js', 'dist/dripx-reviews.js');
+await copyFile('dripx-user-admin.js', 'dist/dripx-user-admin.js');
+await copyFile('dripx-user-admin.css', 'dist/dripx-user-admin.css');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
 const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
@@ -43,12 +47,18 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-account-panel.js','dist/dripx-reviews.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
 }
 const requiredFeatures = [
+  'dripx_admin_list_users',
+  'dripx_admin_set_user_role',
+  'dripx_admin_grant_user_product',
+  'dripx_admin_revoke_user_product',
+  'dripx_admin_set_user_suspension',
+  'dripx_admin_get_user_audit',
   'dripx_claim_free_product',
   'dripx-validate-product-upload',
   'DRIPX_UPLOAD_FILE',
