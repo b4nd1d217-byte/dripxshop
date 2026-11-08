@@ -126,6 +126,7 @@ async function saveForm(form){
   const fd=new FormData(form),id=form.dataset.itemId,type=form.dataset.itemType;
   const title=String(fd.get('title')||'').trim(),description=String(fd.get('description')||''),price=Number(fd.get('price_usd'));
   const imageUrl=String(fd.get('image_url')||'').trim();
+  const currentItem=products.find(p=>String(p.id)===String(id));
   if(!title||!Number.isFinite(price)||price<0)throw new Error('Comprueba el nombre y el precio.');
   if(imageUrl&&!/^https:\/\//i.test(imageUrl))throw new Error('La imagen debe usar HTTPS.');
   const resourceIds=type==='plan'?fd.getAll('resource_ids').map(String):[];
@@ -151,6 +152,15 @@ async function saveForm(form){
    p_features:features,p_resource_product_ids:resourceIds
   });
   if(result.error)throw result.error;
+  if(type==='resource'){
+   const details=await db.rpc('dripx_admin_update_product_details',{
+    p_product_id:id,p_store_category:String(currentItem?.store_category||'scripts-mta'),
+    p_image_url:imageUrl||null,p_video_url:currentItem?.video_url||null,
+    p_image_path:imageUrl?null:(currentItem?.image_path||null),
+    p_video_path:currentItem?.video_path||null
+   });
+   if(details.error)throw details.error;
+  }
   notify(type==='plan'?'Plan actualizado y productos sincronizados.':'Producto actualizado.');
   $(ROOT+' [data-dxcm-modal]').hidden=true;await load();
  }catch(e){if(status)status.textContent=e.message||'No se pudieron guardar los cambios.';notify(e.message||'No se pudieron guardar los cambios.');}
