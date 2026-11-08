@@ -37,9 +37,9 @@ function render(){
  const plans=planProducts().sort((a,b)=>a.sort_order-b.sort_order||a.title.localeCompare(b.title));
  const resources=resourceProducts().sort((a,b)=>a.sort_order-b.sort_order||a.title.localeCompare(b.title));
  host.innerHTML='<header class="dxcm-heading"><div><span class="dxcm-kicker">DRIP X SHOP · CATÁLOGO ADMINISTRATIVO</span><h2>Planes y productos</h2><p>Administra la publicación desde el menú de cada elemento. Los recursos se crean aparte y después se incluyen en los planes.</p></div><div class="dxcm-totals"><div><b>'+plans.length+'</b><span>Planes</span></div><div><b>'+resources.length+'</b><span>Productos</span></div></div></header>'+
- '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">01 / ACCESO</span><h3>Planes</h3><p>Precio, duración, presentación y productos incluidos. Un plan nunca almacena ZIP.</p></div></header>'+
+ '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">01 / ACCESO</span><h3>Planes</h3><p>Precio, duración, presentación y productos incluidos. Un plan nunca almacena ZIP.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="plans" aria-label="Opciones de Planes">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="plans" hidden><button type="button" data-dxcm-section-action="create-plan">＋ Crear plan</button></div></div></header>'+
  (plans.length?'<div class="dxcm-list">'+plans.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>✦</span><strong>No hay planes creados</strong><p>Usa el formulario de creación superior y selecciona “Plan de acceso · sin ZIP”.</p></div>')+'</section>'+
- '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">02 / INVENTARIO</span><h3>Productos descargables</h3><p>Los recursos se crean aquí como productos independientes, dentro de la categoría Productos.</p></div></header>'+
+ '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">02 / INVENTARIO</span><h3>Productos descargables</h3><p>Los recursos se crean aquí como productos independientes, dentro de la categoría Productos.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="products" aria-label="Opciones de Productos">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="products" hidden><button type="button" data-dxcm-section-action="create-product">＋ Crear producto</button></div></div></header>'+
  (resources.length?'<div class="dxcm-list">'+resources.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>▣</span><strong>Aún no hay productos descargables</strong><p>Crea uno desde el formulario superior, selecciona “Producto descargable · ZIP” y categoría “Productos”.</p></div>')+'</section>'+
  '<div class="dxcm-footnote"><span>i</span><p>Las acciones de publicación, ocultación, edición y asignación se guardan en Supabase y dejan registro administrativo. Los productos ocultos no aparecen en el catálogo público.</p></div>'+
  '<div class="dxcm-backdrop" data-dxcm-modal hidden><section class="dxcm-modal" role="dialog" aria-modal="true" aria-labelledby="dxcm-modal-title"><header><div><small>CONFIGURACIÓN DEL CATÁLOGO</small><h3 id="dxcm-modal-title">Editar elemento</h3></div><button type="button" data-dxcm-close aria-label="Cerrar">×</button></header><div data-dxcm-body></div></section></div>';
@@ -67,7 +67,7 @@ async function load(){
  }catch(e){const host=$(ROOT);if(host)host.innerHTML='<div class="dxcm-error"><strong>No se pudo sincronizar el catálogo</strong><p>'+esc(e.message||'Error de Supabase')+'</p><button type="button" data-dxcm-reload>Reintentar</button></div>';console.error('[DRIPX catalog manager]',e);}
  finally{loading=false;}
 }
-function modalOpen(item){
+function modalOpen(item,creating=false){
  const backdrop=$(ROOT+' [data-dxcm-modal]'),body=$(ROOT+' [data-dxcm-body]'),title=$(ROOT+' #dxcm-modal-title');
  if(!backdrop||!body||!title)throw new Error('No se encontró el editor.');
  const isPlan=item.product_type==='plan';
@@ -76,7 +76,7 @@ function modalOpen(item){
   '<label class="dxcm-resource-choice"><input type="checkbox" name="resource_ids" value="'+esc(r.id)+'" '+(assigned.has(String(r.id))?'checked':'')+'><span class="dxcm-resource-icon">'+((r.image_url||r.catalogImageUrl)&&/^https:\/\//i.test(r.image_url||r.catalogImageUrl)?'<img src="'+esc(r.image_url||r.catalogImageUrl)+'" alt="">':'▣')+'</span><span class="dxcm-resource-copy"><strong>'+esc(r.title)+'</strong><small>Producto publicado · ZIP disponible</small></span><i>'+(assigned.has(String(r.id))?'Incluido':'Disponible')+'</i></label>'
  ).join('');
  const duration=['monthly','yearly','lifetime'].map(v=>'<option value="'+v+'" '+(String(item.billing_period||'monthly')===v?'selected':'')+'>'+(v==='monthly'?'Mensual · 30 días aprox.':v==='yearly'?'Anual · 1 año':'Permanente · sin vencimiento')+'</option>').join('');
- body.innerHTML='<form class="dxcm-edit-form" data-dxcm-form data-item-id="'+esc(item.id)+'" data-item-type="'+(isPlan?'plan':'resource')+'">'+
+ body.innerHTML='<form class="dxcm-edit-form" data-dxcm-form '+(creating?'data-dxcm-create-plan="true"':'data-item-id="'+esc(item.id)+'"')+' data-item-type="'+(isPlan?'plan':'resource')+'">'+
   '<div class="dxcm-form-grid"><label class="wide">Nombre<input name="title" maxlength="100" required value="'+esc(item.title)+'"></label>'+
   '<label>Precio (USD)<input name="price_usd" type="number" min="0" max="100000" step="0.01" required value="'+esc(item.price_usd)+'"></label>'+
   '<label>Imagen URL (HTTPS)<input name="image_url" type="url" placeholder="https://…" value="'+esc(item.image_url||'')+'"></label>'+
@@ -87,7 +87,7 @@ function modalOpen(item){
   (isPlan?'<div class="dxcm-assign"><header><div><small>CONTENIDO DEL PLAN</small><h4>Productos incluidos</h4><p>Selecciona productos ya creados y publicados. Aquí no se suben ZIP ni se crean productos nuevos.</p></div><span>'+options.length+'</span></header>'+
    (options?'<div class="dxcm-resource-list">'+options+'</div>':'<div class="dxcm-empty compact"><strong>No hay productos listos para asignar</strong><p>Primero crea y publica los ZIP desde Productos.</p><a href="#admin/productos" data-dxcm-close>Volver al formulario de Productos</a></div>')+'</div>':'<div class="dxcm-product-note"><span>▣</span><div><strong>Archivo descargable</strong><p>El ZIP se gestiona desde el formulario de Productos; esta edición no reemplaza ni modifica el archivo almacenado.</p></div></div>')+
   '<footer><span data-dxcm-save-status>Los cambios se guardan directamente en Supabase.</span><button type="button" class="dxcm-cancel" data-dxcm-close>Cancelar</button><button type="submit" class="dxcm-save">Guardar cambios <span>→</span></button></footer></form>';
- title.textContent=(isPlan?'Editar plan · ':'Editar producto · ')+item.title;
+ title.textContent=creating?'Crear plan · sin ZIP':(isPlan?'Editar plan · ':'Editar producto · ')+item.title;
  backdrop.hidden=false;
 }
 async function setStatus(id,status,button){
@@ -111,6 +111,17 @@ async function saveForm(form){
   const features=type==='plan'?String(fd.get('features')||'').split('\n').map(x=>x.trim()).filter(Boolean):[];
   if(type==='plan'&&features.length>30)throw new Error('El plan admite hasta 30 características.');
   if(status)status.textContent='Guardando cambios y verificando asignaciones…';
+  if(type==='plan'&&form.dataset.dxcmCreatePlan==='true'){
+   if(status)status.textContent='Creando el plan y guardando su lista de productos…';
+   const result=await db.rpc('dripx_admin_create_plan',{
+    p_title:title,p_description:description,p_price_usd:price,p_tagline:String(fd.get('tagline')||''),
+    p_image_url:imageUrl||null,p_plan_code:String(fd.get('plan_code')||'').trim().toLowerCase(),
+    p_billing_period:String(fd.get('billing_period')||'monthly'),p_features:features,p_resource_product_ids:resourceIds
+   });
+   if(result.error)throw result.error;
+   notify('Plan creado como borrador. Ya puedes publicarlo desde sus tres puntos.');
+   $(ROOT+' [data-dxcm-modal]').hidden=true;await load();return;
+  }
   const result=await db.rpc('dripx_admin_update_catalog_item',{
    p_product_id:id,p_title:title,p_description:description,p_price_usd:price,
    p_tagline:String(fd.get('tagline')||''),p_image_url:imageUrl||null,
@@ -128,6 +139,8 @@ document.addEventListener('click',async e=>{
  const reload=e.target.closest('[data-dxcm-reload]');if(reload){e.preventDefault();await load();return;}
  const close=e.target.closest('[data-dxcm-close]');if(close){const m=$(ROOT+' [data-dxcm-modal]');if(m)m.hidden=true;return;}
  const more=e.target.closest('[data-dxcm-menu]');if(more){e.preventDefault();e.stopImmediatePropagation();const id=more.dataset.dxcmMenu;document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);const panel=$('[data-dxcm-menu-panel="'+CSS.escape(id)+'"]');if(panel)panel.hidden=false;return;}
+ const sectionMenu=e.target.closest('[data-dxcm-section-menu]');if(sectionMenu){e.preventDefault();e.stopImmediatePropagation();const id=sectionMenu.dataset.dxcmSectionMenu;document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);const menu=$('[data-dxcm-section-menu-panel="'+CSS.escape(id)+'"]');if(menu)menu.hidden=false;return;}
+ const sectionAction=e.target.closest('[data-dxcm-section-action]');if(sectionAction){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);if(sectionAction.dataset.dxcmSectionAction==='create-plan'){modalOpen({id:'',product_type:'plan',title:'',description:'',price_usd:'0.00',tagline:'',image_url:'',plan_code:'',billing_period:'monthly',features:[]},true);return;}if(sectionAction.dataset.dxcmSectionAction==='create-product'){const form=$('#product-form');if(!form){notify('No se encontró el formulario de creación de Productos.');return;}const type=form.querySelector('select[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}const category=form.querySelector('select[name="category"],select[id*="categor" i]');if(category){const opt=[...category.options].find(o=>normalize(o.value)==='productos');if(opt)category.value=opt.value;}form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="title"]')?.focus({preventScroll:true});return;}}
  const action=e.target.closest('[data-dxcm-action]');if(action){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);
   if(action.dataset.dxcmAction==='status'){const item=products.find(p=>String(p.id)===String(action.dataset.id));const next=action.dataset.next;
    if(next==='archived'&&!confirm('¿Ocultar "'+(item?.title||'este elemento')+'" del catálogo público? Los registros y accesos existentes se conservarán.'))return;
