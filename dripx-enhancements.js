@@ -535,16 +535,16 @@
       node.innerHTML='<div class="dx-zip-inspector">'+
         '<div class="dx-zip-inspector-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><div class="dx-zip-inspector-title"><span class="dx-zip-inspector-kicker">DRIP X · INSPECTOR ZIP</span><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small>'+formatBytes(file.size)+' · '+formatBytes(scan.expanded)+' descomprimidos</small></div><span class="dx-zip-inspector-state is-ready">ABIERTO</span></div>'+
         '<div class="dx-zip-inspector-stats"><div><strong>'+c.total+'</strong><small>ARCHIVOS</small></div><div><strong>'+c.lua+'</strong><small>LUA</small></div><div><strong>'+c.shaders+'</strong><small>SHADERS</small></div><div><strong>'+c.meta+'</strong><small>META.XML</small></div></div>'+
-        (warnings?'<div class="dx-zip-inspector-warnings">'+warnings+'</div>':'<div class="dx-zip-inspector-clean">ZIP legible. Se muestran todos los archivos. No se requiere compilación para publicar.</div>')+
+        (warnings?'<div class="dx-zip-inspector-warnings">'+warnings+'</div>':'<div class="dx-zip-inspector-clean">Inventario legible. Pulsa Trabajar para compilar y proteger; el ZIP original nunca se publica ni se entrega.</div>')+
         '<div class="dx-zip-inspector-files-head"><strong>Contenido completo del ZIP</strong><span>'+scan.files.length+' elementos</span></div>'+
         '<div class="dx-zip-inspector-files">'+(rows||'<div class="dx-zip-inspector-empty">El ZIP está vacío. No hay archivos que mostrar.</div>')+'</div>'+
         '<div class="dx-zip-inspector-actions"><button type="button" class="dx-zip-start" data-dripx-start-protection>Trabajar · Proteger y compilar Lua</button><p>Al pulsar Trabajar se inyecta la validación de licencia, se conserva el shared como shared y se compilan los Lua no-shared. La publicación solo continúa si el ZIP protegido supera las verificaciones.</p></div>'+
       '</div>';
       node.querySelectorAll('.dx-zip-inspector-file-name').forEach(el=>{el.setAttribute('title',el.textContent||'');});
       bindProtectionButton(node.querySelector('[data-dripx-start-protection]'));
-      if(status){status.dataset.state=scan.warnings.length?'warning':'success';status.textContent='ZIP abierto: '+scan.files.length+' archivos. '+scan.warnings.length+' avisos. Ya puedes guardar el ZIP original sin pasar por el compilador.';}
+      if(status){status.dataset.state=scan.warnings.length?'warning':'success';status.textContent='ZIP abierto: '+scan.files.length+' archivos. '+scan.warnings.length+' avisos. Inventario listo. Pulsa Trabajar; el ZIP original no se puede publicar ni descargar.';}
       console.info('[DRIPX] Original ZIP inventory completed',{name:file.name,count:scan.files.length,warnings:scan.warnings.map(x=>x.code)});
-      lockProductSubmit(form,false);
+      lockProductSubmit(form,true);
     })().catch(showFailure);
     return live;
   }
@@ -632,9 +632,9 @@
       if(window.__DRIPX_PROTECTION_JOB)window.__DRIPX_PROTECTION_JOB.status='failed';
       const current=ensureLiveProductZipPreview(input,runId);
       if(current){current.node.dataset.state='error';}
-      setProductZipStatus('ERROR: no se publicó el ZIP original. '+(error?.message||'Error desconocido.'),'error');
+      setProductZipStatus('ERROR: el ZIP original no se publica; corrige la protección y vuelve a pulsar Trabajar. '+(error?.message||'Error desconocido.'),'error');
       console.error('[DRIPX] Protection workflow:',error);
-      lockProductSubmit(form,false);
+      lockProductSubmit(form,true);
       return {ok:false,error};
     }
   }
