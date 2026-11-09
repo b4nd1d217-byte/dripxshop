@@ -50,19 +50,19 @@ async function renderProductReviews(){
   if(pe)throw pe;if(re)throw re;if(!product){root.remove();return;}
   let mine=null,owned=null;
   if(session?.user?.id){
-   const [mr,ordersResult]=await Promise.all([
-    db.from('dripx_reviews').select('id,order_id,rating,body,public_name,published,created_at,updated_at').eq('product_id',id).eq('user_id',session.user.id).maybeSingle(),
-    db.from('dripx_orders').select('id,created_at,approved_at').eq('user_id',session.user.id).eq('status','approved').order('created_at',{ascending:false}).limit(100)
-   ]);
-   if(mr.error)throw mr.error;if(ordersResult.error)throw ordersResult.error;
-   mine=mr.data;
+   const ordersResult=await db.from('dripx_orders').select('id,created_at,approved_at').eq('user_id',session.user.id).eq('status','approved').order('created_at',{ascending:false}).limit(100);
+   if(ordersResult.error)throw ordersResult.error;
    const approvedIds=(ordersResult.data||[]).map(order=>String(order.id));
    if(approvedIds.length){
     const {data:matchingItems,error:itemError}=await db.from('dripx_order_items').select('order_id').eq('product_id',id).in('order_id',approvedIds);
     if(itemError)throw itemError;
     const matchingIds=new Set((matchingItems||[]).map(item=>String(item.order_id)));
     const latestApprovedOrder=(ordersResult.data||[]).find(order=>matchingIds.has(String(order.id)));
-    if(latestApprovedOrder)owned={order_id:String(latestApprovedOrder.id)};
+    if(latestApprovedOrder){
+     owned={order_id:String(latestApprovedOrder.id)};
+     const mr=await db.from('dripx_reviews').select('id,order_id,rating,body,public_name,published,created_at,updated_at').eq('order_id',latestApprovedOrder.id).eq('product_id',id).eq('user_id',session.user.id).maybeSingle();
+     if(mr.error)throw mr.error;mine=mr.data;
+    }
    }
   }
   const visible=[...(mine?.published?[mine]:[]),...(reviews||[]).filter(r=>r.id!==mine?.id)];
