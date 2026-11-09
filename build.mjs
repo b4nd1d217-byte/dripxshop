@@ -29,6 +29,10 @@ new Script(accountPanel, { filename: 'dripx-account-panel.js' });
 new Script(reviewsPanel, { filename: 'dripx-reviews.js' });
 const userAdminPanel = await readFile('dripx-user-admin.js', 'utf8');
 new Script(userAdminPanel, { filename: 'dripx-user-admin.js' });
+const userAdminActionsPanel = await readFile('dripx-user-admin-actions.js', 'utf8');
+new Script(userAdminActionsPanel, { filename: 'dripx-user-admin-actions.js' });
+const ticketAdminPanel = await readFile('dripx-ticket-admin.js', 'utf8');
+new Script(ticketAdminPanel, { filename: 'dripx-ticket-admin.js' });
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
@@ -44,6 +48,9 @@ await copyFile('dripx-visual-system.css', 'dist/dripx-visual-system.css');
 await copyFile('dripx-reviews.js', 'dist/dripx-reviews.js');
 await copyFile('dripx-user-admin.js', 'dist/dripx-user-admin.js');
 await copyFile('dripx-user-admin.css', 'dist/dripx-user-admin.css');
+await copyFile('dripx-user-admin-actions.js', 'dist/dripx-user-admin-actions.js');
+await copyFile('dripx-ticket-admin.js', 'dist/dripx-ticket-admin.js');
+await copyFile('dripx-ticket-admin.css', 'dist/dripx-ticket-admin.css');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
 const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
@@ -51,7 +58,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -197,9 +204,19 @@ const categoryChecks = [
 ];
 const failedCategoryChecks = categoryChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedCategoryChecks.length) throw new Error('DRIPX category regression checks failed: ' + failedCategoryChecks.join(', '));
+const adminPanelChecks = [
+  [catalogUi.includes('DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE') && catalogUi.includes('dripx_admin_delete_catalog_item') && catalogUi.includes('data-dxcm-action="sales"'), 'Products route and contextual sales/delete actions'],
+  [userAdminActionsPanel.includes('dripx_admin_transfer_product') && userAdminActionsPanel.includes('data-dxua-extra-action="details"'), 'Users contextual purchase history and transfer actions'],
+  [ticketAdminPanel.includes('dripx_admin_delete_ticket') && ticketAdminPanel.includes('dripx_admin_set_ticket_status') && ticketAdminPanel.includes('El pedido'), 'admin ticket manager and order-preserving delete action']
+];
+const failedAdminPanelChecks = adminPanelChecks.filter(([passed]) => !passed).map(([,name]) => name);
+if (failedAdminPanelChecks.length) throw new Error('DRIPX admin panel checks failed: ' + failedAdminPanelChecks.join(', '));
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedUploadChecks.length) throw new Error('DRIPX upload pipeline checks failed: ' + failedUploadChecks.join(', '));
-const cssSource = Buffer.concat([css, extraCss]).toString('utf8') + await readFile('dist/dripx-visual-system.css', 'utf8');
+const cssSource = Buffer.concat([css, extraCss]).toString('utf8')
+  + await readFile('dist/dripx-visual-system.css', 'utf8')
+  + await readFile('dripx-user-admin.css', 'utf8')
+  + await readFile('dripx-ticket-admin.css', 'utf8');
 if (!cssSource.includes('@media(max-width:720px)') || !cssSource.includes(':focus-visible')) {
   throw new Error('DRIPX responsive/accessibility styles are missing.');
 }
