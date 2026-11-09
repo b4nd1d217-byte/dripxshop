@@ -8,6 +8,7 @@ const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const notify=message=>{const t=$('#toast');if(t){t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}};
 const normalize=v=>String(v||'').trim().toLowerCase();
+const timed=(promise,ms,message)=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(message)),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});
 function activeView(){
  if(window.DRIPX_IS_ADMIN!==true)return false;
  const hash=String(location.hash||'').toLowerCase();
@@ -33,6 +34,7 @@ function row(p){
   '<div class="dxcm-menu-wrap"><button type="button" class="dxcm-more" data-dxcm-menu="'+esc(p.id)+'" aria-label="Opciones de '+esc(p.title)+'">···</button>'+
   '<div class="dxcm-menu" data-dxcm-menu-panel="'+esc(p.id)+'" hidden>'+
    '<button type="button" data-dxcm-action="sales" data-id="'+esc(p.id)+'">▤ Ver compras y ventas</button>'+
+   '<button type="button" data-dxcm-action="buyers" data-id="'+esc(p.id)+'">♙ Usuarios con acceso</button>'+
    (isPlan?'':'<button type="button" data-dxcm-action="inspect-zip" data-id="'+esc(p.id)+'" '+(!p.file_path?'disabled':'')+'>▣ Gestionar ZIP · Leer archivos</button>')+
    '<button type="button" data-dxcm-action="status" data-id="'+esc(p.id)+'" data-next="'+(p.status==='published'?'archived':'published')+'">'+(p.status==='published'?'◉ Ocultar':'✓ Publicar')+'</button>'+
    '<button type="button" data-dxcm-action="edit" data-id="'+esc(p.id)+'">✎ Editar configuración</button>'+
@@ -53,26 +55,31 @@ function render(){
 }
 async function load(){
  if(loading||!activeView())return;loading=true;
+ const shell=$(ROOT);if(shell)shell.dataset.loaded='loading';
  try{
-  const {data:session,error:sessionError}=await db.auth.getSession();if(sessionError)throw sessionError;
+  const {data:session,error:sessionError}=await timed(db.auth.getSession(),8000,'La sesión de Supabase no respondió. Pulsa Reintentar.');
+  if(sessionError)throw sessionError;
   if(!session?.session?.user?.id)throw new Error('Inicia sesión con Discord para administrar el catálogo.');
-  const admin=await db.rpc('dripx_is_admin');if(admin.error)throw admin.error;if(admin.data!==true)throw new Error('Tu cuenta no tiene permisos de administración.');
-  const [p,m,categoryResult]=await Promise.all([
-   db.from('dripx_products').select('id,title,description,price_usd,category,store_category,status,product_type,plan_code,billing_period,features,tagline,image_url,image_path,video_url,video_path,file_path,protection_enabled,sort_order').order('sort_order').order('created_at',{ascending:false}),
-   db.from('dripx_plan_resources').select('plan_product_id,resource_product_id'),
-   db.from('dripx_categories').select('name,slug,active,sort_order').eq('active',true).order('sort_order',{ascending:true})
-  ]);
+  const admin=await timed(db.rpc('dripx_is_admin'),8000,'La comprobación de permisos tardó demasiado.');
+  if(admin.error)throw admin.error;if(admin.data!==true)throw new Error('Tu cuenta no tiene permisos de administración.');
+  const [p,m,categoryResult]=await timed(Promise.all([
+   db.from('dripx_products').select('id,title,description,price_usd,category,store_category,status,product_type,plan_code,billing_period,features,tagline,image_url,image_path,video_url,video_path,file_path,protection_enabled,sort_order').order('sort_order').order('created_at',{ascending:false}).limit(300),
+   db.from('dripx_plan_resources').select('plan_product_id,resource_product_id').limit(1500),
+   db.from('dripx_categories').select('name,slug,active,sort_order').eq('active',true).order('sort_order',{ascending:true}).limit(100)
+  ]),16000,'El catálogo tardó demasiado en responder. Pulsa Reintentar.');
   if(p.error)throw p.error;if(m.error)throw m.error;if(categoryResult.error)throw categoryResult.error;
   products=p.data||[];mappings=m.data||[];categories=categoryResult.data||[];
-  await Promise.all(products.map(async item=>{
-   if(item.image_url||!item.image_path)return;
-   try{const signed=await db.storage.from('product-images').createSignedUrl(item.image_path,3600);if(!signed.error)item.catalogImageUrl=signed.data?.signedUrl||null;}
-   catch(error){console.warn('[DRIPX] No se pudo cargar la miniatura:',item.id,error?.message||error);}
+  const thumbnails=products.filter(item=>!item.image_url&&item.image_path).slice(0,24);
+  await Promise.all(thumbnails.map(async item=>{
+   try{
+    const signed=await timed(db.storage.from('product-images').createSignedUrl(item.image_path,900),5000,'image_timeout');
+    if(!signed.error)item.catalogImageUrl=signed.data?.signedUrl||null;
+   }catch(error){console.warn('[DRIPX] Miniatura omitida:',item.id,error?.message||error);}
   }));
-  // Keep internal items strictly separated; other legacy categories do not leak into these lists.
   products=products.filter(p=>(p.product_type==='plan'&&p.category==='Planes')||(p.product_type==='resource'&&p.category==='Productos'));
+  if(!activeView())return;
   render();const panel=$(ROOT);if(panel)panel.dataset.loaded='1';
- }catch(e){const panel=$(ROOT);if(panel){panel.dataset.loaded='error';panel.innerHTML='<div class="dxcm-error"><strong>No se pudo sincronizar el catálogo</strong><p>'+esc(e.message||'Error de Supabase')+'</p><button type="button" data-dxcm-reload>Reintentar</button></div>';}console.error('[DRIPX catalog manager]',e);}
+ }catch(e){const panel=$(ROOT);if(panel){panel.dataset.loaded='error';panel.innerHTML='<div class="dxcm-error"><strong>No se pudo sincronizar el catálogo</strong><p>'+esc(e.message||'Error de Supabase')+'</p><button type="button" data-dxcm-reload>↻ Reintentar</button></div>';}console.error('[DRIPX catalog manager]',e);}
  finally{loading=false;}
 }
 function modalOpen(item,creating=false){
@@ -118,6 +125,15 @@ async function inspectZip(item){
  title.textContent='Gestión del ZIP · '+item.title;
  backdrop.hidden=false;
 }
+async function showProductBuyers(item){
+ const result=await db.rpc('dripx_admin_get_product_buyers',{p_product_id:item.id});if(result.error)throw result.error;
+ const rows=result.data||[];
+ const w=$(ROOT+' [data-dxcm-modal]'),body=$(ROOT+' [data-dxcm-body]'),title=$(ROOT+' #dxcm-modal-title');
+ if(!w||!body||!title)throw new Error('No se encontró el mini panel.');
+ const list=rows.map(user=>'<article class="dxcm-sale-row"><div><strong>'+esc(user.display_name||'Usuario')+'</strong><small>'+esc(user.discord_id||user.user_id)+'</small></div><span>'+esc(user.access_source||'Acceso')+'</span><b>'+(user.expires_at?'Vence '+new Date(user.expires_at).toLocaleDateString('es-DO'):'Permanente')+'</b></article>').join('');
+ body.innerHTML='<div class="dxcm-sales">'+(list||'<div class="dxcm-empty compact">Todavía no hay usuarios con acceso a este producto.</div>')+'</div>';
+ title.textContent='Usuarios con acceso · '+item.title;w.hidden=false;
+}
 async function showProductSales(item){
  const items=await db.from('dripx_order_items').select('order_id').eq('product_id',item.id).limit(100);if(items.error)throw items.error;
  const ids=[...new Set((items.data||[]).map(x=>x.order_id).filter(Boolean))];
@@ -133,8 +149,12 @@ async function showProductSales(item){
 async function deleteCatalogItem(item,button){
  if(!item)return;if(!confirm('¿Eliminar o retirar "'+item.title+'"? Si conserva compras, licencias, archivos o asignaciones, se archivará para conservar el historial.'))return;
  if(button)button.disabled=true;
- try{const {data,error}=await db.rpc('dripx_admin_delete_catalog_item',{p_product_id:item.id});if(error)throw error;if(data?.ok!==true)throw new Error('Supabase no confirmó la operación.');notify(data.archived?'Elemento retirado del catálogo; historial y accesos conservados.':'Elemento eliminado.');const p=$(ROOT);if(p)p.dataset.loaded='0';await load();}
- catch(error){notify(error.message||'No se pudo eliminar el elemento.');if(button)button.disabled=false;}
+ try{
+  const {data,error}=await db.rpc('dripx_admin_delete_catalog_product',{p_product_id:item.id});
+  if(error)throw error;if(data?.ok!==true)throw new Error('Supabase no confirmó la operación.');
+  notify(data.archived?'Elemento retirado del catálogo; historial, compras y accesos conservados.':'Elemento eliminado.');
+  const p=$(ROOT);if(p)p.dataset.loaded='0';await load();
+ }catch(error){notify(error.message||'No se pudo eliminar el elemento.');if(button)button.disabled=false;}
 }
 async function setStatus(id,status,button){
  if(busy)return;busy=true;if(button)button.disabled=true;
@@ -215,6 +235,7 @@ document.addEventListener('click',async e=>{
  const sectionAction=e.target.closest('[data-dxcm-section-action]');if(sectionAction){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-section-menu').forEach(m=>m.hidden=true);if(sectionAction.dataset.dxcmSectionAction==='create-plan'){modalOpen({id:'',product_type:'plan',title:'',description:'',price_usd:'0.00',tagline:'',image_url:'',plan_code:'',billing_period:'monthly',features:[]},true);return;}if(sectionAction.dataset.dxcmSectionAction==='create-product'){window.__DRIPX_REPLACE_PRODUCT_ID=null;const form=$('#product-form');if(!form){notify('No se encontró el formulario de creación de Productos.');return;}const type=form.querySelector('select[name="product_type"]');if(type){type.value='resource';type.dispatchEvent(new Event('change',{bubbles:true}));}const category=form.querySelector('select[name="category"],select[id*="categor" i]');if(category){const opt=[...category.options].find(o=>normalize(o.value)==='productos');if(opt)category.value=opt.value;}form.scrollIntoView({behavior:'smooth',block:'center'});form.querySelector('[name="title"]')?.focus({preventScroll:true});return;}}
  const action=e.target.closest('[data-dxcm-action]');if(action){e.preventDefault();e.stopImmediatePropagation();document.querySelectorAll('.dxcm-menu').forEach(m=>m.hidden=true);
   if(action.dataset.dxcmAction==='sales'){const item=products.find(p=>String(p.id)===String(action.dataset.id));if(item){try{await showProductSales(item);}catch(error){notify(error.message||'No se pudo consultar el historial.');}}return;}
+  if(action.dataset.dxcmAction==='buyers'){const item=products.find(p=>String(p.id)===String(action.dataset.id));if(item){try{await showProductBuyers(item);}catch(error){notify(error.message||'No se pudieron consultar los accesos.');}}return;}
   if(action.dataset.dxcmAction==='delete'){const item=products.find(p=>String(p.id)===String(action.dataset.id));await deleteCatalogItem(item,action);return;}
   if(action.dataset.dxcmAction==='inspect-zip'){const item=products.find(p=>String(p.id)===String(action.dataset.id));if(item){try{await inspectZip(item);}catch(error){notify(error.message||'No se pudo inspeccionar el ZIP.');}}return;}
   if(action.dataset.dxcmAction==='status'){const item=products.find(p=>String(p.id)===String(action.dataset.id));const next=action.dataset.next;
@@ -244,7 +265,7 @@ function ensure(){
   existing=document.createElement('section');existing.id='dx-catalog-admin';existing.className='dxcm-shell';
   const app=$('#app');if(app)app.prepend(existing);
  }
- if(existing&&existing.dataset.loaded!=='1'&&!loading)load();
+ if(existing&&['','0'].includes(existing.dataset.loaded||'')&&!loading)load();
 }
 document.addEventListener('click',e=>{
  const nav=e.target.closest('#app button,#app a,#app [role="tab"]');if(!nav)return;
