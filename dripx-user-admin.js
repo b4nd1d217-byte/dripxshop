@@ -4,7 +4,7 @@ if(!db)return;
 const $=(s,r=document)=>r.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let rows=[],products=[],selected=null,loading=false;
 const isAdmin=()=>location.hash.toLowerCase().startsWith('#admin')&&window.DRIPX_IS_ADMIN===true;
-const isUsers=()=>{const h=location.hash.toLowerCase();if(/usuarios|users/.test(h))return true;const nodes=[...document.querySelectorAll('#app .active,#app [aria-selected="true"],#app [aria-current="page"]')];return nodes.some(n=>/usuarios|users/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label')].join(' ').toLowerCase()));};
+const isUsers=()=>{const h=location.hash.toLowerCase();if(/usuarios|users/.test(h))return true;try{if(window.DRIPX_ADMIN_USERS_TAB_ACTIVE===true||sessionStorage.getItem('dripx.admin.tab')==='usuarios')return true;}catch{}const nodes=[...document.querySelectorAll('#app .active,#app [aria-selected="true"],#app [aria-current="page"]')];return nodes.some(n=>/usuarios|users/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label')].join(' ').toLowerCase()));};
 const toast=m=>{const n=$('#toast');if(n){n.textContent=m;n.classList.add('show');setTimeout(()=>n.classList.remove('show'),3200);}};
 const avatar=u=>u.avatar_url||'';
 async function load(force=false){
@@ -62,7 +62,7 @@ document.addEventListener('click',async e=>{
  }catch(err){toast(err.message||'La operación no pudo completarse.');if(role)role.disabled=false;if(grant)grant.disabled=false;if(suspend)suspend.disabled=false;}
 },false);
 function sync(){if(!isAdmin()||!isUsers()){$('#dx-user-admin')?.remove();return;}if(!$('#dx-user-admin'))load();}
-document.addEventListener('click',e=>{const n=e.target.closest('#app a,#app button,#app [role="tab"]');if(!n)return;const label=[n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label'),n.getAttribute('href')].join(' ').toLowerCase();if(/usuarios|users/.test(label))setTimeout(sync,80);});
+document.addEventListener('click',e=>{const n=e.target.closest('#app a,#app button,#app [role="tab"]');if(!n||n.closest('#dx-user-admin'))return;const label=[n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label'),n.getAttribute('href')].join(' ').toLowerCase();if(/usuarios|users/.test(label)){window.DRIPX_ADMIN_USERS_TAB_ACTIVE=true;try{sessionStorage.setItem('dripx.admin.tab','usuarios');}catch{}setTimeout(sync,80);}else if(/productos|planes|pedidos|tickets|resenas|ajustes|configuracion|panel|inicio/.test(label)){window.DRIPX_ADMIN_USERS_TAB_ACTIVE=false;setTimeout(sync,80);}});
 window.addEventListener('hashchange',()=>setTimeout(sync,100));
 const ob=new MutationObserver(()=>{if(isAdmin()&&isUsers()&&!$('#dx-user-admin'))load();});const start=()=>{if($('#app'))ob.observe($('#app'),{childList:true,subtree:true});sync();};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
