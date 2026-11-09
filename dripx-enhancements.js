@@ -912,14 +912,22 @@
   }
   function setCategoryTabActive(active){
     window.__DRIPX_CATEGORY_TAB_ACTIVE=!!active;
+    window.__DRIPX_ADMIN_CATEGORIES_TAB_ACTIVE=!!active;
+    if(active)window.__DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
     try{
       if(active)window.sessionStorage?.setItem('dripx.admin.tab','categorias');
-      else window.sessionStorage?.removeItem('dripx.admin.tab');
+      else if(window.sessionStorage?.getItem('dripx.admin.tab')==='categorias')window.sessionStorage?.removeItem('dripx.admin.tab');
     }catch{}
   }
   function categoryViewActive(){
-    // La administración de categorías queda deshabilitada: el catálogo opera únicamente con Planes.
-    return false;
+    if(window.DRIPX_IS_ADMIN!==true)return false;
+    const hash=String(location.hash||'').toLowerCase();
+    if(!hash.startsWith('#admin'))return false;
+    if(/^#admin\/(?:categorias?|categories?)(?:$|[/?])/.test(hash))return true;
+    let tab='';try{tab=window.sessionStorage?.getItem('dripx.admin.tab')||'';}catch{}
+    if(window.__DRIPX_ADMIN_CATEGORIES_TAB_ACTIVE===true||window.__DRIPX_CATEGORY_TAB_ACTIVE===true||tab==='categorias')return true;
+    const active=[...document.querySelectorAll('#app .active,#app .is-active,#app [aria-selected="true"],#app [aria-current="page"]')];
+    return active.some(node=>/categorias?|categories?/i.test([node.getAttribute('data-admin-tab'),node.getAttribute('data-admin-route'),node.getAttribute('data-tab'),node.getAttribute('aria-label'),node.textContent].filter(Boolean).join(' ')));
   }
   function categoryIconMarkup(value){
     const key=String(value||'package').toLowerCase();
@@ -1729,10 +1737,10 @@
     const clock='h'+hours+':'+String(mins).padStart(2,'0');return days?'d'+days+' '+clock:clock;
   }
   function updateUserPlanClocks(){document.querySelectorAll('[data-dx-up-clock]').forEach(n=>n.textContent=userPlanRemaining(n.dataset.expiresAt,n.dataset.active==='true'));}
-  function scheduleUserPlanManager(){clearTimeout(userPlanManagerTimer);if(!isAdminProductsRoute()||window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-user-plan-manager')?.remove();return;}userPlanManagerTimer=setTimeout(()=>renderUserPlanManager(),180);}
+  function scheduleUserPlanManager(){clearTimeout(userPlanManagerTimer);if(window.__DRIPX_CATALOG_MANAGER_ACTIVE||!isAdminProductsRoute()||window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-user-plan-manager')?.remove();return;}userPlanManagerTimer=setTimeout(()=>renderUserPlanManager(),180);}
   async function renderUserPlanManager(force=false){
     let panel=document.querySelector('#dx-user-plan-manager');
-    if(!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
+    if(window.__DRIPX_CATALOG_MANAGER_ACTIVE||!isAdminProductsRoute()||!client||window.DRIPX_IS_ADMIN!==true){panel?.remove();return;}
     if(userPlanManagerBusy||panel?.dataset.loaded==='1'&&!force)return;userPlanManagerBusy=true;
     try{
       await getAdminSession();
