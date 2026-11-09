@@ -15,21 +15,21 @@ async function syncCatalogRatings(force=false){
  if(ratingPromise)return ratingPromise;
  if(!force&&Date.now()-ratingLoadedAt<30000)return;
  ratingPromise=(async()=>{
-  const {data,error}=await db.from('dripx_reviews').select('product_id,rating').eq('published',true);
+  const {data,error}=await db.from('dripx_product_review_stats').select('product_id,average_rating,review_count');
   if(error){console.warn('[DRIPX] catalog ratings unavailable:',error.message||error);ratingMap={};ratingLoadedAt=Date.now();return;}
   const map={};
-  for(const row of data||[]){const id=String(row.product_id);(map[id]??=[]).push(Number(row.rating)||0);}
+  for(const row of data||[])map[String(row.product_id)]={average:Number(row.average_rating)||0,count:Number(row.review_count)||0};
   ratingMap=map;ratingLoadedAt=Date.now();
-  $$('#app [data-add],#app [data-claim-free]').forEach(button=>{
+  $('#app [data-add],#app [data-claim-free]').forEach(button=>{
    const id=String(button.dataset.add||button.dataset.claimFree||'');
    if(!id)return;
    const card=button.closest('.product-card,[data-product-id],article,.product')||button.parentElement?.parentElement;
    if(!card)return;
-   const scores=ratingMap[id]||[],avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
+   const stats=ratingMap[id]||{average:0,count:0},avg=stats.average,count=stats.count;
    let node=card.querySelector(':scope > .dx-catalog-rating');
    if(!node){node=document.createElement('div');node.className='dx-catalog-rating';const anchor=card.querySelector('.product-bottom,.product-actions,.product-footer')||button.parentElement||button;anchor.insertAdjacentElement('beforebegin',node);}
-   const key=scores.length+':'+avg.toFixed(2);
-   if(node.dataset.ratingKey!==key){node.innerHTML=stars(avg)+'<span>'+(scores.length?avg.toFixed(1)+' · '+scores.length+' '+(scores.length===1?'reseña':'reseñas'):'Sin reseñas')+'</span>';node.dataset.ratingKey=key;}
+   const key=count+':'+avg.toFixed(2);
+   if(node.dataset.ratingKey!==key){node.innerHTML=stars(avg)+'<span>'+(count?avg.toFixed(1)+' · '+count+' '+(count===1?'reseña':'reseñas'):'Sin reseñas')+'</span>';node.dataset.ratingKey=key;}
   });
  })().finally(()=>{ratingPromise=null;});
  return ratingPromise;
@@ -50,16 +50,25 @@ async function renderProductReviews(){
   if(pe)throw pe;if(re)throw re;if(!product){root.remove();return;}
   let mine=null,owned=null;
   if(session?.user?.id){
-   const [mr,er]=await Promise.all([
-    db.from('dripx_reviews').select('id,rating,body,public_name,published,created_at,updated_at').eq('product_id',id).eq('user_id',session.user.id).maybeSingle(),
-    db.from('dripx_entitlements').select('order_id').eq('product_id',id).eq('user_id',session.user.id).eq('active',true).maybeSingle()
+   const [mr,ordersResult]=await Promise.all([
+    db.from('dripx_reviews').select('id,order_id,rating,body,public_name,published,created_at,updated_at').eq('product_id',id).eq('user_id',session.user.id).maybeSingle(),
+    db.from('dripx_orders').select('id,created_at,approved_at').eq('user_id',session.user.id).eq('status','approved').order('created_at',{ascending:false}).limit(100)
    ]);
-   if(mr.error)throw mr.error;if(er.error)throw er.error;mine=mr.data;owned=er.data;
+   if(mr.error)throw mr.error;if(ordersResult.error)throw ordersResult.error;
+   mine=mr.data;
+   const approvedIds=(ordersResult.data||[]).map(order=>String(order.id));
+   if(approvedIds.length){
+    const {data:matchingItems,error:itemError}=await db.from('dripx_order_items').select('order_id').eq('product_id',id).in('order_id',approvedIds);
+    if(itemError)throw itemError;
+    const matchingIds=new Set((matchingItems||[]).map(item=>String(item.order_id)));
+    const latestApprovedOrder=(ordersResult.data||[]).find(order=>matchingIds.has(String(order.id)));
+    if(latestApprovedOrder)owned={order_id:String(latestApprovedOrder.id)};
+   }
   }
   const visible=[...(mine?.published?[mine]:[]),...(reviews||[]).filter(r=>r.id!==mine?.id)];
   const avg=visible.length?visible.reduce((s,r)=>s+Number(r.rating||0),0)/visible.length:0;
   const list=visible.length?visible.map(r=>'<article class="dx-review-card"><div class="dx-review-card-head">'+stars(r.rating)+'<time>'+date(r.created_at)+'</time></div><p>'+esc(r.body)+'</p><small>'+(r.id===mine?.id?'Tu valoración':(r.public_name?'Cliente de DRIP X SHOP':'Comprador verificado'))+'</small></article>').join(''):'<div class="dx-review-empty"><span class="dx-review-empty-icon">'+starSvg()+'</span><strong>Aún no hay opiniones</strong><p>Comparte tu experiencia con este producto cuando lo tengas en tu cuenta.</p></div>';
-  const form=owned?'<form class="dx-review-editor" data-dx-review-form data-product-id="'+esc(id)+'" data-review-id="'+esc(mine?.id||'')+'" data-order-id="'+esc(owned.order_id||'')+'"><div class="dx-review-editor-title"><div><span class="dx-review-kicker">TU EXPERIENCIA</span><h3>'+(mine?'Editar tu valoración':'Valora este producto')+'</h3></div><span class="dx-rating-number" data-dx-rating-label>'+Number(mine?.rating||0)+'/5</span></div><div class="dx-star-picker" data-dx-star-picker data-rating="'+Number(mine?.rating||0)+'">'+[1,2,3,4,5].map(n=>'<button type="button" data-dx-star="'+n+'" aria-label="'+n+' estrellas" class="'+(n<=Number(mine?.rating||0)?'is-selected':'')+'">'+starSvg()+'</button>').join('')+'</div><label class="dx-review-comment">Tu comentario<textarea name="body" rows="4" minlength="10" maxlength="700" required placeholder="Cuéntanos cómo fue tu experiencia…">'+esc(mine?.body||'')+'</textarea></label><label class="dx-review-name"><input type="checkbox" name="public_name" '+(mine?.public_name?'checked':'')+'> Mostrar mi nombre público</label><button type="submit" class="dx-review-submit">'+starSvg()+(mine?'Guardar cambios':'Publicar valoración')+'</button></form>':(session?.user?.id?'<div class="dx-review-gate">Para valorar este producto, primero debes tenerlo habilitado en tu cuenta.</div>':'<div class="dx-review-gate">Inicia sesión con Discord y obtén este producto para publicar una valoración.</div>');
+  const form=owned?'<form class="dx-review-editor" data-dx-review-form data-product-id="'+esc(id)+'" data-review-id="'+esc(mine?.id||'')+'" data-order-id="'+esc(owned.order_id||'')+'"><div class="dx-review-editor-title"><div><span class="dx-review-kicker">TU EXPERIENCIA</span><h3>'+(mine?'Editar tu valoración':'Valora este producto')+'</h3></div><span class="dx-rating-number" data-dx-rating-label>'+Number(mine?.rating||0)+'/5</span></div><div class="dx-star-picker" data-dx-star-picker data-rating="'+Number(mine?.rating||0)+'">'+[1,2,3,4,5].map(n=>'<button type="button" data-dx-star="'+n+'" aria-label="'+n+' estrellas" class="'+(n<=Number(mine?.rating||0)?'is-selected':'')+'">'+starSvg()+'</button>').join('')+'</div><label class="dx-review-comment">Tu comentario<textarea name="body" rows="4" minlength="10" maxlength="700" required placeholder="Cuéntanos cómo fue tu experiencia…">'+esc(mine?.body||'')+'</textarea></label><label class="dx-review-name"><input type="checkbox" name="public_name" '+(mine?.public_name?'checked':'')+'> Mostrar mi nombre público</label><button type="submit" class="dx-review-submit">'+starSvg()+(mine?'Guardar cambios':'Publicar valoración')+'</button></form>':(session?.user?.id?'<div class="dx-review-gate">Solo puedes valorar este producto cuando exista un pedido aprobado que lo incluya.</div>':'<div class="dx-review-gate">Inicia sesión con Discord y obtén este producto para publicar una valoración.</div>');
   root.innerHTML='<header class="dx-review-section-head"><div><span class="dx-review-kicker">COMUNIDAD DRIP X</span><h2>Valoraciones del producto</h2><p>Opiniones de clientes con acceso confirmado.</p></div><div class="dx-review-summary">'+stars(avg)+'<strong>'+avg.toFixed(1)+'</strong><small>'+visible.length+' '+(visible.length===1?'valoración':'valoraciones')+'</small></div></header><div class="dx-review-columns"><div class="dx-review-feed">'+list+'</div><aside class="dx-review-compose">'+form+'</aside></div>';
   root.dataset.ready='true';
  }catch(err){console.error('[DRIPX] product reviews',err);if(root){root.innerHTML='<div class="dx-review-empty">No se pudieron cargar las valoraciones. Recarga la página para intentarlo de nuevo.</div>';root.dataset.ready='true';} }
@@ -91,17 +100,23 @@ document.addEventListener('submit',async e=>{
  const rating=Number($('[data-dx-star-picker]',form)?.dataset.rating||0),body=$('textarea[name="body"]',form)?.value?.trim()||'';
  if(rating<1||rating>5){notify('Selecciona de una a cinco estrellas.');return;}if(body.length<10||body.length>700){notify('La opinión debe tener entre 10 y 700 caracteres.');return;}
  const {data:{session},error:se}=await db.auth.getSession();if(se)throw se;if(!session?.user?.id){notify('Inicia sesión con Discord para valorar.');return;}
- const record={product_id:form.dataset.productId,user_id:session.user.id,rating,body,public_name:$('input[name="public_name"]',form)?.checked===true,published:true,order_id:form.dataset.orderId||null};
+ const orderId=String(form.dataset.orderId||'').trim();
+ if(!orderId){notify('No se encontró un pedido aprobado asociado a este producto.');return;}
+ const record={product_id:form.dataset.productId,user_id:session.user.id,rating,body,public_name:$('input[name="public_name"]',form)?.checked===true,published:true,order_id:orderId};
  const id=form.dataset.reviewId;const result=id
-  ? await db.from('dripx_reviews').update(record).eq('id',id).select('id').single()
+  ? await db.from('dripx_reviews').update(record).eq('id',id).eq('user_id',session.user.id).select('id').single()
   : await db.from('dripx_reviews').insert(record).select('id').single();
  if(result.error){notify(result.error.message||'No se pudo guardar la valoración.');return;}
  const savedId=result.data?.id||id;
+ let discordNotConfigured=false;
  if(savedId){
-  const {error:logError}=await db.functions.invoke('dripx-discord-logs',{body:{event:id?'review_updated':'review_created',details:{review_id:savedId}}});
+  const {data:logData,error:logError}=await db.functions.invoke('dripx-discord-logs',{body:{event:id?'review_updated':'review_created',details:{review_id:savedId}}});
   if(logError)console.warn('[DRIPX] review log was not delivered:',logError.message||'unknown');
+  else discordNotConfigured=logData?.sent===false&&logData?.reason==='not_configured';
  }
- notify(id?'Valoración actualizada.':'Valoración publicada.');const p=$('#dx-product-reviews');if(p)p.dataset.ready='false';await renderProductReviews();
+ notify((id?'Valoración actualizada.':'Valoración publicada.')+(discordNotConfigured?' Falta configurar el canal Discord de reseñas en Administración > Logs.':''));
+ await syncCatalogRatings(true);
+ const p=$('#dx-product-reviews');if(p)p.dataset.ready='false';await renderProductReviews();
 });
 let timer=0;
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{renderProductReviews();renderAdminReviews();syncCatalogRatings(false).catch(err=>console.warn('[DRIPX] catalog ratings',err));},180);}

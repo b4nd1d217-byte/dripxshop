@@ -1644,20 +1644,18 @@
         body:JSON.stringify({product_id:productId}),
         signal:AbortSignal.timeout(60000)
       });
-      if(!response.ok){
-        let detail={};try{detail=await response.clone().json();}catch(_){}
-        throw new Error(detail.message||detail.reason||detail.error||'No se pudo preparar la descarga protegida.');
+      let payload={};
+      try{payload=await response.json();}catch(_){}
+      if(!response.ok)throw new Error(payload.message||payload.reason||payload.error||'No se pudo preparar la descarga protegida.');
+      const rawUrl=String(payload.download_url||'');
+      if(!rawUrl||Number(payload.expires_in)!==60)throw new Error('El servidor no entregó un enlace temporal válido.');
+      const downloadUrl=new URL(rawUrl,String(C.supabaseUrl));
+      const storageOrigin=new URL(String(C.supabaseUrl)).origin;
+      if(downloadUrl.origin!==storageOrigin||!downloadUrl.pathname.includes('/storage/v1/object/sign/product-files/')){
+        throw new Error('El enlace de descarga no pertenece al almacenamiento privado de DRIP X SHOP.');
       }
-      const blob=await response.blob();
-      if(!blob.size)throw new Error('El ZIP recibido está vacío.');
-      const disposition=response.headers.get('content-disposition')||'';
-      const match=disposition.match(/filename="?([^";]+)"?/i);
-      const filename=match?.[1]||('DRIPX-'+productId.slice(0,8)+'.zip');
-      const url=URL.createObjectURL(blob);
-      const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;anchor.style.display='none';
-      document.body.append(anchor);anchor.click();anchor.remove();
-      window.setTimeout(()=>URL.revokeObjectURL(url),30000);
-      toast('Descarga personalizada y licencia MTA incluidas.');
+      window.location.assign(downloadUrl.toString());
+      toast('Enlace seguro generado. Caduca en 60 segundos.');
     }finally{
       if(button){button.disabled=false;delete button.dataset.dripxLoading;}
     }

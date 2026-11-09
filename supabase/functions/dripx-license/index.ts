@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import JSZip from "npm:jszip@3.10.1";
 import { Unzip, UnzipInflate } from "npm:fflate@0.8.3";
 
@@ -482,15 +483,23 @@ async function downloadOwnedProduct(req: Request) {
 
   const safeName = String(product.title || "DRIPX-resource")
     .replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 64) || "DRIPX-resource";
-  return new Response(sourceZip, {
-    status: 200,
-    headers: {
-      ...CORS_HEADERS,
-      "content-type": "application/zip",
-      "content-disposition": "attachment; filename=\"" + safeName + ".zip\"",
-      "content-length": String(sourceZip.byteLength),
-      "x-dripx-package": "generic-v1",
-    },
+  const storageClient = createClient(base, service, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const { data: signed, error: signedError } = await storageClient
+    .storage
+    .from("product-files")
+    .createSignedUrl(filePath, 60, { download: safeName + ".zip" });
+  if (signedError || !signed?.signedUrl) {
+    console.error("[DRIPX] Could not create temporary ZIP download URL:", signedError?.message || "missing_signed_url");
+    return json(502, { error: "temporary_download_link_unavailable" });
+  }
+  return json(200, {
+    success: true,
+    download_url: signed.signedUrl,
+    expires_in: 60,
+    filename: safeName + ".zip",
+    package: "generic-v1",
   });
 }
 
