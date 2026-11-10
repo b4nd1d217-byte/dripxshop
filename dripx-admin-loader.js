@@ -1,4 +1,5 @@
 (()=>{'use strict';
+window.__DRIPX_ADMIN_SHELL_ENABLED=true;
 const styles=[
  ['/dripx-user-admin.css?v=20261110-users-02','dripx-admin-users-css'],
  ['/dripx-catalog-manager.css?v=20261110-catalog-02','dripx-admin-catalog-css'],
