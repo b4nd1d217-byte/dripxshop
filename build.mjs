@@ -123,7 +123,7 @@ const adminShellChecks = [
   [adminExtraPanel.includes("dripx_categories") && adminExtraPanel.includes("dripx_settings"), 'Categories and settings use persistent Supabase tables'],
   [!adminShellPanel.includes("legacy.click()"), 'Admin route isolation does not reopen every legacy panel'],
   [adminShellPanel.includes("bootstrapLegacyProductEditor") && adminShellPanel.includes("DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM"), 'The real product editor is bootstrapped inside the new catalog route'],
-  [adminLoader.includes("loadRuntimeDependencies") && adminLoader.includes("dripx-jszip-runtime") && adminLoader.includes("dripx-tus-runtime"), 'ZIP and resumable upload runtimes are loaded only with admin modules'],
+  [adminLoader.includes("DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES") && adminShellPanel.includes("loadDeps().then"), 'ZIP and resumable upload runtimes load only on the Products route'],
   [userAdminPanel.includes("data-dxua-menu") && userAdminPanel.includes("data-dxua-menu-panel") && userAdminPanel.includes("data-dxua-filter"), 'Users render as a searchable list with row action menus and filters'],
   [userAdminPanel.includes("value=\"customer\"") && userAdminPanel.includes("value=\"support\"") && userAdminPanel.includes("value=\"moderator\""), 'User role choices align with Supabase allowed roles'],
   [userAdminActionsPanel.includes("dripx_admin_transfer_user_product") && userAdminActionsPanel.includes("dripx_admin_get_user_products"), 'User details and transfers use protected Supabase RPCs'],

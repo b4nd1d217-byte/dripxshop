@@ -125,7 +125,13 @@ function sync(){
   setFlags(route);renderShellState(route);
   window.dispatchEvent(new CustomEvent('dripx:admin-route',{detail:{route}}));
   if(route==='productos'){
-   bootstrapLegacyProductEditor();
+   const loadDeps=window.DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES;
+   if(typeof loadDeps==='function'){
+    loadDeps().then(()=>{if(routeFromLocation()==='productos'&&window.DRIPX_IS_ADMIN===true)bootstrapLegacyProductEditor();}).catch(error=>{
+     console.error('[DRIPX] No se pudieron cargar las herramientas ZIP/TUS:',error);
+     const toast=$('#toast');if(toast){toast.textContent='No se pudo preparar el editor ZIP. Reintenta al abrir Productos.';toast.classList.add('show');}
+    });
+   }else bootstrapLegacyProductEditor();
    window.dispatchEvent(new CustomEvent('dripx:admin-products-view'));
   }
   if(route==='logs')setTimeout(()=>window.dispatchEvent(new CustomEvent('dripx:admin-logs-view')),0);
