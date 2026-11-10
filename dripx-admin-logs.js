@@ -2,7 +2,7 @@
 if(window.__DRIPX_ADMIN_LOGS_INSTALLED)return;
 window.__DRIPX_ADMIN_LOGS_INSTALLED=true;
 const db=window.DRIPX_SUPABASE_CLIENT;if(!db)return;
-const ROOT='#dx-admin-logs',ALLOWED=new Set(['store','security','sales_public','sales_private','reviews','coupons','support','licenses']);
+const ROOT='#dx-admin-logs';
 const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=v=>String(v||'').trim().toLowerCase();
@@ -18,7 +18,7 @@ const categories=[
  ['support','Soporte','Tickets, mensajes y acciones de soporte','◷'],
  ['licenses','Licencias','Activaciones, validaciones y errores de licencia','⚿']
 ];
-const categoryMap=new Map(categories.map(item=>[item[0],item]));
+
 function active(){return window.DRIPX_IS_ADMIN===true&&String(location.hash||'').toLowerCase().startsWith('#admin')&&(window.DRIPX_ADMIN_LOGS_TAB_ACTIVE===true||norm(location.hash.split('/')[1])==='logs'||sessionStorageSafe()==='logs');}
 function sessionStorageSafe(){try{return sessionStorage.getItem('dripx.admin.tab')||'';}catch{return '';}}
 function toast(message){const t=$('#toast');if(t){t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3600);}}
