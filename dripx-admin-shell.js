@@ -112,15 +112,8 @@ function sync(){
    return;
   }
   setFlags(route);renderShellState(route);
-  if(route!=='resumen'&&route!=='logs'){
-   const legacy=findLegacyControl(route);
-   if(legacy&&legacy.dataset.dxasClickedFor!==route){
-    legacy.dataset.dxasClickedFor=route;
-    legacy.click();
-   }
-  }
+  window.dispatchEvent(new CustomEvent('dripx:admin-route',{detail:{route}}));
   if(route==='logs')setTimeout(()=>window.dispatchEvent(new CustomEvent('dripx:admin-logs-view')),0);
-  if(route==='resumen')setTimeout(()=>window.dispatchEvent(new CustomEvent('dripx:admin-overview-view')),0);
  },60);
 }
 function navigate(route){

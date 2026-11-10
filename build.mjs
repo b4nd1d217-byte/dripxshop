@@ -37,6 +37,8 @@ const adminShellPanel = await readFile('dripx-admin-shell.js', 'utf8');
 new Script(adminShellPanel, { filename: 'dripx-admin-shell.js' });
 const adminLogsPanel = await readFile('dripx-admin-logs.js', 'utf8');
 new Script(adminLogsPanel, { filename: 'dripx-admin-logs.js' });
+const adminExtraPanel = await readFile('dripx-admin-extra.js', 'utf8');
+new Script(adminExtraPanel, { filename: 'dripx-admin-extra.js' });
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
@@ -59,6 +61,8 @@ await copyFile('dripx-admin-shell.js', 'dist/dripx-admin-shell.js');
 await copyFile('dripx-admin-shell.css', 'dist/dripx-admin-shell.css');
 await copyFile('dripx-admin-logs.js', 'dist/dripx-admin-logs.js');
 await copyFile('dripx-admin-logs.css', 'dist/dripx-admin-logs.css');
+await copyFile('dripx-admin-extra.js', 'dist/dripx-admin-extra.js');
+await copyFile('dripx-admin-extra.css', 'dist/dripx-admin-extra.css');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
 const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
@@ -66,7 +70,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -94,7 +98,11 @@ const requiredFeatures = [
   'dripx_admin_save_discord_log_setting',
   'dripx-discord-logs',
   'DRIPX_ADMIN_NAVIGATE',
-  'DRIPX_ADMIN_CATALOG_MODE'
+  'DRIPX_ADMIN_CATALOG_MODE',
+  'dripx_admin_approve_order',
+  'dripx_admin_reject_order',
+  'dripx_categories',
+  'dripx_settings'
 ];
 const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
@@ -107,7 +115,10 @@ const adminShellChecks = [
   [adminLogsPanel.includes("dripx_admin_get_discord_log_settings") && adminLogsPanel.includes("dripx_admin_save_discord_log_setting"), 'Logs use existing secure database RPCs'],
   [adminLogsPanel.includes("db.functions.invoke('dripx-discord-logs'") && adminLogsPanel.includes("event:'test_embed'"), 'Discord tests use the real edge function'],
   [adminLogsPanel.includes("URL oculta") && adminLogsPanel.includes("data-dxlg-webhook"), 'Webhook URLs are not rendered in form values'],
-  [adminShellPanel.includes("body.dxas-active") || (await readFile('dripx-admin-shell.css','utf8')).includes('dxas-active'), 'admin shell styling is present']
+  [adminShellPanel.includes("body.dxas-active") || (await readFile('dripx-admin-shell.css','utf8')).includes('dxas-active'), 'admin shell styling is present'],
+  [adminExtraPanel.includes("dripx_admin_approve_order") && adminExtraPanel.includes("dripx_admin_reject_order"), 'Orders use the secured approval and rejection RPCs'],
+  [adminExtraPanel.includes("dripx_categories") && adminExtraPanel.includes("dripx_settings"), 'Categories and settings use persistent Supabase tables'],
+  [!adminShellPanel.includes("legacy.click()"), 'Admin routes do not dispatch legacy navigation clicks']
 ];
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
