@@ -131,8 +131,30 @@ const adminShellChecks = [
 ];
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
-if (!shell.includes('<script>window.__DRIPX_ADMIN_SHELL_ENABLED=true;</script>')) throw new Error('DRIPX regression: new shell flag must be set before legacy enhancement boot.');
-if (!shell.includes('dripx-admin-loader.js?v=20261110-loader-02')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (!shell.includes("window.__DRIPX_ADMIN_SHELL_ENABLED=/^#admin(?:$|[/?])/i.test(location.hash||''")) throw new Error('DRIPX regression: admin shell must only activate on admin URLs.');
+if (!shell.includes('dripx-admin-loader.js?v=20261110-loader-03')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (!adminLoader.includes('if(!isAdminRoute())return;') || adminLoader.includes('if(!isAdmin())return;')) throw new Error('DRIPX regression: admin loader must gate by route, not an undefined/global role helper.');
+if (!adminLoader.includes("window.addEventListener('dripx:admin-ready',ensureAdminModules)")) throw new Error('DRIPX regression: admin modules must also recover after auth readiness.');
+if (!adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=false') || !adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=true')) throw new Error('DRIPX regression: admin shell must restore storefront mode outside admin routes.');
+const adminShellCss = await readFile('dripx-admin-shell.css','utf8');
+const adminRouteContracts = [
+ ['resumen',adminExtraPanel.includes("if(route==='resumen')await loadOverview()"),'dx-admin-extra'],
+ ['pedidos',adminExtraPanel.includes("if(route==='pedidos')await loadOrders()"),'dx-admin-extra'],
+ ['tickets',ticketAdminPanel.includes('dripx_admin_delete_ticket'),'dx-ticket-admin'],
+ ['productos',catalogManager.includes('id="dxcm-product-form-host"'),'dx-catalog-admin'],
+ ['planes',catalogManager.includes("return 'planes';"),'dx-catalog-admin'],
+ ['categorias',adminExtraPanel.includes('function renderCategories()')&&adminExtraPanel.includes("db.from('dripx_categories')"),'dx-admin-extra'],
+ ['usuarios',userAdminPanel.includes('dripx_admin_list_users')&&userAdminPanel.includes("window.addEventListener('dripx:admin-route'"),'dx-user-admin'],
+ ['resenas',reviewsPanel.includes('function isAdminReviewsRoute()')&&reviewsPanel.includes("window.addEventListener('dripx:admin-route',schedule)"),'dx-admin-review-center'],
+ ['logs',adminLogsPanel.includes('dripx_admin_get_discord_log_settings'),'dx-admin-logs'],
+ ['ajustes',adminExtraPanel.includes('function loadSettings()')&&adminExtraPanel.includes("dripx_settings"),'dx-admin-extra']
+];
+const brokenAdminRoutes = adminRouteContracts.filter(([route,moduleReady,hostId]) =>
+ !adminShellPanel.includes("id:'"+route+"'") || !moduleReady ||
+ !adminShellCss.includes('body.dxas-active #app[data-dxas-route="'+route+'"]>#'+hostId)
+).map(([route])=>route);
+if (brokenAdminRoutes.length) throw new Error('DRIPX admin render contract failed; missing route/module/visible host: '+brokenAdminRoutes.join(', '));
+if (!reviewsPanel.includes("window.addEventListener('dripx:admin-ready',schedule)")) throw new Error('DRIPX regression: reviews must retry when admin authorization finishes.');
 if (shell.includes('jszip.min.js') || shell.includes('tus-js-client')) throw new Error('DRIPX regression: ZIP/upload dependencies must not block storefront entry.');
 
 const patchSource = await readFile('dripx-patch.mjs', 'utf8');
