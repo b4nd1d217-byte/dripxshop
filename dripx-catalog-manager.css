@@ -73,3 +73,28 @@
 .dxcm-loading p{margin:0;color:#89a9bc;font-size:10px}
 #app>[data-dxcm-legacy-hidden="1"]{display:none!important}
 @media(max-width:620px){.dxcm-heading{gap:11px}.dxcm-heading-actions{width:100%;justify-content:flex-start}.dxcm-return{width:100%}.dxcm-create-product{padding:11px}}
+
+/* Keep the original working MTA resource editor, but present it as part of the new catalog UI. */
+.dxcm-create-product #product-form{display:grid;gap:16px;margin:0;padding:clamp(14px,2.2vw,22px);border:1px solid rgba(0,199,255,.16);border-radius:15px;background:linear-gradient(145deg,rgba(9,25,39,.96),rgba(5,14,23,.98));color:#eaf6ff}
+.dxcm-create-product #product-form>*{min-width:0}
+.dxcm-create-product #product-form label{display:grid;gap:7px;min-width:0;color:#b6cbd9;font-size:10px;font-weight:700}
+.dxcm-create-product #product-form input:not([type=checkbox]):not([type=radio]),.dxcm-create-product #product-form select,.dxcm-create-product #product-form textarea{width:100%;min-width:0;min-height:38px;padding:9px 11px;border:1px solid rgba(130,175,202,.2);border-radius:9px;background:#071522;color:#edf8ff;font:inherit;font-size:10px;outline:none;box-shadow:none}
+.dxcm-create-product #product-form textarea{min-height:92px;resize:vertical;line-height:1.6}
+.dxcm-create-product #product-form input[type=file]{min-height:42px;padding:8px;background:rgba(0,199,255,.035);border-style:dashed}
+.dxcm-create-product #product-form input:focus,.dxcm-create-product #product-form select:focus,.dxcm-create-product #product-form textarea:focus{border-color:rgba(0,199,255,.65);box-shadow:0 0 0 3px rgba(0,199,255,.09)}
+.dxcm-create-product #product-form input[type=checkbox],.dxcm-create-product #product-form input[type=radio]{accent-color:#00c7ff}
+.dxcm-create-product #product-form button{min-height:36px;padding:8px 13px;border:1px solid rgba(0,199,255,.25);border-radius:9px;background:linear-gradient(110deg,rgba(0,199,255,.15),rgba(0,153,207,.08));color:#d9f6ff;font-size:10px;font-weight:750;cursor:pointer}
+.dxcm-create-product #product-form button:disabled{opacity:.5;cursor:not-allowed}
+.dxcm-create-product #product-form [data-dripx-store-category-field]{display:grid;gap:7px;padding:12px;border:1px solid rgba(0,199,255,.15);border-radius:11px;background:rgba(0,199,255,.035)}
+.dxcm-create-product #product-form #product-zip-upload-state{display:block;min-height:28px;padding:9px 11px;border:1px solid rgba(0,199,255,.13);border-radius:9px;background:rgba(0,199,255,.04);color:#8dcde1;font-size:9px;line-height:1.6}
+.dxcm-create-product #product-form .dx-product-store-category-field{margin-top:4px}
+.dxcm-create-product #product-form .dx-product-store-category-field small{color:#7796aa;font-size:8px;line-height:1.5}
+.dxcm-create-product #product-form .dx-product-engine,.dxcm-create-product #product-form [data-dripx-zip-engine]{padding:14px;border:1px solid rgba(0,199,255,.14);border-radius:12px;background:rgba(2,12,21,.55)}
+.dxcm-create-product #product-form .dx-product-engine h3,.dxcm-create-product #product-form .dx-product-engine h4{color:#e9f8ff}
+.dxcm-create-product #product-form .dx-product-engine p,.dxcm-create-product #product-form .dx-product-engine small{color:#849fb1}
+.dxcm-create-product #product-form .dx-product-engine button{margin:4px 5px 4px 0}
+.dxcm-create-product #product-form [hidden]{display:none!important}
+.dxcm-form-missing{padding:17px;border:1px dashed rgba(0,199,255,.24);border-radius:12px;background:rgba(0,199,255,.035);color:#d9f4ff}
+.dxcm-form-missing strong{font-size:11px}.dxcm-form-missing p{color:#829eb1;font-size:9px;line-height:1.6}
+.dxcm-form-missing button{min-height:34px;padding:8px 11px;border:1px solid rgba(0,199,255,.28);border-radius:8px;background:rgba(0,199,255,.1);color:#c7f2ff;font-size:9px;font-weight:750}
+.dxcm-row .dxcm-thumb img{width:100%;height:100%;object-fit:cover}
