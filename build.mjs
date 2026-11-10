@@ -98,8 +98,8 @@ const requiredFeatures = [
 ];
 const missingFeatures = requiredFeatures.filter(feature => !clientSource.includes(feature));
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
-const catalogUi = await readFile('dripx-catalog-manager.js', 'utf8');
-if (/;\\n\s*const nav=/.test(catalogUi)) throw new Error('DRIPX regression: malformed escaped newline in admin navigation handler.');
+const adminCatalogRouteSource = await readFile('dripx-catalog-manager.js', 'utf8');
+if (/;\\n\s*const nav=/.test(adminCatalogRouteSource)) throw new Error('DRIPX regression: malformed escaped newline in admin navigation handler.');
 const adminShellChecks = [
   [adminShellPanel.includes("window.DRIPX_ADMIN_NAVIGATE=navigate"), 'shared admin navigation callback is installed'],
   [adminShellPanel.includes("setFlags(route)") && adminShellPanel.includes("window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=products"), 'route state is synchronized with existing admin modules'],
