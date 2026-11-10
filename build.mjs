@@ -121,7 +121,7 @@ const adminShellChecks = [
   [adminShellPanel.includes("body.dxas-active") || (await readFile('dripx-admin-shell.css','utf8')).includes('dxas-active'), 'admin shell styling is present'],
   [adminExtraPanel.includes("dripx_admin_approve_order") && adminExtraPanel.includes("dripx_admin_reject_order"), 'Orders use the secured approval and rejection RPCs'],
   [adminExtraPanel.includes("dripx_categories") && adminExtraPanel.includes("dripx_settings"), 'Categories and settings use persistent Supabase tables'],
-  [!adminShellPanel.includes("legacy.click()"), 'Admin route isolation does not reopen every legacy panel'],
+  [adminShellPanel.includes("bootstrapLegacyProductEditor") && !adminShellPanel.slice(adminShellPanel.indexOf("function sync()"),adminShellPanel.indexOf("function navigate(route)")).includes("legacy.click()"), 'Only the Products route bootstraps the real editor; other routes do not replay legacy navigation'],
   [adminShellPanel.includes("bootstrapLegacyProductEditor") && adminShellPanel.includes("DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM"), 'The real product editor is bootstrapped inside the new catalog route'],
   [adminLoader.includes("DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES") && adminShellPanel.includes("loadDeps().then"), 'ZIP and resumable upload runtimes load only on the Products route'],
   [userAdminPanel.includes("data-dxua-menu") && userAdminPanel.includes("data-dxua-menu-panel") && userAdminPanel.includes("data-dxua-filter"), 'Users render as a searchable list with row action menus and filters'],
