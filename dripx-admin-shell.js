@@ -52,7 +52,7 @@ function setFlags(route){
  window.DRIPX_ADMIN_LOGS_TAB_ACTIVE=route==='logs';
  try{if(route==='resumen')sessionStorage.removeItem('dripx.admin.tab');else sessionStorage.setItem('dripx.admin.tab',route);}catch{}
 }
-function findLegacyControl(route){
+function findLegacyControl(route,includeHidden=false){
  const matchers={
   pedidos:/pedidos|orders/i,tickets:/tickets|soporte/i,productos:/productos|products/i,
   categorias:/categorias|categories/i,usuarios:/usuarios|users/i,resenas:/resenas|reviews/i,ajustes:/ajustes|configuracion|settings/i
@@ -60,14 +60,14 @@ function findLegacyControl(route){
  const matcher=matchers[route];if(!matcher)return null;
  const controls=[...document.querySelectorAll('#app a,#app button,#app [role="tab"],#app [data-admin-tab],#app [data-admin-route]')];
  return controls.find(node=>{
-  if(node.closest('#dx-admin-shell')||node.closest('[hidden]'))return false;
+  if(node.closest('#dx-admin-shell')||(!includeHidden&&node.closest('[hidden]')))return false;
   const value=[node.textContent,node.getAttribute('data-admin-tab'),node.getAttribute('data-admin-route'),node.getAttribute('data-tab'),node.getAttribute('aria-label'),node.getAttribute('href')].filter(Boolean).join(' ');
   return matcher.test(norm(value));
  })||null;
 }
 function bootstrapLegacyProductEditor(){
  if($('#product-form'))return true;
- const legacy=findLegacyControl('productos');
+ const legacy=findLegacyControl('productos',true);
  if(!legacy)return false;
  const last=Number(legacy.dataset.dxasProductBootstrapAt||0);
  if(Date.now()-last<1200)return false;
