@@ -122,10 +122,19 @@ const adminShellChecks = [
   [adminExtraPanel.includes("dripx_admin_approve_order") && adminExtraPanel.includes("dripx_admin_reject_order"), 'Orders use the secured approval and rejection RPCs'],
   [adminExtraPanel.includes("dripx_categories") && adminExtraPanel.includes("dripx_settings"), 'Categories and settings use persistent Supabase tables'],
   [!adminShellPanel.includes("legacy.click()"), 'Admin route isolation does not reopen every legacy panel'],
+  [adminShellPanel.includes("bootstrapLegacyProductEditor") && adminShellPanel.includes("DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM"), 'The real product editor is bootstrapped inside the new catalog route'],
+  [adminLoader.includes("loadRuntimeDependencies") && adminLoader.includes("dripx-jszip-runtime") && adminLoader.includes("dripx-tus-runtime"), 'ZIP and resumable upload runtimes are loaded only with admin modules'],
+  [userAdminPanel.includes("data-dxua-menu") && userAdminPanel.includes("data-dxua-menu-panel") && userAdminPanel.includes("data-dxua-filter"), 'Users render as a searchable list with row action menus and filters'],
+  [userAdminPanel.includes("value=\"customer\"") && userAdminPanel.includes("value=\"support\"") && userAdminPanel.includes("value=\"moderator\""), 'User role choices align with Supabase allowed roles'],
+  [userAdminActionsPanel.includes("dripx_admin_transfer_user_product") && userAdminActionsPanel.includes("dripx_admin_get_user_products"), 'User details and transfers use protected Supabase RPCs'],
   [adminLoader.includes("dripx-catalog-manager.js") && adminLoader.includes("dripx-user-admin.js") && adminLoader.includes("dripx-admin-shell.js"), 'Admin modules are lazy-loaded in dependency order']
 ];
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
+if (!shell.includes('<script>window.__DRIPX_ADMIN_SHELL_ENABLED=true;</script>')) throw new Error('DRIPX regression: new shell flag must be set before legacy enhancement boot.');
+if (!shell.includes('dripx-admin-loader.js?v=20261110-loader-02')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (shell.includes('jszip.min.js') || shell.includes('tus-js-client')) throw new Error('DRIPX regression: ZIP/upload dependencies must not block storefront entry.');
+
 const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
 const uploadUi = await readFile('dripx-enhancements.js', 'utf8');
