@@ -74,8 +74,14 @@ async function renderProductReviews(){
  }catch(err){console.error('[DRIPX] product reviews',err);if(root){root.innerHTML='<div class="dx-review-empty">No se pudieron cargar las valoraciones. Recarga la página para intentarlo de nuevo.</div>';root.dataset.ready='true';} }
  finally{productBusy=false;}
 }
+function isAdminReviewsRoute(){
+ const hash=String(location.hash||'').toLowerCase();
+ if(!/^#admin(?:\/|$)/.test(hash))return false;
+ const route=hash.match(/^#admin\/([^/?#]+)/)?.[1]||'';
+ return route==='resenas'||route==='reviews';
+}
 async function renderAdminReviews(){
- if(!db||!/^#admin(?:\/|$)/i.test(location.hash)){$('#dx-admin-review-center')?.remove();return;}
+ if(!db||!isAdminReviewsRoute()){$('#dx-admin-review-center')?.remove();return;}
  if($('#dx-admin-review-center')?.dataset.ready==='true')return;
  if(adminBusy)return;adminBusy=true;
  try{
@@ -121,6 +127,8 @@ document.addEventListener('submit',async e=>{
 let timer=0;
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{renderProductReviews();renderAdminReviews();syncCatalogRatings(false).catch(err=>console.warn('[DRIPX] catalog ratings',err));},180);}
 window.addEventListener('hashchange',schedule);
+window.addEventListener('dripx:admin-ready',schedule);
+window.addEventListener('dripx:admin-route',schedule);
 function boot(){const app=$('#app');if(app){const observer=new MutationObserver(()=>{if(/^#(?:inicio|productos)(?:$|[/?])/i.test(location.hash)||/^#producto\/[0-9a-f-]{36}/i.test(location.hash)||/^#admin(?:\/|$)/i.test(location.hash))schedule();});observer.observe(app,{childList:true,subtree:true});}schedule();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
