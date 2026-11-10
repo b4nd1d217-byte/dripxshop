@@ -1,0 +1,83 @@
+body.dxas-active{overflow:hidden;background:#060b12!important}
+body.dxas-active header.top,body.dxas-active body>footer,body.dxas-active>footer,body.dxas-active #cart,body.dxas-active #overlay{display:none!important}
+#dx-admin-shell{position:fixed;inset:0;z-index:12000;pointer-events:none;color:#eff7fc;font-family:Inter,"SF Pro Display","Segoe UI",Roboto,Arial,sans-serif}
+#dx-admin-shell *{box-sizing:border-box}
+#dx-admin-shell button{font:inherit}
+.dxas-sidebar{position:absolute;inset:0 auto 0 0;width:250px;display:flex;flex-direction:column;gap:0;padding:22px 16px 16px;border-right:1px solid rgba(153,190,215,.14);background:linear-gradient(180deg,#0b1420,#080f18 72%,#070d15);pointer-events:auto}
+.dxas-brand{display:flex;align-items:center;gap:11px;min-height:52px;padding:0 3px}
+.dxas-mark{display:grid;place-items:center;width:40px;height:40px;border:1px solid rgba(0,199,255,.4);border-radius:12px;background:linear-gradient(145deg,rgba(0,199,255,.2),rgba(0,199,255,.05));color:#59dcff;font-size:15px;font-weight:900;letter-spacing:-.08em;box-shadow:0 0 28px rgba(0,199,255,.08)}
+.dxas-brand-copy{display:grid;gap:3px;min-width:0}
+.dxas-brand-copy strong{font-size:13px;letter-spacing:.01em;color:#f1faff}
+.dxas-brand-copy small{font-size:8px;font-weight:850;letter-spacing:.19em;color:#46cdef}
+.dxas-sidebar-rule{height:1px;margin:17px 2px 19px;background:rgba(153,190,215,.13)}
+.dxas-nav{display:grid;gap:13px;overflow:auto;scrollbar-width:thin;scrollbar-color:#24445a transparent;padding-bottom:12px}
+.dxas-nav-group{display:grid;gap:4px}
+.dxas-nav-group h2{margin:0 0 3px;padding:0 8px;color:#627d91;font-size:8px;letter-spacing:.18em;font-weight:850}
+.dxas-nav-item{position:relative;display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:5px 9px;border:1px solid transparent;border-radius:9px;background:transparent;color:#91a8b9;text-align:left;font-size:10px;font-weight:650;cursor:pointer;transition:background .16s,border-color .16s,color .16s}
+.dxas-nav-item:hover{background:rgba(0,199,255,.065);border-color:rgba(0,199,255,.13);color:#effaff}
+.dxas-nav-item.is-active{border-color:rgba(0,199,255,.22);background:linear-gradient(90deg,rgba(0,199,255,.13),rgba(0,199,255,.045));color:#7ee4ff}
+.dxas-nav-item.is-active:after{position:absolute;right:-1px;top:8px;bottom:8px;width:2px;border-radius:3px;background:#00c7ff;content:""}
+.dxas-nav-icon{display:grid;place-items:center;width:25px;height:25px;flex:none;border:1px solid rgba(153,190,215,.12);border-radius:7px;background:#101e2b;color:#8ba9bc}
+.dxas-nav-icon svg{width:14px;height:14px}
+.dxas-nav-item.is-active .dxas-nav-icon{border-color:rgba(0,199,255,.24);background:rgba(0,199,255,.12);color:#48d7fb}
+.dxas-nav-active{margin-left:auto}
+.dxas-sidebar-footer{display:flex;align-items:center;gap:8px;min-height:42px;margin-top:auto;padding:10px 8px;border:1px solid rgba(153,190,215,.12);border-radius:10px;background:rgba(255,255,255,.018);color:#8ba4b6;font-size:8px}
+.dxas-secure-dot{width:7px;height:7px;border-radius:50%;background:#4bd5a1;box-shadow:0 0 0 4px rgba(75,213,161,.1)}
+.dxas-secure-state{margin-left:auto;color:#4bd5a1;font-size:7px;font-weight:850;letter-spacing:.1em}
+.dxas-topbar{position:absolute;left:250px;right:0;top:0;display:flex;align-items:center;justify-content:space-between;gap:14px;height:80px;padding:0 28px;border-bottom:1px solid rgba(153,190,215,.12);background:rgba(7,15,24,.96);backdrop-filter:blur(18px);pointer-events:auto}
+.dxas-crumb{display:flex;align-items:center;gap:9px;color:#6f899b;font-size:8px;font-weight:800;letter-spacing:.1em;white-space:nowrap}
+.dxas-crumb i{color:#425b6b;font-style:normal}
+.dxas-crumb strong{color:#c9e7f3;font-weight:850}
+.dxas-top-actions{display:flex;align-items:center;gap:13px}
+.dxas-session-pill{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid rgba(75,213,161,.17);border-radius:20px;background:rgba(75,213,161,.05);color:#82dfb6;font-size:8px;font-weight:750}
+.dxas-session-pill>span{width:6px;height:6px;border-radius:50%;background:#4bd5a1}
+.dxas-account{display:flex;align-items:center;gap:8px;padding-left:12px;border-left:1px solid rgba(153,190,215,.14)}
+.dxas-avatar{display:grid;place-items:center;overflow:hidden;width:32px;height:32px;border:1px solid rgba(0,199,255,.23);border-radius:9px;background:#102a3a;color:#8de9ff;font-size:10px;font-weight:850}
+.dxas-avatar img{display:block;width:100%;height:100%;object-fit:cover}
+.dxas-account-copy{display:grid;gap:3px;min-width:120px}
+.dxas-account-copy strong{max-width:190px;overflow:hidden;color:#e7f5fb;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.dxas-account-copy small{color:#758fa1;font-size:7px}
+.dxas-store-link{display:flex;align-items:center;gap:6px;min-height:33px;padding:0 10px;border:1px solid rgba(153,190,215,.17);border-radius:8px;background:#101e2b;color:#a9c3d3;font-size:8px;font-weight:750;cursor:pointer}
+.dxas-store-link:hover{border-color:rgba(0,199,255,.4);color:#d9f8ff}
+.dxas-mobile-menu,.dxas-mobile-close{display:none}
+.dxas-mobile-backdrop{display:none}
+body.dxas-active #app.dxas-app{position:fixed!important;left:250px!important;right:0!important;top:80px!important;bottom:0!important;width:auto!important;min-width:0!important;min-height:0!important;height:auto!important;margin:0!important;padding:26px clamp(18px,2.1vw,34px) 46px!important;overflow:auto!important;z-index:12001!important;background:#060b12!important;scrollbar-color:#1d4056 transparent;scrollbar-width:thin}
+body.dxas-active #app.dxas-app>*{max-width:1480px}
+body.dxas-active #app.dxas-app .dx-admin-overview{margin:0 0 24px!important}
+body.dxas-active #app.dxas-app>.dx-admin-overview{display:block}
+body.dxas-active #app.dxas-app [data-dxas-legacy="1"]{display:none!important}
+body.dxas-active #app.dxas-app>.dxas-shell-page{display:block}
+body.dxas-active #app.dxas-app .dxcm-shell,body.dxas-active #app.dxas-app .dxua-shell,body.dxas-active #app.dxas-app .dxta-shell,body.dxas-active #app.dxas-app #dx-category-manager{margin-top:0!important}
+body.dxas-active #app.dxas-app .dxas-panel-hidden{display:none!important}
+body.dxas-active #app.dxas-app .dxas-legacy-nav,body.dxas-active #app.dxas-app .admin-sidebar,body.dxas-active #app.dxas-app .admin-nav,body.dxas-active #app.dxas-app .admin-menu,body.dxas-active #app.dxas-app .sidebar-nav,body.dxas-active #app.dxas-app .admin-tabs,body.dxas-active #app.dxas-app .admin-dashboard-nav{display:none!important}
+body.dxas-active #app.dxas-app .dx-admin-overview-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.dxas-active #app.dxas-app .dx-admin-overview{max-width:1480px}
+body.dxas-active #app.dxas-app .dx-admin-overview-head strong{font-size:20px}
+body.dxas-active #app.dxas-app .dx-admin-log-test{display:none!important}
+@media(max-width:980px){
+ .dxas-topbar{padding:0 17px}
+ .dxas-crumb{font-size:7px}
+ .dxas-session-pill{display:none}
+ .dxas-account-copy{display:none}
+ .dxas-top-actions{gap:8px}
+}
+@media(max-width:720px){
+ .dxas-sidebar{width:min(290px,84vw);transform:translateX(-105%);transition:transform .2s ease;z-index:3;box-shadow:24px 0 70px rgba(0,0,0,.45)}
+ #dx-admin-shell.is-mobile-open .dxas-sidebar{transform:translateX(0)}
+ .dxas-mobile-backdrop{position:absolute;inset:0;background:rgba(1,6,12,.68);pointer-events:auto}
+ #dx-admin-shell.is-mobile-open .dxas-mobile-backdrop{display:block}
+ .dxas-mobile-menu{display:grid;place-items:center;width:34px;height:34px;border:1px solid rgba(153,190,215,.15);border-radius:8px;background:#101e2b;color:#c4e3f1;cursor:pointer}
+ .dxas-mobile-close{display:grid;place-items:center;margin-left:auto;width:30px;height:30px;border:1px solid rgba(153,190,215,.14);border-radius:8px;background:#101e2b;color:#d9eff8;font-size:19px}
+ .dxas-topbar{left:0;height:66px;padding:0 12px;gap:8px}
+ .dxas-crumb{min-width:0;flex:1;overflow:hidden;font-size:7px;gap:5px;text-overflow:ellipsis}
+ .dxas-crumb span:nth-child(2),.dxas-crumb i:nth-of-type(1){display:none}
+ .dxas-account{display:none}
+ .dxas-store-link{min-height:31px;padding:0 8px}
+ body.dxas-active #app.dxas-app{left:0!important;top:66px!important;padding:18px 13px 34px!important}
+ body.dxas-active #app.dxas-app .dx-admin-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:420px){
+ .dxas-crumb{font-size:6px;letter-spacing:.04em}
+ .dxas-store-link span{display:none}
+ body.dxas-active #app.dxas-app .dx-admin-overview-grid{grid-template-columns:1fr}
+}
