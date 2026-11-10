@@ -19,6 +19,10 @@ const scripts=[
 ];
 let inflight=null;
 const isAdminRoute=()=>/^#admin(?:$|[/?])/i.test(String(location.hash||''));
+const runtimeDependencies=[
+ ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js','dripx-jszip-runtime'],
+ ['https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js','dripx-tus-runtime']
+];
 function loadStyle(src,id){
  const existing=document.getElementById(id);
  if(existing)return Promise.resolve();
@@ -36,13 +40,17 @@ function loadScript(src,id){
   document.head.append(script);
  });
 }
+async function loadRuntimeDependencies(){
+ await Promise.all(runtimeDependencies.map(([src,id])=>loadScript(src,id)));
+}
 async function ensureAdminModules(){
- if(!isAdmin()){window.__DRIPX_ADMIN_SHELL_ENABLED=false;return;}
+ if(!isAdmin())return;
  window.__DRIPX_ADMIN_SHELL_ENABLED=true;
  if(window.__DRIPX_ADMIN_MODULES_READY===true)return;
  if(inflight)return inflight;
  inflight=(async()=>{
   await Promise.all(styles.map(([src,id])=>loadStyle(src,id)));
+  await loadRuntimeDependencies();
   for(const [src,id] of scripts)await loadScript(src,id);
   window.__DRIPX_ADMIN_MODULES_READY=true;
   window.dispatchEvent(new CustomEvent('dripx:admin-modules-ready'));
