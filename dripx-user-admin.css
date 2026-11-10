@@ -11,3 +11,57 @@
 .dxua-extra-row small,.dxua-extra-order span,.dxua-extra-order small{color:#87a4b7;font-size:9px}
 .dxua-extra-history h4{margin:15px 0 6px;color:#54d5f5;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
 .dxua-modal:has(.dxua-extra-history){width:min(680px,100%)}
+
+/* User management: compact live list with an always-visible three-dot action menu. */
+.dxua-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:14px 0}
+.dxua-stats>article{display:grid;gap:4px;min-width:0;padding:12px 13px;border:1px solid rgba(132,169,193,.13);border-radius:12px;background:linear-gradient(130deg,rgba(12,30,45,.9),rgba(6,16,26,.95))}
+.dxua-stats small{color:#7996a9;font-size:8px;letter-spacing:.1em;text-transform:uppercase}
+.dxua-stats strong{color:#eaf8ff;font-size:20px;font-variant-numeric:tabular-nums}
+.dxua-stats span{color:#67869b;font-size:8px}
+.dxua-list-head{display:grid;grid-template-columns:minmax(0,1fr) 112px 110px 48px;gap:12px;padding:8px 13px;color:#66869b;font-size:8px;font-weight:850;letter-spacing:.13em}
+.dxua-row{min-width:0}
+.dxua-identity{flex:1}
+.dxua-identity small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dxua-role{font-weight:750}
+.dxua-role-admin{border:1px solid rgba(0,199,255,.28);background:rgba(0,199,255,.12);color:#8de7ff}
+.dxua-role-support{border:1px solid rgba(125,171,255,.2);background:rgba(125,171,255,.08);color:#b5caff}
+.dxua-role-moderator{border:1px solid rgba(191,143,255,.2);background:rgba(191,143,255,.08);color:#d9beff}
+.dxua-role-customer{border:1px solid rgba(151,185,208,.13);background:rgba(151,185,208,.06);color:#b7c9d7}
+.dxua-state{display:inline-flex;align-items:center;gap:6px}
+.dxua-state i{width:6px;height:6px;border-radius:50%;background:#41d49a}
+.dxua-state.is-suspended i{background:#ff8181}
+.dxua-actions{margin-left:auto;flex:0 0 auto}
+.dxua-actions>.dxua-more{display:grid;place-content:center;gap:3px;width:35px;height:35px;padding:6px;border:1px solid rgba(0,199,255,.2);border-radius:10px;background:linear-gradient(145deg,#102538,#0a1926);color:#c8f2ff;cursor:pointer}
+.dxua-more span{display:block;width:3px;height:3px;border-radius:50%;background:currentColor}
+.dxua-actions>.dxua-more:hover,.dxua-actions>.dxua-more[aria-expanded="true"]{border-color:rgba(0,199,255,.55);background:rgba(0,199,255,.12);color:#6fe1ff}
+.dxua-menu{min-width:195px;padding:6px}
+.dxua-menu button{display:flex;align-items:center;gap:9px;min-height:34px;cursor:pointer}
+.dxua-menu button:disabled{opacity:.4;cursor:not-allowed}
+.dxua-menu button:disabled:hover{background:transparent;color:#dceefa}
+.dxua-tools select{min-height:39px;max-width:200px;padding:0 11px;border:1px solid #1d3548;border-radius:10px;background:#081522;color:#c8dce8;font:inherit;font-size:10px;outline:none}
+.dxua-search>span{flex:none;font-size:16px}
+.dxua-loading{display:flex;align-items:center;justify-content:center;gap:12px;min-height:120px}
+.dxua-loading>div{display:grid;gap:4px;text-align:left}
+.dxua-loading strong{color:#dff4fc;font-size:12px}
+.dxua-loading small{color:#7895a8;font-size:9px}
+.dxua-loading-mark{display:grid;place-items:center;width:36px;height:36px;border:1px solid rgba(0,199,255,.28);border-radius:10px;background:rgba(0,199,255,.1);color:#55dafa;font-weight:900}
+@media(max-width:760px){
+ .dxua-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dxua-list-head{display:none}
+ .dxua-row{gap:8px;padding:10px}
+ .dxua-identity{flex:1 1 42%;min-width:0}
+ .dxua-identity strong{max-width:none}
+ .dxua-role{display:inline-flex;font-size:8px;padding:4px 6px}
+ .dxua-state{font-size:8px;padding:4px 6px}
+ .dxua-actions>.dxua-more{width:34px;height:34px}
+ .dxua-tools{display:flex;align-items:stretch;flex-direction:column}
+ .dxua-tools select{max-width:none;width:100%}
+}
+@media(max-width:420px){
+ .dxua-row{flex-wrap:wrap}
+ .dxua-identity{min-width:calc(100% - 95px);flex:1 1 calc(100% - 95px)}
+ .dxua-role{margin-left:44px}
+ .dxua-state{margin-left:auto}
+ .dxua-actions{margin-left:0}
+ .dxua-menu{right:0}
+}
