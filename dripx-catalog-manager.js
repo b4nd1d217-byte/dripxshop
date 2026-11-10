@@ -74,6 +74,24 @@ function planProducts(){return products.filter(p=>p.product_type==='plan'&&p.cat
 function resourceProducts(){return products.filter(p=>p.product_type==='resource'&&p.category==='Productos');}
 function selectedResources(planId){return mappings.filter(m=>String(m.plan_product_id)===String(planId)).map(m=>String(m.resource_product_id));}
 function imageFor(p){const source=p.image_url||p.catalogImageUrl||'';return source&&/^https:\/\//i.test(source)?'<img src="'+esc(source)+'" alt="" loading="lazy">':'<span class="dxcm-art">'+(p.product_type==='plan'?'✦':'▣')+'</span>';}
+async function hydrateProductThumbnails(items){
+ const pending=items.filter(item=>!item.image_url&&item.image_path).slice(0,36);
+ let cursor=0;
+ const worker=async()=>{
+  while(cursor<pending.length){
+   const item=pending[cursor++];
+   try{
+    const result=await timed(db.storage.from('product-images').createSignedUrl(item.image_path,900),5000,'image_timeout');
+    const url=result.data?.signedUrl;
+    if(result.error||!url)continue;
+    item.catalogImageUrl=url;
+    const row=$(ROOT+' .dxcm-row[data-item-id="'+CSS.escape(String(item.id))+'"] .dxcm-thumb');
+    if(row&&!row.querySelector('img'))row.innerHTML='<img src="'+esc(url)+'" alt="" loading="lazy" decoding="async">';
+   }catch(error){console.warn('[DRIPX] Miniatura omitida:',item.id,error?.message||error);}
+  }
+ };
+ await Promise.all(Array.from({length:Math.min(4,pending.length)},worker));
+}
 function money(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function row(p){
  const isPlan=p.product_type==='plan',hidden=p.status==='archived',draft=p.status==='draft',linked=isPlan?selectedResources(p.id).length:0;
@@ -108,7 +126,7 @@ function render(){
   form.hidden=false;form.classList.remove('hidden');form.removeAttribute('aria-hidden');delete form.dataset.dxcmManaged;
  }
  const header='<header class="dxcm-heading"><div><span class="dxcm-kicker">DRIP X SHOP · ADMINISTRACIÓN</span><h2>'+(mode==='planes'?'Planes de acceso':'Productos descargables')+'</h2><p>'+(mode==='planes'?'Configura duración, precio y recursos incluidos. Los planes agrupan productos publicados y nunca reciben archivos ZIP.':'Publica recursos MTA:SA. Inspecciona, protege y compila los ZIP antes de habilitar su descarga.')+'</p></div><div class="dxcm-heading-actions"><button type="button" class="dxcm-return" data-dxcm-back>← Volver al resumen</button></div><div class="dxcm-totals">'+(mode==='planes'?'<div><b>'+plans.length+'</b><span>Planes</span></div>':'<div><b>'+resources.length+'</b><span>Productos</span></div>')+'</div></header>';
- const productsView='<section class="dxcm-create-product"><header><div><span class="dxcm-section-mark">PUBLICACIÓN DE RECURSOS</span><h3>Crear o publicar producto</h3><p>El formulario conserva el flujo de inspección, protección y compilación. Los archivos shared y de configuración se mantienen intactos.</p></div></header><div id="dxcm-product-form-host"></div><div class="dxcm-form-missing" data-dxcm-form-missing hidden><strong>El formulario no se ha podido recuperar todavía.</strong><p>La aplicación está reconstruyendo el editor de Productos. Vuelve a intentar sincronizar el panel.</p><button type="button" data-dxcm-reload>↻ Reintentar</button></div></section>'+
+ const productsView='<section class="dxcm-create-product"><header><div><span class="dxcm-section-mark">PUBLICACIÓN DE RECURSOS</span><h3>Crear o publicar producto</h3><p>El formulario conserva el flujo de inspección, protección y compilación. Los archivos shared y de configuración se mantienen intactos.</p></div></header><div id="dxcm-product-form-host"></div><div class="dxcm-form-missing" data-dxcm-form-missing hidden><strong>Preparando el editor de publicación…</strong><p>Se está conectando el formulario real de recursos MTA:SA dentro de este panel. No se crean productos de muestra.</p><button type="button" data-dxcm-recover-form>↻ Recuperar formulario de Productos</button></div></section>'+
  '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">INVENTARIO / MTA:SA</span><h3>Productos descargables</h3><p>Recursos independientes dentro de la categoría Productos.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="products" aria-label="Opciones de Productos">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="products" hidden><button type="button" data-dxcm-section-action="create-product">＋ Crear producto</button></div></div></header>'+
  (resources.length?'<div class="dxcm-list">'+resources.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>▣</span><strong>Aún no hay productos descargables</strong><p>Crea tu primer recurso desde el formulario y completa la inspección y protección ZIP antes de publicarlo.</p></div>')+'</section>';
  const plansView='<section class="dxcm-section"><header><div><span class="dxcm-section-mark">ACCESO / MEMBRESÍAS</span><h3>Planes</h3><p>Precio, duración, presentación y productos incluidos. Un plan nunca almacena ni recibe archivos ZIP.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="plans" aria-label="Opciones de Planes">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="plans" hidden><button type="button" data-dxcm-section-action="create-plan">＋ Crear plan</button></div></div></header>'+
@@ -135,16 +153,10 @@ async function load(){
   ]),16000,'El catálogo tardó demasiado en responder. Pulsa Reintentar.');
   if(p.error)throw p.error;if(m.error)throw m.error;if(categoryResult.error)throw categoryResult.error;
   products=p.data||[];mappings=m.data||[];categories=categoryResult.data||[];
-  const thumbnails=products.filter(item=>!item.image_url&&item.image_path).slice(0,24);
-  await Promise.all(thumbnails.map(async item=>{
-   try{
-    const signed=await timed(db.storage.from('product-images').createSignedUrl(item.image_path,900),5000,'image_timeout');
-    if(!signed.error)item.catalogImageUrl=signed.data?.signedUrl||null;
-   }catch(error){console.warn('[DRIPX] Miniatura omitida:',item.id,error?.message||error);}
-  }));
   products=products.filter(p=>(p.product_type==='plan'&&p.category==='Planes')||(p.product_type==='resource'&&p.category==='Productos'));
   if(!activeView())return;
   render();const panel=$(ROOT);if(panel)panel.dataset.loaded='1';
+  void hydrateProductThumbnails(products);
  }catch(e){const panel=$(ROOT);if(panel){panel.dataset.loaded='error';panel.innerHTML='<div class="dxcm-error"><strong>No se pudo sincronizar el catálogo</strong><p>'+esc(e.message||'Error de Supabase')+'</p><button type="button" data-dxcm-reload>↻ Reintentar</button></div>';}console.error('[DRIPX catalog manager]',e);}
  finally{loading=false;}
 }
@@ -351,7 +363,11 @@ document.addEventListener('click',e=>{
   return;
  }
  const retry=e.target.closest('[data-dxcm-reload],[data-dxcm-recover-form]');
- if(retry){e.preventDefault();const panel=$(ROOT);if(panel)panel.dataset.loaded='0';loading=false;ensure();if(!loading)load();return;}
+ if(retry){
+  e.preventDefault();
+  if(retry.hasAttribute('data-dxcm-recover-form'))window.DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM?.();
+  const panel=$(ROOT);if(panel)panel.dataset.loaded='0';loading=false;ensure();if(!loading)load();return;
+ }
  const nav=e.target.closest('#app button,#app a,#app [role="tab"]');
  if(!nav||nav.closest(ROOT))return;
  const label=[nav.textContent,nav.getAttribute('data-admin-tab'),nav.getAttribute('data-tab'),nav.getAttribute('aria-label'),nav.getAttribute('href')].join(' ').toLowerCase();

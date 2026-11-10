@@ -39,6 +39,8 @@ const adminLogsPanel = await readFile('dripx-admin-logs.js', 'utf8');
 new Script(adminLogsPanel, { filename: 'dripx-admin-logs.js' });
 const adminExtraPanel = await readFile('dripx-admin-extra.js', 'utf8');
 new Script(adminExtraPanel, { filename: 'dripx-admin-extra.js' });
+const adminLoader = await readFile('dripx-admin-loader.js', 'utf8');
+new Script(adminLoader, { filename: 'dripx-admin-loader.js' });
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
@@ -63,6 +65,7 @@ await copyFile('dripx-admin-logs.js', 'dist/dripx-admin-logs.js');
 await copyFile('dripx-admin-logs.css', 'dist/dripx-admin-logs.css');
 await copyFile('dripx-admin-extra.js', 'dist/dripx-admin-extra.js');
 await copyFile('dripx-admin-extra.css', 'dist/dripx-admin-extra.css');
+await copyFile('dripx-admin-loader.js', 'dist/dripx-admin-loader.js');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
 const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
@@ -70,7 +73,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js','dist/dripx-admin-loader.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -118,10 +121,20 @@ const adminShellChecks = [
   [adminShellPanel.includes("body.dxas-active") || (await readFile('dripx-admin-shell.css','utf8')).includes('dxas-active'), 'admin shell styling is present'],
   [adminExtraPanel.includes("dripx_admin_approve_order") && adminExtraPanel.includes("dripx_admin_reject_order"), 'Orders use the secured approval and rejection RPCs'],
   [adminExtraPanel.includes("dripx_categories") && adminExtraPanel.includes("dripx_settings"), 'Categories and settings use persistent Supabase tables'],
-  [!adminShellPanel.includes("legacy.click()"), 'Admin routes do not dispatch legacy navigation clicks']
+  [adminShellPanel.includes("bootstrapLegacyProductEditor") && !adminShellPanel.slice(adminShellPanel.indexOf("function sync()"),adminShellPanel.indexOf("function navigate(route)")).includes("legacy.click()"), 'Only the Products route bootstraps the real editor; other routes do not replay legacy navigation'],
+  [adminShellPanel.includes("bootstrapLegacyProductEditor") && adminShellPanel.includes("DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM"), 'The real product editor is bootstrapped inside the new catalog route'],
+  [adminLoader.includes("DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES") && adminShellPanel.includes("loadDeps().then"), 'ZIP and resumable upload runtimes load only on the Products route'],
+  [userAdminPanel.includes("data-dxua-menu") && userAdminPanel.includes("data-dxua-menu-panel") && userAdminPanel.includes("data-dxua-filter"), 'Users render as a searchable list with row action menus and filters'],
+  [userAdminPanel.includes("value=\"customer\"") && userAdminPanel.includes("value=\"support\"") && userAdminPanel.includes("value=\"moderator\""), 'User role choices align with Supabase allowed roles'],
+  [userAdminActionsPanel.includes("dripx_admin_transfer_user_product") && userAdminActionsPanel.includes("dripx_admin_get_user_products"), 'User details and transfers use protected Supabase RPCs'],
+  [adminLoader.includes("dripx-catalog-manager.js") && adminLoader.includes("dripx-user-admin.js") && adminLoader.includes("dripx-admin-shell.js"), 'Admin modules are lazy-loaded in dependency order']
 ];
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
+if (!shell.includes('<script>window.__DRIPX_ADMIN_SHELL_ENABLED=true;</script>')) throw new Error('DRIPX regression: new shell flag must be set before legacy enhancement boot.');
+if (!shell.includes('dripx-admin-loader.js?v=20261110-loader-02')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (shell.includes('jszip.min.js') || shell.includes('tus-js-client')) throw new Error('DRIPX regression: ZIP/upload dependencies must not block storefront entry.');
+
 const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
 const uploadUi = await readFile('dripx-enhancements.js', 'utf8');

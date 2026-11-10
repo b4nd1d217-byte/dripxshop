@@ -65,6 +65,17 @@ function findLegacyControl(route){
   return matcher.test(norm(value));
  })||null;
 }
+function bootstrapLegacyProductEditor(){
+ if($('#product-form'))return true;
+ const legacy=findLegacyControl('productos');
+ if(!legacy)return false;
+ const last=Number(legacy.dataset.dxasProductBootstrapAt||0);
+ if(Date.now()-last<1200)return false;
+ legacy.dataset.dxasProductBootstrapAt=String(Date.now());
+ legacy.click();
+ return true;
+}
+window.DRIPX_ADMIN_BOOTSTRAP_PRODUCTS_FORM=bootstrapLegacyProductEditor;
 function mount(){
  let shell=$(ROOT_ID);if(shell)return shell;
  shell=document.createElement('section');shell.id=ROOT_ID;shell.className='dxas-shell';
@@ -113,6 +124,16 @@ function sync(){
   }
   setFlags(route);renderShellState(route);
   window.dispatchEvent(new CustomEvent('dripx:admin-route',{detail:{route}}));
+  if(route==='productos'){
+   const loadDeps=window.DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES;
+   if(typeof loadDeps==='function'){
+    loadDeps().then(()=>{if(routeFromLocation()==='productos'&&window.DRIPX_IS_ADMIN===true)bootstrapLegacyProductEditor();}).catch(error=>{
+     console.error('[DRIPX] No se pudieron cargar las herramientas ZIP/TUS:',error);
+     const toast=$('#toast');if(toast){toast.textContent='No se pudo preparar el editor ZIP. Reintenta al abrir Productos.';toast.classList.add('show');}
+    });
+   }else bootstrapLegacyProductEditor();
+   window.dispatchEvent(new CustomEvent('dripx:admin-products-view'));
+  }
   if(route==='logs')setTimeout(()=>window.dispatchEvent(new CustomEvent('dripx:admin-logs-view')),0);
  },60);
 }
