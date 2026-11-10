@@ -91,7 +91,7 @@ function renderShellState(route){
  const shell=mount(),current=ROUTES.find(item=>item.id===route)||ROUTES[0];
  document.body.classList.add('dxas-active');
  shell.dataset.route=route;
- const app=$(APP);if(app){app.classList.add('dxas-app');app.dataset.dxasRoute=route;}
+ const app=$(APP);if(app){app.classList.add('dxas-app');setLegacyContent(route);}
  shell.querySelectorAll('[data-dxas-route]').forEach(button=>{
   const active=button.dataset.dxasRoute===route;
   button.classList.toggle('is-active',active);button.setAttribute('aria-current',active?'page':'false');
