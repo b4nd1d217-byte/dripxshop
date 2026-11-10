@@ -306,22 +306,40 @@ document.addEventListener('click',e=>{
 },false);
 function ensure(){
  let existing=$(ROOT);
- if(!activeView()){existing?.remove();document.querySelector('#dx-plan-resource-manager')?.remove();return;}
+ if(!activeView()){restoreLegacySurface();existing?.remove();document.querySelector('#dx-plan-resource-manager')?.remove();return;}
  if(!existing){
   document.querySelector('#dx-plan-resource-manager')?.remove();
-  existing=document.createElement('section');existing.id='dx-catalog-admin';existing.className='dxcm-shell';
+  existing=document.createElement('section');existing.id='dx-catalog-admin';existing.className='dxcm-shell';existing.dataset.loaded='0';
+  existing.innerHTML='<div class="dxcm-loading"><span class="dxcm-loading-mark">DX</span><strong>Preparando el catálogo administrativo</strong><p>Verificando permisos y sincronizando el catálogo…</p></div>';
   const app=$('#app');if(app)app.prepend(existing);
  }
+ takeOverLegacySurface();
  if(existing&&['','0'].includes(existing.dataset.loaded||'')&&!loading)load();
 }
 document.addEventListener('click',e=>{
- const nav=e.target.closest('#app button,#app a,#app [role="tab"]');if(!nav)return;
+ const back=e.target.closest('[data-dxcm-back]');
+ if(back){
+  e.preventDefault();e.stopImmediatePropagation();manualExit=true;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
+  try{sessionStorage.removeItem('dripx.admin.tab');}catch{}
+  restoreLegacySurface();
+  const nav=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].find(n=>!n.closest(ROOT)&&/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()));
+  if(nav)nav.click();else{const root=$(ROOT);if(root)root.remove();if(location.hash!=='#admin')location.hash='#admin';}
+  setTimeout(()=>{restoreLegacySurface();const root=$(ROOT);if(root)root.remove();},80);
+  return;
+ }
+ const retry=e.target.closest('[data-dxcm-reload],[data-dxcm-recover-form]');
+ if(retry){e.preventDefault();const panel=$(ROOT);if(panel)panel.dataset.loaded='0';loading=false;ensure();if(!loading)load();return;}
+ const nav=e.target.closest('#app button,#app a,#app [role="tab"]');
+ if(!nav||nav.closest(ROOT))return;
  const label=[nav.textContent,nav.getAttribute('data-admin-tab'),nav.getAttribute('data-tab'),nav.getAttribute('aria-label'),nav.getAttribute('href')].join(' ').toLowerCase();
- if(/productos|planes/.test(label)){window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=true;try{sessionStorage.setItem('dripx.admin.tab','productos');}catch{}setTimeout(ensure,120);}
+ if(/productos|planes/.test(label)){manualExit=false;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=true;try{sessionStorage.setItem('dripx.admin.tab','productos');}catch{}setTimeout(ensure,120);}
  else if(/pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label)){window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;setTimeout(ensure,80);}
 },true);
 window.addEventListener('hashchange',()=>setTimeout(ensure,120));
-const observer=new MutationObserver(()=>{if(activeView()&&!$(ROOT))ensure();});
+const observer=new MutationObserver(()=>{
+ if(activeView()){if(!$(ROOT))ensure();else takeOverLegacySurface();}
+ else if($(ROOT))ensure();
+});
 const start=()=>{const app=$('#app');if(app)observer.observe(app,{childList:true,subtree:true});ensure();};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
