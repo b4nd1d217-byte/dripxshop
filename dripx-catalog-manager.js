@@ -16,7 +16,7 @@ function activeView(){
  let tab='';try{tab=sessionStorage.getItem('dripx.admin.tab')||'';}catch{}
  const tracked=window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true||tab==='productos'||tab==='planes';
  const explicit=/^#admin(?:\/(?:productos|planes))(?:$|[/?])/.test(hash);
- const activeNav=[...document.querySelectorAll('#app button.active,#app a.active,#app [role="tab"][aria-selected="true"],#app [aria-current="page"]')].some(n=>/productos|planes/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label'),n.getAttribute('href')].join(' ').toLowerCase()));
+ const activeNav=[...document.querySelectorAll('#app button.active,#app a.active,#app [role="tab"][aria-selected="true"],#app [aria-current="page"]')].some(n=>!n.closest('[hidden]')&&!n.closest(ROOT)&&/productos|planes/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label'),n.getAttribute('href')].join(' ').toLowerCase()));
  return hash.startsWith('#admin')&&(tracked||explicit||activeNav);
 }
 function rememberProductForm(form){
@@ -27,11 +27,12 @@ function rememberProductForm(form){
 function mountProductForm(){
  const slot=$(ROOT+' #dxcm-product-form-host');if(!slot)return;
  const found=$('#product-form');if(found&&!found.closest(ROOT))rememberProductForm(found);
- if(!managedProductForm)return;
+ const missing=$(ROOT+' [data-dxcm-form-missing]');
+ if(!managedProductForm){if(missing)missing.hidden=false;return;}
  if(managedProductForm.parentNode!==slot)slot.append(managedProductForm);
  managedProductForm.hidden=false;managedProductForm.classList.remove('hidden');managedProductForm.removeAttribute('aria-hidden');
  managedProductForm.dataset.dxcmManaged='true';
- const missing=$(ROOT+' [data-dxcm-form-missing]');if(missing)missing.hidden=true;
+ if(missing)missing.hidden=true;
 }
 function takeOverLegacySurface(){
  const app=$('#app');if(!app)return;
@@ -322,7 +323,7 @@ document.addEventListener('click',e=>{
   e.preventDefault();e.stopImmediatePropagation();manualExit=true;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
   try{sessionStorage.removeItem('dripx.admin.tab');}catch{}
   restoreLegacySurface();
-  const nav=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].find(n=>!n.closest(ROOT)&&/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()));
+  const controls=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].filter(n=>!n.closest(ROOT)&&!n.closest('[hidden]'));\n  const nav=controls.find(n=>/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()))||controls.find(n=>/pedidos/i.test(String(n.textContent||'').trim()));
   if(nav)nav.click();else{const root=$(ROOT);if(root)root.remove();if(location.hash!=='#admin')location.hash='#admin';}
   setTimeout(()=>{restoreLegacySurface();const root=$(ROOT);if(root)root.remove();},80);
   return;
