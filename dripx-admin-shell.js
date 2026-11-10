@@ -44,6 +44,7 @@ function routeFromLocation(){
 function setFlags(route){
  const products=['productos','planes'].includes(route);
  window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=products;
+ window.DRIPX_ADMIN_CATALOG_MODE=route==='planes'?'planes':route==='productos'?'productos':'';
  window.DRIPX_ADMIN_USERS_TAB_ACTIVE=route==='usuarios';
  window.DRIPX_ADMIN_TICKETS_TAB_ACTIVE=route==='tickets';
  window.__DRIPX_ADMIN_CATEGORIES_TAB_ACTIVE=route==='categorias';
@@ -85,35 +86,7 @@ function updateIdentity(){
   if(source&&avatar){avatar.innerHTML='<img src="'+esc(source)+'" alt="">';}
  }).catch(()=>{});
 }
-function setLegacyContent(route){
- const app=$(APP);if(!app)return;
- const rootIds={
-  resumen:['dx-admin-overview'],
-  productos:['dx-catalog-admin'],
-  planes:['dx-catalog-admin'],
-  categorias:['dx-category-manager'],
-  usuarios:['dx-user-admin'],
-  tickets:['dx-ticket-admin'],
-  logs:['dx-admin-logs']
- };
- const wanted=rootIds[route]||[];
- app.dataset.dxasRoute=route;
- app.querySelectorAll(':scope > *').forEach(node=>{
-  if(node.id==='dx-admin-overview'||node.id==='dx-catalog-admin'||node.id==='dx-category-manager'||node.id==='dx-user-admin'||node.id==='dx-ticket-admin'||node.id==='dx-admin-logs')return;
-  node.dataset.dxasLegacy='1';
- });
- if(route==='logs'){
-  app.querySelector('#dx-admin-logs')?.removeAttribute('hidden');
- }
- if(route==='resumen'){
-  app.querySelector('#dx-admin-overview')?.removeAttribute('hidden');
- }
- if(wanted.length){
-  app.querySelectorAll(':scope > section').forEach(node=>{
-   if(wanted.includes(node.id))node.removeAttribute('hidden');
-  });
- }
-}
+function setLegacyContent(route){const app=$(APP);if(app)app.dataset.dxasRoute=route;}
 function renderShellState(route){
  const shell=mount(),current=ROUTES.find(item=>item.id===route)||ROUTES[0];
  document.body.classList.add('dxas-active');
@@ -157,6 +130,7 @@ function navigate(route){
  if(location.hash!==hash)location.hash=hash;else sync();
  const shell=mount();shell.querySelectorAll('[data-dxas-route]').forEach(button=>button.classList.toggle('is-active',button.dataset.dxasRoute===route));
 }
+window.DRIPX_ADMIN_NAVIGATE=navigate;
 document.addEventListener('click',event=>{
  const nav=event.target.closest('#dx-admin-shell [data-dxas-route]');
  if(nav){event.preventDefault();navigate(nav.dataset.dxasRoute);return;}
