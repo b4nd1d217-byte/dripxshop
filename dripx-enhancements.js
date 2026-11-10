@@ -920,6 +920,7 @@
     }catch{}
   }
   function categoryViewActive(){
+    if(window.__DRIPX_ADMIN_SHELL_ENABLED===true)return false;
     if(window.DRIPX_IS_ADMIN!==true)return false;
     const hash=String(location.hash||'').toLowerCase();
     if(!hash.startsWith('#admin'))return false;
@@ -1293,6 +1294,7 @@
   let planResourceTimer=0,planResourceLoading=false;
   function schedulePlanResourceManager(){
     clearTimeout(planResourceTimer);
+    if(window.__DRIPX_ADMIN_SHELL_ENABLED===true||window.__DRIPX_CATALOG_MANAGER_ACTIVE===true){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
     if(window.DRIPX_IS_ADMIN!==true){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
     planResourceTimer=setTimeout(()=>{void renderPlanResourceManager();},150);
   }
@@ -1412,12 +1414,14 @@
   function isAdminRoute(){return /^#admin(?:$|[/?])/i.test(location.hash||'')||String(location.hash||'').toLowerCase().startsWith('#admin');}
   function markAdminView(){
     const app=document.querySelector('#app');if(!app)return;
+    if(window.__DRIPX_ADMIN_SHELL_ENABLED===true){app.classList.remove('dx-admin-view');document.querySelector('#dx-admin-overview')?.remove();return;}
     const active=isAdminRoute();
     app.classList.toggle('dx-admin-view',active);
     if(!active||window.DRIPX_IS_ADMIN!==true)document.querySelector('#dx-admin-overview')?.remove();
     else refreshAdminOverview(false);
   }
   async function refreshAdminOverview(force=false){
+    if(window.__DRIPX_ADMIN_SHELL_ENABLED===true){document.querySelector('#dx-admin-overview')?.remove();return;}
     const app=document.querySelector('#app');
     if(!app||!isAdminRoute()||!client||window.DRIPX_IS_ADMIN!==true){
       document.querySelector('#dx-admin-overview')?.remove();
