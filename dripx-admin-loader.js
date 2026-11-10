@@ -1,5 +1,4 @@
 (()=>{'use strict';
-window.__DRIPX_ADMIN_SHELL_ENABLED=true;
 const styles=[
  ['/dripx-user-admin.css?v=20261110-users-02','dripx-admin-users-css'],
  ['/dripx-catalog-manager.css?v=20261110-catalog-02','dripx-admin-catalog-css'],
@@ -15,7 +14,7 @@ const scripts=[
  ['/dripx-ticket-admin.js?v=20261110-tickets-02','dripx-admin-tickets-js'],
  ['/dripx-admin-logs.js?v=20261110-logs-02','dripx-admin-logs-js'],
  ['/dripx-admin-extra.js?v=20261110-extra-02','dripx-admin-extra-js'],
- ['/dripx-admin-shell.js?v=20261110-shell-03','dripx-admin-shell-js']
+ ['/dripx-admin-shell.js?v=20261110-shell-04','dripx-admin-shell-js']
 ];
 let inflight=null;
 const isAdminRoute=()=>/^#admin(?:$|[/?])/i.test(String(location.hash||''));
@@ -47,7 +46,7 @@ async function loadRuntimeDependencies(){
  try{return await runtimePromise;}catch(error){runtimePromise=null;throw error;}
 }
 async function ensureAdminModules(){
- if(!isAdmin())return;
+ if(!isAdminRoute())return;
  window.__DRIPX_ADMIN_SHELL_ENABLED=true;
  if(window.__DRIPX_ADMIN_MODULES_READY===true)return;
  if(inflight)return inflight;
@@ -67,5 +66,6 @@ async function ensureAdminModules(){
 window.DRIPX_LOAD_ADMIN_MODULES=ensureAdminModules;
 window.DRIPX_LOAD_PRODUCT_UPLOAD_DEPENDENCIES=loadRuntimeDependencies;
 window.addEventListener('hashchange',ensureAdminModules);
+window.addEventListener('dripx:admin-ready',ensureAdminModules);
 if(isAdminRoute())void ensureAdminModules();
 })();
