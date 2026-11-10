@@ -117,11 +117,21 @@ function sync(){
  syncTimer=setTimeout(()=>{
   const route=routeFromLocation(),admin=route!==null&&window.DRIPX_IS_ADMIN===true;
   if(!admin){
+   window.__DRIPX_ADMIN_SHELL_ENABLED=false;
+   window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
+   window.DRIPX_ADMIN_CATALOG_MODE='';
+   window.DRIPX_ADMIN_USERS_TAB_ACTIVE=false;
+   window.DRIPX_ADMIN_TICKETS_TAB_ACTIVE=false;
+   window.__DRIPX_ADMIN_CATEGORIES_TAB_ACTIVE=false;
+   window.__DRIPX_CATEGORY_TAB_ACTIVE=false;
+   window.DRIPX_ADMIN_LOGS_TAB_ACTIVE=false;
+   try{sessionStorage.removeItem('dripx.admin.tab');}catch{}
    document.body.classList.remove('dxas-active');
    document.querySelector('#'+ROOT_ID)?.remove();
    const app=$(APP);if(app){app.classList.remove('dxas-app');delete app.dataset.dxasRoute;}
    return;
   }
+  window.__DRIPX_ADMIN_SHELL_ENABLED=true;
   setFlags(route);renderShellState(route);
   window.dispatchEvent(new CustomEvent('dripx:admin-route',{detail:{route}}));
   if(route==='productos'){
