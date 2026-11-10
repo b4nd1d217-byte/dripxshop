@@ -4,19 +4,63 @@ window.__DRIPX_CATALOG_MANAGER_ACTIVE=true;
 if(!db)return;
 const ROOT='#dx-catalog-admin';
 let products=[],mappings=[],categories=[],busy=false,loading=false;
+let managedProductForm=null,productFormOrigin=null,manualExit=false;
 const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const notify=message=>{const t=$('#toast');if(t){t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}};
 const normalize=v=>String(v||'').trim().toLowerCase();
 const timed=(promise,ms,message)=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(message)),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});
 function activeView(){
- if(window.DRIPX_IS_ADMIN!==true)return false;
+ if(manualExit)return false;
  const hash=String(location.hash||'').toLowerCase();
  let tab='';try{tab=sessionStorage.getItem('dripx.admin.tab')||'';}catch{}
- const tracked=window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true||tab==='productos';
- const explicit=/^#admin\/(?:productos|planes)(?:$|[/?])/.test(hash);
- const activeNav=[...document.querySelectorAll('#app button.active,#app a.active,#app [role="tab"][aria-selected="true"],#app [aria-current="page"]')].some(n=>/productos|planes/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label')].join(' ').toLowerCase()));
+ const tracked=window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true||tab==='productos'||tab==='planes';
+ const explicit=/^#admin(?:\/(?:productos|planes))(?:$|[/?])/.test(hash);
+ const activeNav=[...document.querySelectorAll('#app button.active,#app a.active,#app [role="tab"][aria-selected="true"],#app [aria-current="page"]')].some(n=>/productos|planes/.test([n.textContent,n.getAttribute('data-admin-tab'),n.getAttribute('data-tab'),n.getAttribute('aria-label'),n.getAttribute('href')].join(' ').toLowerCase()));
  return hash.startsWith('#admin')&&(tracked||explicit||activeNav);
+}
+function rememberProductForm(form){
+ if(!form)return;
+ if(!managedProductForm){managedProductForm=form;productFormOrigin={parent:form.parentNode,next:form.nextSibling};}
+ else if(form!==managedProductForm)form.remove();
+}
+function mountProductForm(){
+ const slot=$(ROOT+' #dxcm-product-form-host');if(!slot)return;
+ const found=$('#product-form');if(found&&!found.closest(ROOT))rememberProductForm(found);
+ if(!managedProductForm)return;
+ if(managedProductForm.parentNode!==slot)slot.append(managedProductForm);
+ managedProductForm.hidden=false;managedProductForm.classList.remove('hidden');managedProductForm.removeAttribute('aria-hidden');
+ managedProductForm.dataset.dxcmManaged='true';
+ const missing=$(ROOT+' [data-dxcm-form-missing]');if(missing)missing.hidden=true;
+}
+function takeOverLegacySurface(){
+ const app=$('#app');if(!app)return;
+ const candidate=$('#product-form');if(candidate&&!candidate.closest(ROOT))rememberProductForm(candidate);
+ for(const child of Array.from(app.children)){
+  if(child.id===ROOT)continue;
+  if(!child.hasAttribute('data-dxcm-legacy-hidden')){
+   child.setAttribute('data-dxcm-legacy-hidden','1');
+   child.setAttribute('data-dxcm-prev-hidden',child.hidden?'1':'0');
+   child.setAttribute('data-dxcm-prev-aria',child.hasAttribute('aria-hidden')?child.getAttribute('aria-hidden'):'__none__');
+  }
+  child.hidden=true;child.setAttribute('aria-hidden','true');
+ }
+ mountProductForm();
+}
+function restoreLegacySurface(){
+ const form=managedProductForm,origin=productFormOrigin;
+ if(form&&form.closest(ROOT)){
+  if(origin&&origin.parent&&origin.parent.isConnected){
+   if(origin.next&&origin.next.parentNode===origin.parent)origin.parent.insertBefore(form,origin.next);
+   else origin.parent.append(form);
+  }else form.remove();
+ }
+ document.querySelectorAll('#app [data-dxcm-legacy-hidden="1"]').forEach(node=>{
+  node.hidden=node.getAttribute('data-dxcm-prev-hidden')==='1';
+  const aria=node.getAttribute('data-dxcm-prev-aria');
+  if(aria==='__none__')node.removeAttribute('aria-hidden');else if(aria!==null)node.setAttribute('aria-hidden',aria);
+  node.removeAttribute('data-dxcm-legacy-hidden');node.removeAttribute('data-dxcm-prev-hidden');node.removeAttribute('data-dxcm-prev-aria');
+ });
 }
 function planProducts(){return products.filter(p=>p.product_type==='plan'&&p.category==='Planes');}
 function resourceProducts(){return products.filter(p=>p.product_type==='resource'&&p.category==='Productos');}
