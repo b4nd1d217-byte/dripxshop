@@ -64,6 +64,7 @@ async function loadOverview(){
  const names=new Map((profiles.data||[]).map(x=>[String(x.user_id),x]));
  const approved=orders.filter(x=>x.status==='approved');
  const recent=orders.map(x=>{const person=names.get(String(x.user_id))||{};return '<article class="dxae-order-row"><span class="dxae-order-avatar">'+esc((person.display_name||person.discord_id||'U').slice(0,1).toUpperCase())+'</span><div class="dxae-order-main"><strong>Pedido '+esc(String(x.id).slice(0,8).toUpperCase())+'</strong><small>'+esc(person.display_name||person.discord_id||'Usuario')+' · '+date(x.created_at)+'</small></div><span class="dxae-status is-'+esc(x.status)+'">'+esc(statusLabel(x.status))+'</span><b>'+money(x.total)+'</b></article>';}).join('');
+ if(currentRoute()!=='resumen')return;
  const h=host();
  h.innerHTML=heading('CENTRO DE CONTROL','Resumen general','Indicadores y actividad obtenidos directamente de Supabase.',btn('↻ Actualizar','reload','secondary')+'<span class="dxae-live"><i></i> Conectado</span>')+
  '<div class="dxae-stats">'+stat('Usuarios',u.count??0,'Perfiles Discord','♙')+stat('Productos',p.count??0,'Recursos y planes','▣')+stat('Publicados',pub.count??0,'En la tienda','✓')+stat('Pedidos',o.count??0,'Registros totales','▤')+stat('Tickets abiertos',t.count??0,'Abiertos o en proceso','⌁')+stat('Reseñas',r.count??0,'Opiniones guardadas','☆')+'</div>'+
@@ -79,6 +80,7 @@ async function loadOrders(){
   users.length?db.from('dripx_profiles').select('user_id,discord_id,display_name,avatar_url').in('user_id',users):{data:[],error:null}
  ]);
  if(items.error)throw items.error;if(profiles.error)throw profiles.error;
+ if(currentRoute()!=='pedidos')return;
  state.orders=rows;state.items=items.data||[];state.profiles=new Map((profiles.data||[]).map(x=>[String(x.user_id),x]));
  renderOrders();
 }
@@ -133,6 +135,7 @@ async function loadCategories(){
   db.from('dripx_products').select('id,title,category,store_category,product_type,status')
  ]);
  if(c.error)throw c.error;if(p.error)throw p.error;
+ if(currentRoute()!=='categorias')return;
  state.categories=c.data||[];state.catalog=p.data||[];renderCategories();
 }
 function countCategory(c){
@@ -183,7 +186,7 @@ async function deleteCategory(id){
 async function loadSettings(){
  loading('Ajustes generales','Leyendo los valores persistidos en dripx_settings.');
  const r=await db.from('dripx_settings').select('key,value,updated_at,updated_by').order('key');
- if(r.error)throw r.error;state.settings=r.data||[];renderSettings();
+ if(r.error)throw r.error;if(currentRoute()!=='ajustes')return;state.settings=r.data||[];renderSettings();
 }
 function renderSettings(){
  const invite=state.settings.find(x=>x.key==='discord_invite')||{value:''},h=host();
@@ -209,7 +212,7 @@ async function loadRoute(route,force){
   if(route==='ajustes')await loadSettings();
   const h=$(ROOT);if(h)h.dataset.loaded='1';
  }catch(e){errorPage('No se pudo cargar '+route,e);}
- finally{state.busy=false;}
+ finally{state.busy=false;if(currentRoute()!==route){state.route='';setTimeout(sync,0);}}
 }
 function sync(){
  const route=currentRoute();
@@ -228,12 +231,19 @@ document.addEventListener('click',async e=>{
  const approve=e.target.closest(ROOT+' [data-dxae-approve-order]');if(approve){orderAction(approve.dataset.id,'approve');return;}
  const reject=e.target.closest(ROOT+' [data-dxae-reject-order]');if(reject){orderAction(reject.dataset.id,'reject');return;}
 },true);
-document.addEventListener('input',e=>{if(e.target.matches(ROOT+' [data-dxae-search]'))renderOrders();});
-document.addEventListener('change',e=>{
- if(e.target.matches(ROOT+' [data-dxae-status]'))renderOrders();
- if(e.target.matches(ROOT+' [data-dxae-category-form] [name="name"]')){const s=e.target.closest('form').querySelector('[name="slug"]');if(s&&!s.readOnly&&!s.dataset.edited)s.value=slugify(e.target.value);}
+document.addEventListener('input',e=>{
+ if(e.target.matches(ROOT+' [data-dxae-search]')){
+  const position=e.target.selectionStart;renderOrders();
+  const input=$(ROOT+' [data-dxae-search]');if(input){input.focus();try{input.setSelectionRange(position,position);}catch{}}
+  return;
+ }
+ if(e.target.matches(ROOT+' [data-dxae-category-form] [name="name"]')){
+  const slug=e.target.closest('form').querySelector('[name="slug"]');
+  if(slug&&!slug.readOnly&&!slug.dataset.edited)slug.value=slugify(e.target.value);
+ }
  if(e.target.matches(ROOT+' [data-dxae-category-form] [name="slug"]'))e.target.dataset.edited='true';
 });
+document.addEventListener('change',e=>{if(e.target.matches(ROOT+' [data-dxae-status]'))renderOrders();});
 document.addEventListener('submit',async e=>{
  const c=e.target.closest(ROOT+' [data-dxae-category-form]'),o=e.target.closest(ROOT+' [data-dxae-order-form]'),s=e.target.closest(ROOT+' [data-dxae-setting-form]');
  const f=c||o||s;if(!f)return;e.preventDefault();
