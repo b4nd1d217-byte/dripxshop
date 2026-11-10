@@ -41,7 +41,7 @@ body.dxas-active header.top,body.dxas-active body>footer,body.dxas-active>footer
 .dxas-store-link:hover{border-color:rgba(0,199,255,.4);color:#d9f8ff}
 .dxas-mobile-menu,.dxas-mobile-close{display:none}
 .dxas-mobile-backdrop{display:none}
-body.dxas-active #app.dxas-app{position:fixed!important;left:250px!important;right:0!important;top:80px!important;bottom:0!important;width:auto!important;min-width:0!important;min-height:0!important;height:auto!important;margin:0!important;padding:26px clamp(18px,2.1vw,34px) 46px!important;overflow:auto!important;z-index:12001!important;background:#060b12!important;scrollbar-color:#1d4056 transparent;scrollbar-width:thin}
+body.dxas-active #app.dxas-app{position:fixed!important;left:250px!important;right:0!important;top:80px!important;bottom:0!important;width:auto!important;min-width:0!important;min-height:0!important;height:auto!important;margin:0!important;padding:26px clamp(18px,2.1vw,34px) 46px!important;overflow:auto!important;z-index:11000!important;background:#060b12!important;scrollbar-color:#1d4056 transparent;scrollbar-width:thin}
 body.dxas-active #app.dxas-app>*{max-width:1480px}
 body.dxas-active #app.dxas-app .dx-admin-overview{margin:0 0 24px!important}
 body.dxas-active #app.dxas-app>.dx-admin-overview{display:block}
@@ -118,3 +118,5 @@ body.dxas-active #app[data-dxas-route="usuarios"]>#dx-user-admin,
 body.dxas-active #app[data-dxas-route="tickets"]>#dx-ticket-admin,
 body.dxas-active #app[data-dxas-route="logs"]>#dx-admin-logs{display:block!important}
 body.dxas-active #app[data-dxas-route="resumen"]>#dx-admin-overview{display:block!important}
+
+body.dxas-active #app #admin-nav,body.dxas-active #app #admin-menu,body.dxas-active #app .admin-sections,body.dxas-active #app .admin-dashboard-nav,body.dxas-active #app .sidebar-nav{display:none!important}
