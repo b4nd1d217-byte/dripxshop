@@ -10,8 +10,15 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const notify=message=>{const t=$('#toast');if(t){t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}};
 const normalize=v=>String(v||'').trim().toLowerCase();
 const timed=(promise,ms,message)=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(message)),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});
+function activeCatalogMode(){
+ const hash=String(location.hash||'').toLowerCase();
+ let tab='';try{tab=sessionStorage.getItem('dripx.admin.tab')||'';}catch{}
+ if(/^#admin\/planes(?:$|[/?])/.test(hash)||tab==='planes'||window.DRIPX_ADMIN_CATALOG_MODE==='planes')return 'planes';
+ return 'productos';
+}
 function activeView(){
- if(manualExit)return false;
+ if(manualExit&&window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE!==true)return false;
+ if(window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true)manualExit=false;
  const hash=String(location.hash||'').toLowerCase();
  let tab='';try{tab=sessionStorage.getItem('dripx.admin.tab')||'';}catch{}
  const tracked=window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE===true||tab==='productos'||tab==='planes';
@@ -88,18 +95,29 @@ function row(p){
 }
 function render(){
  let host=$(ROOT);if(!host)return;
+ const mode=activeCatalogMode();
  const plans=planProducts().sort((a,b)=>a.sort_order-b.sort_order||a.title.localeCompare(b.title));
  const resources=resourceProducts().sort((a,b)=>a.sort_order-b.sort_order||a.title.localeCompare(b.title));
  const currentForm=$('#product-form');if(currentForm&&!currentForm.closest(ROOT))rememberProductForm(currentForm);
- host.innerHTML='<header class="dxcm-heading"><div><span class="dxcm-kicker">DRIP X SHOP · CATÁLOGO ADMINISTRATIVO</span><h2>Catálogo administrativo</h2><p>Administra los recursos descargables y las membresías desde secciones independientes. La publicación conserva el flujo real de inspección y protección ZIP.</p></div><div class="dxcm-heading-actions"><button type="button" class="dxcm-return" data-dxcm-back>← Volver a administración</button></div><div class="dxcm-totals"><div><b>'+plans.length+'</b><span>Planes</span></div><div><b>'+resources.length+'</b><span>Productos</span></div></div></header>'+
- '<section class="dxcm-create-product"><header><div><span class="dxcm-section-mark">PUBLICACIÓN DE RECURSOS</span><h3>Crear o publicar producto</h3><p>Usa este formulario para guardar el producto y trabajar su ZIP antes de publicarlo. Los planes se configuran en su propia sección y no admiten ZIP.</p></div></header><div id="dxcm-product-form-host"></div><div class="dxcm-form-missing" data-dxcm-form-missing hidden><strong>El formulario no se ha podido recuperar todavía.</strong><p>La aplicación está reconstruyendo el editor de Productos. Vuelve a intentar sincronizar el panel.</p><button type="button" data-dxcm-reload>↻ Reintentar</button></div></section>'+ '\n' +
- '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">01 / ACCESO</span><h3>Planes</h3><p>Precio, duración, presentación y productos incluidos. Un plan nunca almacena ZIP.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="plans" aria-label="Opciones de Planes">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="plans" hidden><button type="button" data-dxcm-section-action="create-plan">＋ Crear plan</button></div></div></header>'+
- (plans.length?'<div class="dxcm-list">'+plans.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>✦</span><strong>No hay planes creados</strong><p>Usa el formulario de creación superior y selecciona “Plan de acceso · sin ZIP”.</p></div>')+'</section>'+
- '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">02 / INVENTARIO</span><h3>Productos descargables</h3><p>Los recursos se crean aquí como productos independientes, dentro de la categoría Productos.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="products" aria-label="Opciones de Productos">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="products" hidden><button type="button" data-dxcm-section-action="create-product">＋ Crear producto</button></div></div></header>'+
- (resources.length?'<div class="dxcm-list">'+resources.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>▣</span><strong>Aún no hay productos descargables</strong><p>Crea uno desde el formulario superior, selecciona “Producto descargable · ZIP” y categoría “Productos”.</p></div>')+'</section>'+
- '<div class="dxcm-footnote"><span>i</span><p>Las acciones de publicación, ocultación, edición y asignación se guardan en Supabase y dejan registro administrativo. Los productos ocultos no aparecen en el catálogo público.</p></div>'+
- '<div class="dxcm-backdrop" data-dxcm-modal hidden><section class="dxcm-modal" role="dialog" aria-modal="true" aria-labelledby="dxcm-modal-title"><header><div><small>CONFIGURACIÓN DEL CATÁLOGO</small><h3 id="dxcm-modal-title">Editar elemento</h3></div><button type="button" data-dxcm-close aria-label="Cerrar">×</button></header><div data-dxcm-body></div></section></div>';
- mountProductForm();
+ if(mode==='planes'&&managedProductForm&&managedProductForm.closest(ROOT)){
+  const form=managedProductForm,origin=productFormOrigin;
+  if(origin&&origin.parent&&origin.parent.isConnected){
+   if(origin.next&&origin.next.parentNode===origin.parent)origin.parent.insertBefore(form,origin.next);
+   else origin.parent.append(form);
+  }else form.remove();
+  form.hidden=false;form.classList.remove('hidden');form.removeAttribute('aria-hidden');delete form.dataset.dxcmManaged;
+ }
+ const header='<header class="dxcm-heading"><div><span class="dxcm-kicker">DRIP X SHOP · ADMINISTRACIÓN</span><h2>'+(mode==='planes'?'Planes de acceso':'Productos descargables')+'</h2><p>'+(mode==='planes'?'Configura duración, precio y recursos incluidos. Los planes agrupan productos publicados y nunca reciben archivos ZIP.':'Publica recursos MTA:SA. Inspecciona, protege y compila los ZIP antes de habilitar su descarga.')+'</p></div><div class="dxcm-heading-actions"><button type="button" class="dxcm-return" data-dxcm-back>← Volver al resumen</button></div><div class="dxcm-totals">'+(mode==='planes'?'<div><b>'+plans.length+'</b><span>Planes</span></div>':'<div><b>'+resources.length+'</b><span>Productos</span></div>')+'</div></header>';
+ const productsView='<section class="dxcm-create-product"><header><div><span class="dxcm-section-mark">PUBLICACIÓN DE RECURSOS</span><h3>Crear o publicar producto</h3><p>El formulario conserva el flujo de inspección, protección y compilación. Los archivos shared y de configuración se mantienen intactos.</p></div></header><div id="dxcm-product-form-host"></div><div class="dxcm-form-missing" data-dxcm-form-missing hidden><strong>El formulario no se ha podido recuperar todavía.</strong><p>La aplicación está reconstruyendo el editor de Productos. Vuelve a intentar sincronizar el panel.</p><button type="button" data-dxcm-reload>↻ Reintentar</button></div></section>'+
+ '<section class="dxcm-section"><header><div><span class="dxcm-section-mark">INVENTARIO / MTA:SA</span><h3>Productos descargables</h3><p>Recursos independientes dentro de la categoría Productos.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="products" aria-label="Opciones de Productos">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="products" hidden><button type="button" data-dxcm-section-action="create-product">＋ Crear producto</button></div></div></header>'+
+ (resources.length?'<div class="dxcm-list">'+resources.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>▣</span><strong>Aún no hay productos descargables</strong><p>Crea tu primer recurso desde el formulario y completa la inspección y protección ZIP antes de publicarlo.</p></div>')+'</section>';
+ const plansView='<section class="dxcm-section"><header><div><span class="dxcm-section-mark">ACCESO / MEMBRESÍAS</span><h3>Planes</h3><p>Precio, duración, presentación y productos incluidos. Un plan nunca almacena ni recibe archivos ZIP.</p></div><div class="dxcm-section-menu-wrap"><button type="button" class="dxcm-section-more" data-dxcm-section-menu="plans" aria-label="Opciones de Planes">···</button><div class="dxcm-section-menu" data-dxcm-section-menu-panel="plans" hidden><button type="button" data-dxcm-section-action="create-plan">＋ Crear plan</button></div></div></header>'+
+ (plans.length?'<div class="dxcm-list">'+plans.map(row).join('')+'</div>':'<div class="dxcm-empty"><span>✦</span><strong>No hay planes creados</strong><p>Crea un plan y selecciona únicamente productos descargables ya publicados con ZIP disponible.</p><button type="button" data-dxcm-section-action="create-plan">＋ Crear primer plan</button></div>')+'</section>';
+ const footnote='<div class="dxcm-footnote"><span>i</span><p>Los cambios usan permisos administrativos de Supabase. Los productos ocultos conservan historial y asignaciones existentes.</p></div>';
+ const modal='<div class="dxcm-backdrop" data-dxcm-modal hidden><section class="dxcm-modal" role="dialog" aria-modal="true" aria-labelledby="dxcm-modal-title"><header><div><small>CONFIGURACIÓN DEL CATÁLOGO</small><h3 id="dxcm-modal-title">Editar elemento</h3></div><button type="button" data-dxcm-close aria-label="Cerrar">×</button></header><div data-dxcm-body></div></section></div>';
+ host.innerHTML=header+(mode==='planes'?plansView:productsView)+footnote+modal;
+ host.dataset.view=mode;
+ if(mode==='productos')mountProductForm();
 }
 async function load(){
  if(loading||!activeView())return;loading=true;
@@ -308,6 +326,8 @@ document.addEventListener('click',e=>{
 function ensure(){
  let existing=$(ROOT);
  if(!activeView()){restoreLegacySurface();existing?.remove();document.querySelector('#dx-plan-resource-manager')?.remove();return;}
+ const desiredMode=activeCatalogMode();
+ if(existing&&existing.dataset.loaded==='1'&&existing.dataset.view!==desiredMode){render();}
  if(!existing){
   document.querySelector('#dx-plan-resource-manager')?.remove();
   existing=document.createElement('section');existing.id='dx-catalog-admin';existing.className='dxcm-shell';existing.dataset.loaded='0';
@@ -322,6 +342,7 @@ document.addEventListener('click',e=>{
  if(back){
   e.preventDefault();e.stopImmediatePropagation();manualExit=true;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
   try{sessionStorage.removeItem('dripx.admin.tab');}catch{}
+  if(typeof window.DRIPX_ADMIN_NAVIGATE==='function'){window.DRIPX_ADMIN_NAVIGATE('resumen');return;}
   restoreLegacySurface();
   const controls=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].filter(n=>!n.closest(ROOT)&&!n.closest('[hidden]'));
   const nav=controls.find(n=>/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()))||controls.find(n=>/pedidos/i.test(String(n.textContent||'').trim()));
@@ -334,7 +355,7 @@ document.addEventListener('click',e=>{
  const nav=e.target.closest('#app button,#app a,#app [role="tab"]');
  if(!nav||nav.closest(ROOT))return;
  const label=[nav.textContent,nav.getAttribute('data-admin-tab'),nav.getAttribute('data-tab'),nav.getAttribute('aria-label'),nav.getAttribute('href')].join(' ').toLowerCase();
- if(/productos|planes/.test(label)){manualExit=false;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=true;try{sessionStorage.setItem('dripx.admin.tab','productos');}catch{}setTimeout(ensure,120);}
+ if(/productos|planes/.test(label)){manualExit=false;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=true;window.DRIPX_ADMIN_CATALOG_MODE=/planes/.test(label)?'planes':'productos';try{sessionStorage.setItem('dripx.admin.tab',window.DRIPX_ADMIN_CATALOG_MODE);}catch{}setTimeout(ensure,120);}
  else if(/pedidos|tickets|resenas|usuarios|ajustes|configuracion|panel|inicio/.test(label)){window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;setTimeout(ensure,80);}
 },true);
 window.addEventListener('hashchange',()=>setTimeout(ensure,120));
