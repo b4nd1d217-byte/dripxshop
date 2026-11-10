@@ -81,3 +81,40 @@ body.dxas-active #app.dxas-app .dx-admin-log-test{display:none!important}
  .dxas-store-link span{display:none}
  body.dxas-active #app.dxas-app .dx-admin-overview-grid{grid-template-columns:1fr}
 }
+/* Each administrative route exposes only its live module; legacy business views keep their own data/actions. */
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-category-manager,
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-user-admin,
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-ticket-admin,
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-admin-logs{display:none!important}
+body.dxas-active #app[data-dxas-route="productos"]>*:not(#dx-catalog-admin),
+body.dxas-active #app[data-dxas-route="planes"]>*:not(#dx-catalog-admin){display:none!important}
+body.dxas-active #app[data-dxas-route="categorias"]>*:not(#dx-category-manager){display:none!important}
+body.dxas-active #app[data-dxas-route="usuarios"]>*:not(#dx-user-admin){display:none!important}
+body.dxas-active #app[data-dxas-route="tickets"]>*:not(#dx-ticket-admin){display:none!important}
+body.dxas-active #app[data-dxas-route="logs"]>*:not(#dx-admin-logs){display:none!important}
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-admin-overview,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-admin-overview,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-admin-overview{display:none!important}
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-category-manager,
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-user-admin,
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-ticket-admin,
+body.dxas-active #app[data-dxas-route="pedidos"]>#dx-admin-logs,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-category-manager,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-user-admin,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-ticket-admin,
+body.dxas-active #app[data-dxas-route="resenas"]>#dx-admin-logs,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-category-manager,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-user-admin,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-ticket-admin,
+body.dxas-active #app[data-dxas-route="ajustes"]>#dx-admin-logs{display:none!important}
+body.dxas-active #app[data-dxas-route="productos"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="planes"]>#dx-catalog-admin,
+body.dxas-active #app[data-dxas-route="categorias"]>#dx-category-manager,
+body.dxas-active #app[data-dxas-route="usuarios"]>#dx-user-admin,
+body.dxas-active #app[data-dxas-route="tickets"]>#dx-ticket-admin,
+body.dxas-active #app[data-dxas-route="logs"]>#dx-admin-logs{display:block!important}
+body.dxas-active #app[data-dxas-route="resumen"]>#dx-admin-overview{display:block!important}
