@@ -323,7 +323,8 @@ document.addEventListener('click',e=>{
   e.preventDefault();e.stopImmediatePropagation();manualExit=true;window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=false;
   try{sessionStorage.removeItem('dripx.admin.tab');}catch{}
   restoreLegacySurface();
-  const controls=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].filter(n=>!n.closest(ROOT)&&!n.closest('[hidden]'));\n  const nav=controls.find(n=>/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()))||controls.find(n=>/pedidos/i.test(String(n.textContent||'').trim()));
+  const controls=[...document.querySelectorAll('#app a,#app button,#app [role="tab"]')].filter(n=>!n.closest(ROOT)&&!n.closest('[hidden]'));
+  const nav=controls.find(n=>/^(panel|inicio|resumen|dashboard)$/i.test(String(n.textContent||'').trim()))||controls.find(n=>/pedidos/i.test(String(n.textContent||'').trim()));
   if(nav)nav.click();else{const root=$(ROOT);if(root)root.remove();if(location.hash!=='#admin')location.hash='#admin';}
   setTimeout(()=>{restoreLegacySurface();const root=$(ROOT);if(root)root.remove();},80);
   return;
