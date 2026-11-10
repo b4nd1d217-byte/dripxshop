@@ -44,3 +44,32 @@
 .dxcm-zip-manager footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:12px;border-top:1px solid rgba(133,174,202,.16)}
 .dxcm-zip-manager footer span{font-size:11px;color:#88a4b8}
 @media(max-width:560px){.dxcm-zip-file{grid-template-columns:1fr}.dxcm-zip-file small{text-align:left}.dxcm-zip-manager footer{align-items:flex-start;flex-direction:column}}
+
+/* Standalone admin catalog: the old Products/Plans renderer is parked while this route is active. */
+.dxcm-heading{align-items:center}
+.dxcm-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.dxcm-return{min-height:36px;padding:9px 12px;border:1px solid rgba(0,199,255,.22);border-radius:10px;background:rgba(0,199,255,.07);color:#bcefff;font-size:10px;font-weight:800;cursor:pointer}
+.dxcm-return:hover{background:rgba(0,199,255,.14);border-color:rgba(0,199,255,.42)}
+.dxcm-create-product{display:grid;gap:12px;padding:15px;border:1px solid rgba(0,199,255,.18);border-radius:16px;background:linear-gradient(135deg,rgba(0,199,255,.055),rgba(5,15,25,.82))}
+.dxcm-create-product>header h3{margin:5px 0 4px;color:#eaf8ff;font-size:17px}
+.dxcm-create-product>header p{margin:0;color:#89a6b9;font-size:10px;line-height:1.6}
+#dxcm-product-form-host{min-width:0}
+#dxcm-product-form-host>#product-form{display:grid!important;visibility:visible!important;opacity:1!important;gap:12px}
+#dxcm-product-form-host>#product-form label{color:#a7bfce}
+#dxcm-product-form-host>#product-form input,
+#dxcm-product-form-host>#product-form textarea,
+#dxcm-product-form-host>#product-form select{max-width:100%;min-width:0;border-color:rgba(130,176,203,.2);border-radius:10px;background:#071522;color:#eaf7ff}
+#dxcm-product-form-host>#product-form input:focus,
+#dxcm-product-form-host>#product-form textarea:focus,
+#dxcm-product-form-host>#product-form select:focus{border-color:#00c7ff;box-shadow:0 0 0 3px rgba(0,199,255,.08);outline:0}
+.dxcm-form-missing{padding:14px;border:1px dashed rgba(0,199,255,.22);border-radius:11px;background:rgba(0,199,255,.035);color:#d9f2fc}
+.dxcm-form-missing[hidden]{display:none!important}
+.dxcm-form-missing strong{font-size:11px}
+.dxcm-form-missing p{margin:5px 0 10px;color:#8ba9bb;font-size:10px}
+.dxcm-form-missing button{padding:8px 11px;border:1px solid rgba(0,199,255,.24);border-radius:8px;background:rgba(0,199,255,.08);color:#c1efff}
+.dxcm-loading{display:grid;justify-items:start;gap:8px;padding:28px;border:1px solid rgba(0,199,255,.2);border-radius:16px;background:linear-gradient(120deg,rgba(0,199,255,.07),rgba(5,15,25,.9));color:#e8f8ff}
+.dxcm-loading-mark{display:grid;place-items:center;width:36px;height:36px;border:1px solid rgba(0,199,255,.28);border-radius:10px;color:#55d9f6;font-size:11px;font-weight:900}
+.dxcm-loading strong{font-size:13px}
+.dxcm-loading p{margin:0;color:#89a9bc;font-size:10px}
+#app>[data-dxcm-legacy-hidden="1"]{display:none!important}
+@media(max-width:620px){.dxcm-heading{gap:11px}.dxcm-heading-actions{width:100%;justify-content:flex-start}.dxcm-return{width:100%}.dxcm-create-product{padding:11px}}
