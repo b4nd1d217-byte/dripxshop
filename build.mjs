@@ -218,6 +218,7 @@ const adminPanelChecks = [
   [userAdminActionsPanel.includes('dripx_admin_transfer_user_product') && !userAdminActionsPanel.includes('dripx_admin_transfer_product') && userAdminActionsPanel.includes('dripx_admin_get_user_products') && userAdminActionsPanel.includes('data-dxua-extra-action="details"'), 'Users contextual access history and transfer use existing authenticated RPCs'],
   [ticketAdminPanel.includes('dripx_admin_delete_ticket') && ticketAdminPanel.includes('dripx_admin_set_ticket_status') && ticketAdminPanel.includes('El pedido') && uploadUi.includes('window.__DRIPX_CATALOG_MANAGER_ACTIVE||!isAdminProductsRoute()'), 'admin ticket delete preserves orders and legacy plan manager does not duplicate the catalog view']
 ];
+adminPanelChecks.push([catalogUi.includes('function takeOverLegacySurface()') && catalogUi.includes('function restoreLegacySurface()') && catalogUi.includes('data-dxcm-legacy-hidden') && catalogUi.includes('id="dxcm-product-form-host"') && catalogUi.includes('data-dxcm-back'), 'dedicated catalog route parks the old admin renderer and preserves the real product form']);
 const failedAdminPanelChecks = adminPanelChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminPanelChecks.length) throw new Error('DRIPX admin panel checks failed: ' + failedAdminPanelChecks.join(', '));
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
