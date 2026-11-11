@@ -159,7 +159,7 @@ const adminShellChecks = [
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
 if (!shell.includes("window.__DRIPX_ADMIN_SHELL_ENABLED=/^#admin(?:$|[/?])/i.test(location.hash||''")) throw new Error('DRIPX regression: admin shell must only activate on admin URLs.');
-if (!shell.includes('dripx-admin-loader.js?v=20261110-loader-03')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (!shell.includes('dripx-admin-loader.js?v=20261111-zipjs-runtime-01')) throw new Error('DRIPX regression: admin loader cache version is stale.');
 if (!shell.includes('dripx-enhancements.js?v=20261111-license-protection-01')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
 if (!adminLoader.includes('if(!isAdminRoute())return;') || adminLoader.includes('if(!isAdmin())return;')) throw new Error('DRIPX regression: admin loader must gate by route, not an undefined/global role helper.');
 if (!adminLoader.includes("window.addEventListener('dripx:admin-ready',ensureAdminModules)")) throw new Error('DRIPX regression: admin modules must also recover after auth readiness.');
@@ -204,6 +204,7 @@ const verifiedReviewMigration = await readFile('supabase/migrations/202611091830
 const perOrderReviewMigration = await readFile('supabase/migrations/20261109190000_allow_multiple_reviews_per_approved_order.sql', 'utf8');
 const accountPanelCss = await readFile('dripx-account-panel.css', 'utf8');
 const publicIndexHtml = await readFile('index.html', 'utf8');
+if (!publicIndexHtml.includes('@supabase/supabase-js@2.119.0')) throw new Error('DRIPX regression: Supabase JavaScript SDK pin is stale.');
 const uploadChecks = [
   [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
   [appText.includes("const configScriptTag='<script src=\"'+configName+'\" type=\"server\" />';") && appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,...sharedScriptTags,...otherScriptTags]"), 'private license config is loaded before the server license guard'],
@@ -222,8 +223,8 @@ const uploadChecks = [
   [patchSource.includes('precompiledScripts') && patchSource.includes('if(precompiledScripts.length)') && patchSource.includes('Sube los Lua fuente (.lua)'), 'protect workflow rejects precompiled source resources that cannot be license-gated'],
   [uploadValidator.includes('dripx_server_license.luac') && uploadValidator.includes('server_license_guard_bytecode_invalid') && uploadValidator.includes('configScriptIndex>=guardScriptIndex'), 'upload validator requires compiled generic guard after editable config'],
   [patchSource.includes('local postData = string.sub(encodedPayload,2,-2)') && patchSource.includes('local encodedPayload = toJSON(payload)') && patchSource.includes('postData=postData') && !patchSource.includes('postData=toJSON(payload)'), 'MTA fetchRemote sends a JSON object instead of the toJSON array wrapper'],
-  [zipReader.includes('dripxZipCRC32Cooperative') && zipReader.includes('await new Promise(resolve=>setTimeout(resolve,0))') && zipReader.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS'), 'full ZIP CRC verification yields to the UI and reports actual file progress'],
-  [zipReader.includes('checkCRC32: false') && !zipReader.includes('second guard so corrupt archives fail'), 'quick ZIP inspector does not decompress every file before the protection run'],
+  [zipReader.includes('new window.zip.ZipReader') && zipReader.includes('new window.zip.BlobReader(file)') && zipReader.includes("strictness:'balanced'") && zipReader.includes('checkCrc32:true') && zipReader.includes('checkOverlappingEntry:true') && zipReader.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS'), 'Zip.js reads ZIP64 and checks entry CRC/overlap during actual decompression while reporting progress'],
+  [zipReader.includes('window.DRIPX_INSPECT_ZIP') && zipReader.includes('dripxZipReadDirectory(file)') && zipReader.includes('dripx-zipjs-balanced-index-v3') && !zipReader.includes('JSZip.loadAsync'), 'quick ZIP inspector uses the new ZIP64-aware metadata reader without extracting all payload files'],
   [uploadUi.toLowerCase().includes('la protección es obligatoria') && !uploadUi.toLowerCase().includes('protección opcional') && !uploadUi.includes('si no usas esta opción'), 'product publishing cannot be presented as allowing the unprotected original ZIP'],
   [uploadUi.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS=reportProgress') && uploadUi.includes("phaseRanges={validate:[5,25],protect:[28,38],compile:[40,86],package:[88,99]}") && patchSource.includes("phase:'compile'") && patchSource.includes("phase:'package'"), 'product form progress uses validation, per-file compile and package progress'],
   [uploadUi.includes('Supabase comprobará CRC, meta.xml, bytecode y guardián al guardar') && patchSource.includes('serverLicenseTemplate'), 'UI distinguishes local ZIP generation from final server-side verification'],
@@ -255,8 +256,8 @@ const uploadChecks = [
   [zipReader.includes("ensureZipUiNode('zip-analysis','div')") && zipReader.includes('analysisNode.innerHTML'), 'ZIP UI nodes guarded before rendering'],
   [uploadUi.includes('function ensureLiveProductZipPreview(inputHint,runId)') && uploadUi.includes('live=ensureLiveProductZipPreview(input,runId)') && uploadUi.includes('window.DRIPX_LOAD_ZIP(file,resolveLiveEngine)'), 'ZIP reader reattaches to the active product form after auth and DOM refreshes'],
   [zipReader.includes('async function loadZipForProtection(file,hostResolver)') && zipReader.includes("typeof hostResolver==='function'?hostResolver():null") && zipReader.includes('host?.isConnected'), 'ZIP reader resolves its UI host again after asynchronous extraction'],
-  [zipReader.includes('dripxZipCRC32(data)') && zipReader.includes('LIMITS.expanded'), 'ZIP CRC and expansion limits'],
-  [zipReader.includes('const expectedCrcRaw=Number(item.entry._data?.crc32)') && zipReader.includes('expectedCrcRaw>=-0x80000000') && zipReader.includes('expectedCrcRaw>>>0') && ((0x9b2bcb9b|0)<0) && (((0x9b2bcb9b|0)>>>0)===0x9b2bcb9b), 'signed JSZip CRC values are normalized to unsigned before validation'],
+  [zipReader.includes('checkCrc32:true') && zipReader.includes('LIMITS.expanded') && zipReader.includes('LIMITS.compressed'), 'ZIP CRC and expansion limits are enforced by the reader and application'],
+  [zipReader.includes('entry.getData(writer') && zipReader.includes('checkCrc32:true') && zipReader.includes('new window.zip.Uint8ArrayWriter()'), 'Zip.js performs CRC validation inside the decompression pipeline without a duplicate JSZip CRC pass'],
   [zipReader.includes('const hasFiveMManifest=') && zipReader.includes('hadOriginalMeta') && zipReader.includes('hasMtaApi') && !zipReader.includes('fivem|fxserver/i.test(infoText)'), 'ZIP platform detection uses MTA manifest/API evidence instead of names and labels'],
   [zipReader.includes("type==='shared'") && zipReader.includes('infoType!==\'script\''), 'MTA metadata and license shared-script integrity'],
   [zipReader.includes('estructura o API exclusiva de FiveM') && zipReader.includes('fiveMApiCount>=2'), 'FiveM rejection requires an explicit manifest or multiple FiveM native API calls'],
