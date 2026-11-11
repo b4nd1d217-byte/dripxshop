@@ -15,7 +15,15 @@ function control(form,name,tag,attrs){
  let node=form.querySelector('[name="'+name+'"]');
  if(node&&node.tagName.toLowerCase()!==tag){
   if(name==='store_category'){const oldValue=node.value||'';node.remove();node=document.createElement('select');node.name=name;node.dataset.dxpcOwned='true';node.dataset.dxpcInitialValue=oldValue;}
-  else if(name==='category'||name==='product_type'){node.type='hidden';}
+  else if(name==='category'||name==='product_type'){
+   const oldValue=node.value||'';
+   node.remove();
+   node=document.createElement('input');
+   node.type='hidden';
+   node.value=oldValue;
+   node.name=name;
+   node.dataset.dxpcOwned='true';
+  }
   else {node.remove();node=null;}
  }
  if(!node){node=document.createElement(tag);node.name=name;node.dataset.dxpcOwned='true';}
@@ -129,6 +137,11 @@ function mount(form){
   const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
   const ready=!!(selected&&fields.file.dataset.dripxZipReady==='true'&&staged instanceof File&&staged.size>0&&packaged&&packaged.name===staged.name&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID&&form.dataset.dripxZipProcessing!=='true');
   publish.disabled=!ready;
+  if(publish.dataset.busy==='true'&&status?.dataset.state==='error'){
+   publish.dataset.busy='false';
+   publish.textContent='Publicar producto protegido →';
+  }
+  if(publish.dataset.busy==='true')publish.disabled=true;
   const pstate=$('[data-dxpc-protection-state]',form);
   if(pstate)pstate.textContent=ready?'Listo para guardar':'Pendiente';
   const imageFile=fields.image.files?.[0],videoFile=fields.video.files?.[0];
