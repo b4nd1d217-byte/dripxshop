@@ -5,10 +5,10 @@ function invalidAddress(){
 }
 function isIPv4(value){
  const parts=String(value||'').split('.');
- return parts.length===4&&parts.every(part=>/^(0|[1-9]\\d{0,2})$/.test(part)&&Number(part)<=255);
+ return parts.length===4&&parts.every(part=>/^(0|[1-9]\d{0,2})$/.test(part)&&Number(part)<=255);
 }
 function isIPv6(value){
- if(!String(value||'').includes(':')||/[\\s/%?#@]/.test(value))return false;
+ if(!String(value||'').includes(':')||/[\s/%?#@]/.test(value))return false;
  try{new URL('http://['+value+']/');return true;}catch(_){return false;}
 }
 function parseMtaServerAddress(raw,portInput){
@@ -17,10 +17,10 @@ function parseMtaServerAddress(raw,portInput){
  if(/^mtasa:\/\//i.test(value))value=value.replace(/^mtasa:\/\//i,'');
  else if(/^[a-z][a-z0-9+.-]*:\/\//i.test(value))throw new Error('Usa el protocolo mtasa://, no una dirección HTTP/HTTPS.');
  if(value.endsWith('/'))value=value.slice(0,-1);
- if(!value||/[\\s/?#@]/.test(value))invalidAddress();
+ if(!value||/[\s/?#@]/.test(value))invalidAddress();
  let host=value,embeddedPort=null;
  if(value.startsWith('[')){
-  const match=value.match(/^\\[([0-9a-f:.]+)\\](?::([0-9]{1,5}))?$/i);
+  const match=value.match(/^\[([0-9a-f:.]+)\](?::([0-9]{1,5}))?$/i);
   if(!match)invalidAddress();
   host=match[1];embeddedPort=match[2]?Number(match[2]):null;
  }else{
@@ -31,7 +31,7 @@ function parseMtaServerAddress(raw,portInput){
  const typedPort=String(portInput??'').trim();
  let separatePort=null;
  if(typedPort){
-  if(!/^\\d{1,5}$/.test(typedPort))throw new Error('El puerto MTA debe ser un número entero entre 1 y 65535.');
+  if(!/^\d{1,5}$/.test(typedPort))throw new Error('El puerto MTA debe ser un número entero entre 1 y 65535.');
   separatePort=Number(typedPort);
  }
  const port=embeddedPort??separatePort??DEFAULT_MTA_PORT;
