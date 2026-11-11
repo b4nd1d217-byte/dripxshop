@@ -132,6 +132,29 @@ function mount(form){
   form.querySelectorAll('[data-dxpc-go]').forEach(button=>{const active=Number(button.dataset.dxpcGo)===next;button.setAttribute('aria-current',active?'step':'false');button.classList.toggle('is-active',active);});
  };
  const sync=()=>{
+  const successMessage=String(status?.textContent||'');
+  if(publish.dataset.busy==='true'&&status?.dataset.state==='success'&&/producto guardado y publicado correctamente/i.test(successMessage)&&publish.dataset.completed!=='true'){
+   publish.dataset.busy='false';
+   publish.dataset.completed='true';
+   publish.textContent='Publicar producto protegido →';
+   fields.title.value='';
+   fields.description.value='';
+   fields.price_usd.value='0.00';
+   fields.image_url.value='';
+   fields.video_url.value='';
+   fields.image.value='';
+   fields.video.value='';
+   fields.file.value='';
+   fields.file.dataset.dripxZipReady='false';
+   delete fields.file.dataset.dripxZipRun;
+   fields.featured.checked=false;
+   featuredToggle.checked=false;
+   const preview=form.querySelector('#product-zip-preview');
+   if(preview){preview.hidden=true;preview.replaceChildren();}
+   status.textContent='Producto publicado correctamente. Puedes comenzar otro resource.';
+   status.dataset.state='success';
+   setStep(0);
+  }
   const selected=fields.file.files?.[0];
   const staged=window.__DRIPX_PROCESSED_PRODUCT_FILE;
   const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
@@ -188,7 +211,7 @@ function mount(form){
   if(!original||!String(original.name||'').toLowerCase().endsWith('.zip')||!original.size){toast('Selecciona el ZIP original del resource.');setStep(2);fields.file.click();return;}
   if(original.size>50_000_000){toast('El ZIP supera el límite de 50 MB de Supabase Free.');setStep(2);return;}
   if(fields.file.dataset.dripxZipReady!=='true'||!(window.__DRIPX_PROCESSED_PRODUCT_FILE instanceof File)){toast('Primero pulsa Trabajar en el inspector ZIP y espera a que termine la protección y compilación.');setStep(2);return;}
-  publish.dataset.busy='true';publish.disabled=true;publish.textContent='Enviando al servidor…';
+  publish.dataset.busy='true';publish.dataset.completed='false';publish.disabled=true;publish.textContent='Enviando al servidor…';
   try{
    fields.category.value='Productos';fields.product_type.value='resource';
    const submitter=$('[data-dxpc-submit-proxy]',form);
