@@ -137,7 +137,7 @@ if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing 
 const adminCatalogRouteSource = await readFile('dripx-catalog-manager.js', 'utf8');
 if (/;\\n\s*const nav=/.test(adminCatalogRouteSource)) throw new Error('DRIPX regression: malformed escaped newline in admin navigation handler.');
 if (!accountPanel.includes('DRIPX_PARSE_MTA_SERVER_ADDRESS') || !accountPanel.includes('mtasa://203.0.113.10:22003')) throw new Error('DRIPX regression: account server binding must accept MTA URLs and display the canonical format.');
-if (!uploadUi.includes('DRIPX_PARSE_MTA_SERVER_ADDRESS') || !uploadUi.includes("dripx_save_license_binding")) throw new Error('DRIPX regression: legacy license binding must use the canonical MTA address parser.');
+if (!clientSource.includes('DRIPX_PARSE_MTA_SERVER_ADDRESS') || !clientSource.includes("dripx_save_license_binding")) throw new Error('DRIPX regression: legacy license binding must use the canonical MTA address parser.');
 const adminShellChecks = [
   [adminShellPanel.includes("window.DRIPX_ADMIN_NAVIGATE=navigate"), 'shared admin navigation callback is installed'],
   [adminShellPanel.includes("setFlags(route)") && adminShellPanel.includes("window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=products"), 'route state is synchronized with existing admin modules'],
