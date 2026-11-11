@@ -20,7 +20,8 @@ let inflight=null;
 const isAdminRoute=()=>/^#admin(?:$|[/?])/i.test(String(location.hash||''));
 let runtimePromise=null;
 const runtimeDependencies=[
- ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js','dripx-jszip-runtime'],
+ ['https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.24.0/dist/zip-native.min.js','dripx-zipjs-runtime'],
+ ['https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js','dripx-jszip-runtime'],
  ['https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js','dripx-tus-runtime']
 ];
 function loadStyle(src,id){

@@ -1,15 +1,78 @@
-  const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
-  function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
-  async function dripxZipCRC32Cooperative(data,onProgress){
-    let crc=0xffffffff;
-    const chunkSize=256*1024;
-    for(let offset=0;offset<data.length;offset+=chunkSize){
-      const end=Math.min(data.length,offset+chunkSize);
-      for(let i=offset;i<end;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);
-      if(typeof onProgress==='function')onProgress(data.length?end/data.length:1);
-      await new Promise(resolve=>setTimeout(resolve,0));
+  // ZIP64-aware reader: parses the central directory first and reads each entry on demand.
+  async function dripxZipOpenDiagnostic(file,error){
+    const original=String(error?.message||error||'Error desconocido');
+    let hasEocd=false,hasZipSignature=false;
+    try{
+      const head=new Uint8Array(await file.slice(0,Math.min(file.size,4096)).arrayBuffer());
+      for(let i=0;i+3<head.length;i++){
+        if(head[i]===0x50&&head[i+1]===0x4b&&(
+          (head[i+2]===0x03&&head[i+3]===0x04)||
+          (head[i+2]===0x05&&head[i+3]===0x06)||
+          (head[i+2]===0x06&&head[i+3]===0x06)||
+          (head[i+2]===0x07&&head[i+3]===0x08)
+        )){hasZipSignature=true;break;}
+      }
+      const tailStart=Math.max(0,file.size-65557);
+      const tail=new Uint8Array(await file.slice(tailStart).arrayBuffer());
+      for(let i=Math.max(0,tail.length-65557);i+3<tail.length;i++){
+        if(tail[i]===0x50&&tail[i+1]===0x4b&&tail[i+2]===0x05&&tail[i+3]===0x06){
+          hasEocd=true;break;
+        }
+      }
+    }catch{}
+    if(!hasZipSignature&&!hasEocd){
+      return new Error('El archivo seleccionado no contiene una firma ZIP reconocible. Comprueba que elegiste el .zip real y no un .rar, .7z, .apk renombrado o una descarga HTML.');
     }
-    return (crc^0xffffffff)>>>0;
+    if(hasZipSignature&&!hasEocd){
+      return new Error('El archivo empieza como ZIP, pero no contiene el registro final del directorio central (EOCD). Está incompleto o se descargó/compartió antes de terminar de comprimirse. Vuelve a crear o descargar el ZIP completo y revisa su tamaño. No es un error de meta.xml, Lua ni de la licencia.');
+    }
+    return new Error('Se encontró el cierre ZIP, pero no se pudo interpretar su directorio central. Puede estar dañado, protegido con cifrado no compatible o usar un formato dividido. Detalle del lector: '+original);
+  }
+  async function dripxZipReadEntry(entry,type,options={}){
+    if(entry.encrypted)throw new Error('El archivo '+entry.filename+' está cifrado. Vuelve a crear el ZIP sin contraseña para que DRIP X SHOP pueda protegerlo.');
+    const writer=new window.zip.Uint8ArrayWriter();
+    const bytes=await entry.getData(writer,{
+      checkCrc32:true,
+      checkOverlappingEntry:true,
+      strictness:'balanced',
+      useWebWorkers:false,
+      onprogress:(current,total)=>options.onProgress?.(current,total)
+    });
+    if(type==='string')return new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+    if(type==='uint8array')return bytes;
+    throw new Error('Tipo de lectura ZIP no compatible: '+String(type));
+  }
+  function dripxZipWrapEntry(entry){
+    const name=String(entry.filename||'');
+    return {
+      name,
+      dir:!!entry.directory,
+      unsafeOriginalName:name,
+      unixPermissions:entry.unixMode,
+      dosPermissions:entry.msdosAttributesRaw,
+      date:entry.lastModDate,
+      encrypted:!!entry.encrypted,
+      _zipEntry:entry,
+      _data:{uncompressedSize:Number(entry.uncompressedSize)||0,length:Number(entry.uncompressedSize)||0,crc32:entry.crc32},
+      async(type,options){return dripxZipReadEntry(entry,type,options||{});}
+    };
+  }
+  async function dripxZipReadDirectory(file){
+    if(!window.zip?.ZipReader||!window.zip?.BlobReader||!window.zip?.Uint8ArrayWriter){
+      throw new Error('No se cargó el nuevo lector ZIP. Cierra y vuelve a abrir Productos para actualizar sus dependencias.');
+    }
+    const reader=new window.zip.ZipReader(new window.zip.BlobReader(file),{
+      checkOverlappingEntry:true,
+      strictness:'balanced'
+    });
+    try{
+      const entries=await reader.getEntries({strictness:'balanced'});
+      await reader.close();
+      return entries.map(dripxZipWrapEntry);
+    }catch(error){
+      try{await reader.close();}catch{}
+      throw await dripxZipOpenDiagnostic(file,error);
+    }
   }
   function dripxZipMtaBytecode(bytes){return !!bytes&&bytes.length>=4&&bytes[0]===0x1c&&bytes[1]===0x4d&&bytes[2]===0x76&&bytes[3]===0x62;}
   async function loadZipForProtection(file,hostResolver){
@@ -28,9 +91,9 @@
     if(!file||!Number.isFinite(Number(file.size))||Number(file.size)<0)throw new Error('Selecciona un archivo ZIP válido.');
     if(!/\.zip$/i.test(String(file.name||'')))throw new Error('El archivo debe tener extensión .zip.');
     if(Number(file.size)>LIMITS.compressed)throw new Error('El ZIP completo supera los 50 MB permitidos por el almacenamiento Supabase Free. No es un límite por script Lua: cuenta también modelos, texturas, sonidos y demás recursos. Para subir ZIP mayores hay que ampliar el plan y el límite global de Storage.');
-    if(!window.JSZip)throw new Error('No se pudo cargar el lector ZIP. Recarga la página.');
-    const archive=Number(file.size)===0?new JSZip():await JSZip.loadAsync(file,{checkCRC32:false,createFolders:false});
-    const allEntries=Object.values(archive.files||{});
+    if(!window.JSZip||!window.zip?.ZipReader)throw new Error('No se cargaron las dependencias ZIP. Cierra y vuelve a abrir Productos para actualizar el lector.');
+    if(Number(file.size)===0)throw new Error('El ZIP está vacío.');
+    const allEntries=await dripxZipReadDirectory(file);
     if(allEntries.length>LIMITS.entries)throw new Error('El ZIP contiene demasiadas entradas, incluidas carpetas.');
     if(allEntries.filter(entry=>!entry.dir).length>LIMITS.files)throw new Error('El ZIP supera el límite de 3.000 archivos.');
     const normalizePath=(entry)=>{
@@ -112,21 +175,14 @@
     const zip=new JSZip();
     for(let recordIndex=0;recordIndex<normalizedRecords.length;recordIndex++){
       const item=normalizedRecords[recordIndex];
-      const data=await item.entry.async('uint8array');
-      if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
-      const expectedCrcRaw=Number(item.entry._data?.crc32);
-      // JSZip reads 32-bit values with signed bitwise operations. A valid CRC32
-      // with bit 31 set (for example 0x9b2bcb9b) is therefore exposed as negative.
-      const validStoredCrc=Number.isFinite(expectedCrcRaw)&&Number.isInteger(expectedCrcRaw)&&expectedCrcRaw>=-0x80000000&&expectedCrcRaw<=0xffffffff;
-      const expectedCrc=expectedCrcRaw>>>0;
-      const actualCrc=await dripxZipCRC32Cooperative(data,fraction=>{
-        window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({
+      const data=await item.entry.async('uint8array',{
+        onProgress:(current,total)=>window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({
           phase:'validate',
-          percent:((recordIndex+fraction)/Math.max(1,normalizedRecords.length))*100,
+          percent:((recordIndex+(total?current/total:0))/Math.max(1,normalizedRecords.length))*100,
           file:item.path
-        });
+        })
       });
-      if(!validStoredCrc||actualCrc!==expectedCrc)throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
+      if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'. El tamaño descomprimido no coincide con el directorio ZIP.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,
@@ -322,9 +378,9 @@
       throw new Error("Selecciona un archivo .zip con contenido.");
     }
     if (file.size > LIMITS.compressed) throw new Error("El ZIP supera el límite de 50 MB de almacenamiento.");
-    if (!window.JSZip) throw new Error("No se pudo cargar JSZip para leer el archivo.");
-    const archive = await JSZip.loadAsync(file, { checkCRC32: false, createFolders: false });
-    const all = Object.values(archive.files || {});
+    if (!window.zip?.ZipReader) throw new Error("No se cargó el nuevo lector ZIP. Recarga Productos para actualizarlo.");
+    const all = await dripxZipReadDirectory(file);
+    const archive = { files: Object.fromEntries(all.map(entry=>[entry.name,entry])) };
     if (all.length > LIMITS.entries) throw new Error("El ZIP contiene demasiadas entradas.");
     const entries = all.filter(entry => !entry.dir);
     if (entries.length > LIMITS.files) throw new Error("El ZIP supera el límite de 3.000 archivos.");
@@ -444,7 +500,7 @@
       meta: metaCandidates.length
     };
     const manifest = {
-      inspector: "dripx-king-style-quick-index-v2",
+      inspector: "dripx-zipjs-balanced-index-v3",
       source_filename: file.name,
       source_bytes: file.size,
       expanded_bytes: expanded,
