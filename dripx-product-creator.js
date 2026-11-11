@@ -4,6 +4,7 @@ window.__DRIPX_PRODUCT_CREATOR_READY=true;
 const ROOT='#dx-catalog-admin';
 const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isNamedZipBlob=value=>!!value&&typeof value==='object'&&typeof value.name==='string'&&Number.isFinite(Number(value.size))&&Number(value.size)>0&&typeof value.slice==='function'&&typeof value.arrayBuffer==='function';
 let mountedForm=null,categoryPromise=null,observer=null;
 const toast=message=>{const n=$('#toast');if(n){n.textContent=message;n.classList.add('show');setTimeout(()=>n.classList.remove('show'),3800);}};
 function active(){
@@ -158,7 +159,7 @@ function mount(form){
   const selected=fields.file.files?.[0];
   const staged=window.__DRIPX_PROCESSED_PRODUCT_FILE;
   const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
-  const ready=!!(selected&&fields.file.dataset.dripxZipReady==='true'&&staged instanceof File&&staged.size>0&&packaged&&packaged.name===staged.name&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID&&form.dataset.dripxZipProcessing!=='true');
+  const ready=!!(selected&&fields.file.dataset.dripxZipReady==='true'&&isNamedZipBlob(staged)&&staged.size>0&&packaged&&packaged.name===staged.name&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID&&form.dataset.dripxZipProcessing!=='true');
   publish.disabled=!ready;
   if(publish.dataset.busy==='true'&&status?.dataset.state==='error'){
    publish.dataset.busy='false';
@@ -210,7 +211,7 @@ function mount(form){
   const original=fields.file.files?.[0];
   if(!original||!String(original.name||'').toLowerCase().endsWith('.zip')||!original.size){toast('Selecciona el ZIP original del resource.');setStep(2);fields.file.click();return;}
   if(original.size>50_000_000){toast('El ZIP supera el límite de 50 MB de Supabase Free.');setStep(2);return;}
-  if(fields.file.dataset.dripxZipReady!=='true'||!(window.__DRIPX_PROCESSED_PRODUCT_FILE instanceof File)){toast('Primero pulsa Trabajar en el inspector ZIP y espera a que termine la protección y compilación.');setStep(2);return;}
+  if(fields.file.dataset.dripxZipReady!=='true'||!(isNamedZipBlob(window.__DRIPX_PROCESSED_PRODUCT_FILE))){toast('Primero pulsa Trabajar en el inspector ZIP y espera a que termine la protección y compilación.');setStep(2);return;}
   publish.dataset.busy='true';publish.dataset.completed='false';publish.disabled=true;publish.textContent='Enviando al servidor…';
   try{
    fields.category.value='Productos';fields.product_type.value='resource';
