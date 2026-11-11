@@ -219,11 +219,11 @@ if (!runtimeLoaderSource.includes('@zip.js/zip.js@2.24.0') || !runtimeLoaderSour
 
 if (!publicIndexHtml.includes('@supabase/supabase-js@2.119.0')) throw new Error('DRIPX regression: Supabase JavaScript SDK pin is stale.');
 const resolverStart=zipReader.indexOf('  function dripxResolveMetaArchivePath(');
-const resolverEnd=zipReader.indexOf('\\n  async function loadZipForProtection',resolverStart);
+const resolverEnd=zipReader.indexOf('\n  async function loadZipForProtection',resolverStart);
 if(resolverStart<0||resolverEnd<0)throw new Error('DRIPX regression: nested meta.xml path resolver is missing.');
 const resolverCode=zipReader.slice(resolverStart,resolverEnd);
 const resolverContext={};
-runInNewContext(resolverCode+'\\n globalThis.__resolveMetaPath=dripxResolveMetaArchivePath;',resolverContext,{timeout:1000});
+runInNewContext(resolverCode+'\n globalThis.__resolveMetaPath=dripxResolveMetaArchivePath;',resolverContext,{timeout:1000});
 const resolveMetaPath=resolverContext.__resolveMetaPath;
 const originalToOutput=new Map([
  ['Bundle/Resource/server/main.lua','server/main.lua'],
