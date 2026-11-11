@@ -1678,12 +1678,18 @@
     if(save){
       event.preventDefault();event.stopImmediatePropagation();
       const id=save.dataset.dripxSaveLicense;
-      const ip=document.querySelector('[data-dripx-ip="'+id+'"]')?.value?.trim()||'';
-      const port=Number(document.querySelector('[data-dripx-port="'+id+'"]')?.value||0);
-      if(!ip||!Number.isInteger(port)||port<1||port>65535){toast('Introduce una IP pública y un puerto válido.');return;}
+      const ipInput=document.querySelector('[data-dripx-ip="'+id+'"]');
+      const portInput=document.querySelector('[data-dripx-port="'+id+'"]');
+      let parsed;
+      try{
+        if(typeof window.DRIPX_PARSE_MTA_SERVER_ADDRESS!=='function')throw new Error('No se cargó el validador de direcciones MTA. Recarga la página.');
+        parsed=window.DRIPX_PARSE_MTA_SERVER_ADDRESS(ipInput?.value||'',portInput?.value||'');
+      }catch(error){toast(error.message||'La dirección MTA no es válida.');return;}
+      if(ipInput)ipInput.value=parsed.ip;
+      if(portInput)portInput.value=String(parsed.port);
       save.disabled=true;
       try{
-        const {error}=await client.rpc('dripx_save_license_binding',{p_license_id:id,p_server_ip:ip,p_server_port:port});
+        const {error}=await client.rpc('dripx_save_license_binding',{p_license_id:id,p_server_ip:parsed.ip,p_server_port:parsed.port});
         if(error)throw error;
         toast('Servidor vinculado a esta licencia.');
         await renderOwnedProducts();
