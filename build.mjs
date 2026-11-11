@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, cp, copyFile, access } from 'node:fs/promises';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
-import { Script } from 'node:vm';
+import { Script, runInNewContext } from 'node:vm';
 
 const readParts = async (prefix, count) => {
   const parts = await Promise.all(Array.from({ length: count }, (_, i) =>
@@ -20,6 +20,29 @@ const appText = await patchApp(app.toString('utf8'));
 const css = gunzipSync(Buffer.from(cssB64, 'base64'));
 new Script(appText, { filename: 'dist/app.js' });
 new Script(await readFile('auth-bootstrap.js', 'utf8'), { filename: 'auth-bootstrap.js' });
+const mtaAddressSource = await readFile('dripx-mta-address.js', 'utf8');
+new Script(mtaAddressSource, { filename: 'dripx-mta-address.js' });
+const mtaParserSandbox = { window: {}, URL };
+runInNewContext(mtaAddressSource, mtaParserSandbox, { timeout: 1000 });
+const parseMtaServerAddress = mtaParserSandbox.window.DRIPX_PARSE_MTA_SERVER_ADDRESS;
+if (typeof parseMtaServerAddress !== 'function') throw new Error('DRIPX MTA address parser did not initialize.');
+const mtaParserCases = [
+  ['mtasa://8.8.8.8:22023', '', '8.8.8.8', 22023],
+  ['mtasa://9.9.9.9', '', '9.9.9.9', 22003],
+  ['8.8.4.4', '22005', '8.8.4.4', 22005],
+  ['[2606:4700:4700::1111]:22024', '', '2606:4700:4700::1111', 22024]
+];
+for (const [address, port, expectedIp, expectedPort] of mtaParserCases) {
+  const parsed = parseMtaServerAddress(address, port);
+  if (parsed.ip.toLowerCase() !== expectedIp.toLowerCase() || parsed.port !== expectedPort) {
+    throw new Error('DRIPX MTA address parser regression: ' + address);
+  }
+}
+for (const invalidAddress of ['https://8.8.8.8:22003', 'localhost:22003', '8.8.8.8/24', '8.8.8.8:0', '[not-an-ip]:22003']) {
+  let rejected = false;
+  try { parseMtaServerAddress(invalidAddress, ''); } catch { rejected = true; }
+  if (!rejected) throw new Error('DRIPX MTA address parser accepted an invalid address: ' + invalidAddress);
+}
 new Script(await readFile('dripx-enhancements.js', 'utf8'), { filename: 'dripx-enhancements.js' });
 const catalogManager = await readFile('dripx-catalog-manager.js', 'utf8');
 new Script(catalogManager, { filename: 'dripx-catalog-manager.js' });
@@ -47,6 +70,7 @@ await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
 await copyFile('index.html', 'dist/index.html');
 await copyFile('config.js', 'dist/config.js');
 await copyFile('auth-bootstrap.js', 'dist/auth-bootstrap.js');
+await copyFile('dripx-mta-address.js', 'dist/dripx-mta-address.js');
 await copyFile('dripx-enhancements.js', 'dist/dripx-enhancements.js');
 await copyFile('dripx-catalog-manager.js', 'dist/dripx-catalog-manager.js');
 await copyFile('dripx-catalog-manager.css', 'dist/dripx-catalog-manager.css');
@@ -73,7 +97,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js','dist/dripx-admin-loader.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-mta-address.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js','dist/dripx-admin-loader.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -100,6 +124,7 @@ const requiredFeatures = [
   'dripx_admin_get_discord_log_settings',
   'dripx_admin_save_discord_log_setting',
   'dripx-discord-logs',
+  'DRIPX_PARSE_MTA_SERVER_ADDRESS',
   'DRIPX_ADMIN_NAVIGATE',
   'DRIPX_ADMIN_CATALOG_MODE',
   'dripx_admin_approve_order',
@@ -111,6 +136,8 @@ const missingFeatures = requiredFeatures.filter(feature => !clientSource.include
 if (missingFeatures.length) throw new Error('DRIPX smoke checks failed; missing features: ' + missingFeatures.join(', '));
 const adminCatalogRouteSource = await readFile('dripx-catalog-manager.js', 'utf8');
 if (/;\\n\s*const nav=/.test(adminCatalogRouteSource)) throw new Error('DRIPX regression: malformed escaped newline in admin navigation handler.');
+if (!accountPanel.includes('DRIPX_PARSE_MTA_SERVER_ADDRESS') || !accountPanel.includes('mtasa://203.0.113.10:22003')) throw new Error('DRIPX regression: account server binding must accept MTA URLs and display the canonical format.');
+if (!uploadUi.includes('DRIPX_PARSE_MTA_SERVER_ADDRESS') || !uploadUi.includes("dripx_save_license_binding")) throw new Error('DRIPX regression: legacy license binding must use the canonical MTA address parser.');
 const adminShellChecks = [
   [adminShellPanel.includes("window.DRIPX_ADMIN_NAVIGATE=navigate"), 'shared admin navigation callback is installed'],
   [adminShellPanel.includes("setFlags(route)") && adminShellPanel.includes("window.DRIPX_ADMIN_PRODUCTS_TAB_ACTIVE=products"), 'route state is synchronized with existing admin modules'],
@@ -156,6 +183,7 @@ const brokenAdminRoutes = adminRouteContracts.filter(([route,moduleReady,hostId]
 if (brokenAdminRoutes.length) throw new Error('DRIPX admin render contract failed; missing route/module/visible host: '+brokenAdminRoutes.join(', '));
 if (!reviewsPanel.includes("window.addEventListener('dripx:admin-ready',schedule)")) throw new Error('DRIPX regression: reviews must retry when admin authorization finishes.');
 if (shell.includes('jszip.min.js') || shell.includes('tus-js-client')) throw new Error('DRIPX regression: ZIP/upload dependencies must not block storefront entry.');
+if (!shell.includes('dripx-mta-address.js?v=20261110-01')) throw new Error('DRIPX regression: canonical MTA parser must load before app/account scripts.');
 
 const patchSource = await readFile('dripx-patch.mjs', 'utf8');
 const zipReader = await readFile('dripx-zip-reader.txt', 'utf8');
