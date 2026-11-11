@@ -179,9 +179,9 @@ function mount(form){
   const go=event.target.closest('[data-dxpc-go]');if(go){setStep(Number(go.dataset.dxpcGo));return;}
   if(event.target.closest('[data-dxpc-next]')){const step=Number(form.dataset.dxpcStep||0);if(step===0&&!validateDetails())return;if(step===1&&!validateMedia())return;setStep(step+1);return;}
   if(event.target.closest('[data-dxpc-prev]')){setStep(Number(form.dataset.dxpcStep||0)-1);return;}
-  if(event.target.closest('[data-dxpc-publish]')){event.preventDefault();void publish();}
+  if(event.target.closest('[data-dxpc-publish]')){event.preventDefault();void publishProduct();}
  },true);
- async function publish(){
+ async function publishProduct(){
   if(publish.dataset.busy==='true')return;
   if(!validateDetails()||!validateMedia()){setStep(0);return;}
   const original=fields.file.files?.[0];
