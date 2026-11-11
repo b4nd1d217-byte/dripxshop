@@ -1,3 +1,4 @@
+  // ZIP64-aware reader: parses the central directory first and reads each entry on demand.
   async function dripxZipOpenDiagnostic(file,error){
     const original=String(error?.message||error||'Error desconocido');
     let hasEocd=false,hasZipSignature=false;
