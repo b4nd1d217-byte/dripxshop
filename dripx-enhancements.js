@@ -1396,10 +1396,12 @@
     }finally{button.disabled=false;}
   },true);
   function installPlanResourceManagerObserver(){
+    // The current admin shell and catalog manager replace this legacy panel.
+    // Do not keep a subtree observer alive on storefront or modern admin routes.
+    if(!isAdminRoute()||window.__DRIPX_ADMIN_SHELL_ENABLED===true||window.__DRIPX_CATALOG_MANAGER_ACTIVE===true)return;
     const app=document.querySelector('#app');if(!app||app.dataset.dxPlanResourceObserver==='1')return;
     app.dataset.dxPlanResourceObserver='1';
     const observer=new MutationObserver(()=>{
-      if(window.__DRIPX_CATALOG_MANAGER_ACTIVE){document.querySelector('#dx-plan-resource-manager')?.remove();return;}
       if(isAdminProductsRoute()&&window.DRIPX_IS_ADMIN===true){
         const panel=document.querySelector('#dx-plan-resource-manager');
         if(!panel||panel.dataset.loaded!=='1')schedulePlanResourceManager();
@@ -1562,10 +1564,45 @@
       }
     },true);
   }
-  const cssObserver=new MutationObserver(()=>{
-    replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();markAdminView();syncCategoryOptions(false);void ensureProductStoreCategoryField();syncCatalogOwnership(false);clearLegacyZipStaging();installCategoryAuthLifecycle();syncCategoryManagerVisibility();
-    if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
+  let appVisualSyncScheduled=false;
+  function scheduleAppVisualSync(){
+    if(appVisualSyncScheduled)return;
+    appVisualSyncScheduled=true;
+    const schedule=typeof window.requestAnimationFrame==='function'
+      ?window.requestAnimationFrame.bind(window)
+      :callback=>window.setTimeout(callback,16);
+    schedule(()=>{
+      appVisualSyncScheduled=false;
+      const root=document.querySelector('#app');
+      if(!root)return;
+      // Work only inside the application root. Toast text, footer changes and
+      // unrelated document mutations no longer trigger whole-page rescans.
+      replaceIcons(root);
+      ensureButtonIcons(root);
+      installDescriptionToolbar();
+      applyBrandLogo();
+      hideTopCategoryStrip(root);
+      removeDuplicateBackAndAdminLabels(root);
+      syncRouteBackButton();
+      removeStandaloneProtectionAdminEntry(root);
+      applyPlanCardSkin(root);
+      markAdminView();
+      syncCategoryOptions(false);
+      void ensureProductStoreCategoryField();
+      void syncCatalogOwnership(false);
+      clearLegacyZipStaging();
+      installCategoryAuthLifecycle();
+      syncCategoryManagerVisibility();
+      if(root.querySelector('.profile-tabs'))ensureOwnedProductsTab();
+    });
+  }
+  const cssObserver=new MutationObserver(records=>{
+    if(records.some(record=>record.type==='childList'))scheduleAppVisualSync();
   });
+  window.addEventListener('hashchange',scheduleAppVisualSync);
+  window.addEventListener('dripx:admin-route',scheduleAppVisualSync);
+  window.addEventListener('dripx:admin-ready',scheduleAppVisualSync);
+  window.addEventListener('dripx:admin-products-view',scheduleAppVisualSync);
   function removeStandaloneProtectionAdminEntry(root=document){
     const app=root.querySelector?.('#app')||root;
     const candidates=app.querySelectorAll?.('a,button,[role="tab"],[data-admin-route],[data-admin-tab]')||[];
@@ -1799,7 +1836,19 @@
     const remove=ev.target.closest('[data-dx-up-remove]');if(remove){ev.preventDefault();remove.disabled=true;try{await getAdminSession();const {error}=await client.rpc('dripx_admin_remove_user_plan',{p_user_plan_id:remove.dataset.dxUpRemove});if(error)throw error;toast('Plan removido y accesos revocados.');await reloadUp();closeUpModal();}catch(err){toast(err.message||'No se pudo remover.');remove.disabled=false;}}
   },true);
   document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-dx-renew-plan]');if(!b)return;ev.preventDefault();ev.stopImmediatePropagation();b.disabled=true;try{const {data,error}=await client.rpc('customer_request_plan_renewal',{p_user_plan_id:b.dataset.dxRenewPlan});if(error)throw error;toast(data?.message||'Solicitud de renovación creada.');await renderOwnedProducts();}catch(err){toast(err.message||'No se pudo renovar.');b.disabled=false;}},true);
-  function installUserPlanManagerObserver(){if(window.__DRIPX_USER_PLAN_MANAGER_OBSERVER)return;const root=document.querySelector('#app');if(!root)return;const ob=new MutationObserver(()=>scheduleUserPlanManager());ob.observe(root,{childList:true,subtree:true});window.__DRIPX_USER_PLAN_MANAGER_OBSERVER=ob;if(!window.__DRIPX_PLAN_CLOCK_TIMER)window.__DRIPX_PLAN_CLOCK_TIMER=setInterval(updateUserPlanClocks,1000);scheduleUserPlanManager();}
+  function installUserPlanManagerObserver(){
+    // This legacy manager belongs only to the retired admin renderer.
+    // The current admin shell has its own user/plan workflows; the storefront
+    // must not run a per-second plan clock or watch every nested DOM change.
+    if(!isAdminRoute()||window.__DRIPX_ADMIN_SHELL_ENABLED===true||window.__DRIPX_CATALOG_MANAGER_ACTIVE===true)return;
+    if(window.__DRIPX_USER_PLAN_MANAGER_OBSERVER)return;
+    const root=document.querySelector('#app');if(!root)return;
+    const ob=new MutationObserver(()=>scheduleUserPlanManager());
+    ob.observe(root,{childList:true,subtree:true});
+    window.__DRIPX_USER_PLAN_MANAGER_OBSERVER=ob;
+    if(!window.__DRIPX_PLAN_CLOCK_TIMER)window.__DRIPX_PLAN_CLOCK_TIMER=setInterval(updateUserPlanClocks,1000);
+    scheduleUserPlanManager();
+  }
 
   function productFieldWrapper(control){
     if(!control)return null;
@@ -1836,16 +1885,18 @@
     const hint=form.querySelector('[data-dx-product-type-hint]')||document.createElement('div');
     hint.dataset.dxProductTypeHint='';
     hint.className='dx-product-type-guidance '+(isPlan?'is-plan':'is-resource');
-    hint.innerHTML=isPlan
+    const guidance=isPlan
       ?'<span>✦</span><div><strong>Plan de acceso · sin archivos</strong><small>Configura el precio, la duración y las características. Los ZIP no pertenecen al plan; se vinculan desde Configuración de planes.</small></div>'
       :'<span>▣</span><div><strong>Producto descargable · categoría Productos</strong><small>Este recurso se crea aquí, con su ZIP y su imagen. Una vez publicado aparecerá en el configurador para incluirlo en los planes.</small></div>';
+    // Avoid replacing identical child nodes: this form is observed below.
+    if(hint.innerHTML!==guidance)hint.innerHTML=guidance;
     if(!hint.isConnected){
       const parent=type.closest('label,.form-group,.form-field,.field,.form-row')||type.parentElement;
       parent?.insertAdjacentElement('afterend',hint);
     }
     Array.from(type.options).forEach(option=>{
-      if(option.value==='plan')option.textContent='Plan de acceso · sin ZIP';
-      if(option.value==='resource')option.textContent='Producto descargable · ZIP';
+      if(option.value==='plan'&&option.textContent!=='Plan de acceso · sin ZIP')option.textContent='Plan de acceso · sin ZIP';
+      if(option.value==='resource'&&option.textContent!=='Producto descargable · ZIP')option.textContent='Producto descargable · ZIP';
     });
     if(isPlan&&file){
       if(file.value)file.value='';
@@ -1858,24 +1909,45 @@
     form.dataset.dripxProductTypeLayout='1';
   }
   function installProductTypeLayout(){
-    const sync=()=>{const form=document.querySelector('#product-form');if(form)syncProductTypeLayout(form);};
     document.addEventListener('change',event=>{
       if(event.target.matches('#product-form select[name="product_type"]'))syncProductTypeLayout(event.target.closest('#product-form'));
     },true);
-    const root=document.querySelector('#app');
-    if(root&&!root.dataset.dxProductTypeObserver){
-      root.dataset.dxProductTypeObserver='1';
-      const observer=new MutationObserver(()=>sync());
-      observer.observe(root,{childList:true,subtree:true});
-    }
-    sync();
+    let observedForm=null,observer=null,syncScheduled=false;
+    const attach=()=>{
+      if(!isAdminRoute()){
+        observer?.disconnect();observer=null;observedForm=null;return;
+      }
+      const form=document.getElementById('product-form');
+      if(!form){
+        observer?.disconnect();observer=null;observedForm=null;return;
+      }
+      if(observedForm===form){syncProductTypeLayout(form);return;}
+      observer?.disconnect();
+      observedForm=form;
+      syncProductTypeLayout(form);
+      observer=new MutationObserver(records=>{
+        if(!records.some(record=>record.type==='childList')||syncScheduled)return;
+        syncScheduled=true;
+        const schedule=typeof window.requestAnimationFrame==='function'
+          ?window.requestAnimationFrame.bind(window)
+          :callback=>window.setTimeout(callback,16);
+        schedule(()=>{
+          syncScheduled=false;
+          if(observedForm===form&&form.isConnected)syncProductTypeLayout(form);
+        });
+      });
+      observer.observe(form,{childList:true,subtree:true});
+    };
+    window.addEventListener('hashchange',attach);
+    window.addEventListener('dripx:admin-products-view',attach);
+    attach();
   }
 
   function boot(){
     replaceIcons();ensureButtonIcons();installDescriptionToolbar();applyBrandLogo();installImageFallback();hideTopCategoryStrip();removeDuplicateBackAndAdminLabels();syncRouteBackButton();removeStandaloneProtectionAdminEntry();applyPlanCardSkin();installProductZipProtectionGuard();clearLegacyZipStaging();syncCatalogOwnership(true);
     if(document.querySelector('.profile-tabs'))ensureOwnedProductsTab();
     syncCategoryOptions(true);installProductTypeLayout();markAdminView();installAdminProductsTabTracker();installPlanResourceManagerObserver();installUserPlanManagerObserver();installCategoryAuthLifecycle();syncCategoryRouteFromHash();syncCategoryManagerVisibility();
-    cssObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
+    const app=document.querySelector('#app');if(app)cssObserver.observe(app,{childList:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
