@@ -1885,16 +1885,18 @@
     const hint=form.querySelector('[data-dx-product-type-hint]')||document.createElement('div');
     hint.dataset.dxProductTypeHint='';
     hint.className='dx-product-type-guidance '+(isPlan?'is-plan':'is-resource');
-    hint.innerHTML=isPlan
+    const guidance=isPlan
       ?'<span>✦</span><div><strong>Plan de acceso · sin archivos</strong><small>Configura el precio, la duración y las características. Los ZIP no pertenecen al plan; se vinculan desde Configuración de planes.</small></div>'
       :'<span>▣</span><div><strong>Producto descargable · categoría Productos</strong><small>Este recurso se crea aquí, con su ZIP y su imagen. Una vez publicado aparecerá en el configurador para incluirlo en los planes.</small></div>';
+    // Avoid replacing identical child nodes: this form is observed below.
+    if(hint.innerHTML!==guidance)hint.innerHTML=guidance;
     if(!hint.isConnected){
       const parent=type.closest('label,.form-group,.form-field,.field,.form-row')||type.parentElement;
       parent?.insertAdjacentElement('afterend',hint);
     }
     Array.from(type.options).forEach(option=>{
-      if(option.value==='plan')option.textContent='Plan de acceso · sin ZIP';
-      if(option.value==='resource')option.textContent='Producto descargable · ZIP';
+      if(option.value==='plan'&&option.textContent!=='Plan de acceso · sin ZIP')option.textContent='Plan de acceso · sin ZIP';
+      if(option.value==='resource'&&option.textContent!=='Producto descargable · ZIP')option.textContent='Producto descargable · ZIP';
     });
     if(isPlan&&file){
       if(file.value)file.value='';
@@ -1907,17 +1909,38 @@
     form.dataset.dripxProductTypeLayout='1';
   }
   function installProductTypeLayout(){
-    const sync=()=>{const form=document.querySelector('#product-form');if(form)syncProductTypeLayout(form);};
     document.addEventListener('change',event=>{
       if(event.target.matches('#product-form select[name="product_type"]'))syncProductTypeLayout(event.target.closest('#product-form'));
     },true);
-    const root=document.querySelector('#app');
-    if(root&&!root.dataset.dxProductTypeObserver){
-      root.dataset.dxProductTypeObserver='1';
-      const observer=new MutationObserver(()=>sync());
-      observer.observe(root,{childList:true,subtree:true});
-    }
-    sync();
+    let observedForm=null,observer=null,syncScheduled=false;
+    const attach=()=>{
+      if(!isAdminRoute()){
+        observer?.disconnect();observer=null;observedForm=null;return;
+      }
+      const form=document.getElementById('product-form');
+      if(!form){
+        observer?.disconnect();observer=null;observedForm=null;return;
+      }
+      if(observedForm===form){syncProductTypeLayout(form);return;}
+      observer?.disconnect();
+      observedForm=form;
+      syncProductTypeLayout(form);
+      observer=new MutationObserver(records=>{
+        if(!records.some(record=>record.type==='childList')||syncScheduled)return;
+        syncScheduled=true;
+        const schedule=typeof window.requestAnimationFrame==='function'
+          ?window.requestAnimationFrame.bind(window)
+          :callback=>window.setTimeout(callback,16);
+        schedule(()=>{
+          syncScheduled=false;
+          if(observedForm===form&&form.isConnected)syncProductTypeLayout(form);
+        });
+      });
+      observer.observe(form,{childList:true,subtree:true});
+    };
+    window.addEventListener('hashchange',attach);
+    window.addEventListener('dripx:admin-products-view',attach);
+    attach();
   }
 
   function boot(){
