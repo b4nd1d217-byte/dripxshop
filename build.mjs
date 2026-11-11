@@ -64,6 +64,9 @@ const adminExtraPanel = await readFile('dripx-admin-extra.js', 'utf8');
 new Script(adminExtraPanel, { filename: 'dripx-admin-extra.js' });
 const adminLoader = await readFile('dripx-admin-loader.js', 'utf8');
 new Script(adminLoader, { filename: 'dripx-admin-loader.js' });
+const productCreatorPanel = await readFile('dripx-product-creator.js', 'utf8');
+new Script(productCreatorPanel, { filename: 'dripx-product-creator.js' });
+const productCreatorCss = await readFile('dripx-product-creator.css', 'utf8');
 await writeFile('dist/app.js', appText);
 const extraCss = await readFile('dripx-enhancements.css');
 await writeFile('dist/styles.css', Buffer.concat([css, extraCss]));
@@ -90,6 +93,8 @@ await copyFile('dripx-admin-logs.css', 'dist/dripx-admin-logs.css');
 await copyFile('dripx-admin-extra.js', 'dist/dripx-admin-extra.js');
 await copyFile('dripx-admin-extra.css', 'dist/dripx-admin-extra.css');
 await copyFile('dripx-admin-loader.js', 'dist/dripx-admin-loader.js');
+await copyFile('dripx-product-creator.js', 'dist/dripx-product-creator.js');
+await copyFile('dripx-product-creator.css', 'dist/dripx-product-creator.css');
 await cp('assets', 'dist/assets', { recursive: true });
 const shell = await readFile('dist/index.html', 'utf8');
 const localRefs = [...shell.matchAll(/(?:src|href)="(\/[^"?#]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
@@ -97,7 +102,7 @@ for (const ref of localRefs) {
   try { await access('dist' + ref); }
   catch { throw new Error(`Missing local asset referenced by index.html: ${ref}`); }
 }
-const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-mta-address.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js','dist/dripx-admin-loader.js'];
+const clientFiles = ['dist/config.js','dist/app.js','dist/auth-bootstrap.js','dist/dripx-mta-address.js','dist/dripx-enhancements.js','dist/dripx-catalog-manager.js','dist/dripx-account-panel.js','dist/dripx-reviews.js','dist/dripx-user-admin.js','dist/dripx-user-admin-actions.js','dist/dripx-ticket-admin.js','dist/dripx-admin-shell.js','dist/dripx-admin-logs.js','dist/dripx-admin-extra.js','dist/dripx-admin-loader.js','dist/dripx-product-creator.js'];
 const clientSource = (await Promise.all(clientFiles.map(path => readFile(path, 'utf8')))).join('\n');
 if (/sb_secret_[A-Za-z0-9_-]{20,}/i.test(clientSource) || /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']{20,}/i.test(clientSource)) {
   throw new Error('A server-side Supabase secret was detected in a public client asset.');
@@ -154,12 +159,15 @@ const adminShellChecks = [
   [userAdminPanel.includes("data-dxua-menu") && userAdminPanel.includes("data-dxua-menu-panel") && userAdminPanel.includes("data-dxua-filter"), 'Users render as a searchable list with row action menus and filters'],
   [userAdminPanel.includes("value=\"customer\"") && userAdminPanel.includes("value=\"support\"") && userAdminPanel.includes("value=\"moderator\""), 'User role choices align with Supabase allowed roles'],
   [userAdminActionsPanel.includes("dripx_admin_transfer_user_product") && userAdminActionsPanel.includes("dripx_admin_get_user_products"), 'User details and transfers use protected Supabase RPCs'],
-  [adminLoader.includes("dripx-catalog-manager.js") && adminLoader.includes("dripx-user-admin.js") && adminLoader.includes("dripx-admin-shell.js"), 'Admin modules are lazy-loaded in dependency order']
+  [adminLoader.includes("dripx-catalog-manager.js") && adminLoader.includes("dripx-product-creator.js") && adminLoader.includes("dripx-product-creator.css") && adminLoader.includes("dripx-user-admin.js") && adminLoader.includes("dripx-admin-shell.js"), 'Admin modules and dedicated creator assets are lazy-loaded in dependency order'],
+  [productCreatorPanel.includes('DRIPX_PRODUCT_CREATOR_READY') && productCreatorPanel.includes('form.requestSubmit') && productCreatorPanel.includes('data-dxpc-panel="2"') && productCreatorPanel.includes('#resource-file-field') && productCreatorPanel.includes('window.__DRIPX_PROCESSED_PRODUCT_FILE') && productCreatorPanel.includes('db.from(\'dripx_categories\')'), 'new product creator has live multi-step form, active category loading, protected ZIP gate and existing submit bridge'],
+  [productCreatorPanel.includes('form.replaceChildren()') && productCreatorPanel.includes('form.dataset.dxpcReady') && productCreatorPanel.includes('fields.product_type.value=\'resource\'') && productCreatorPanel.includes('fields.category.value=\'Productos\''), 'new creator replaces legacy form presentation while preserving the real product form and persisted contract'],
+  [productCreatorCss.includes('.dxpc-form') && productCreatorCss.includes('@media(max-width:680px)'), 'creator stylesheet includes responsive mobile layout']
 ];
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
 if (!shell.includes("window.__DRIPX_ADMIN_SHELL_ENABLED=/^#admin(?:$|[/?])/i.test(location.hash||''")) throw new Error('DRIPX regression: admin shell must only activate on admin URLs.');
-if (!shell.includes('dripx-admin-loader.js?v=20261111-zipjs-runtime-01')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (!shell.includes('dripx-admin-loader.js?v=20261111-new-product-creator-01')) throw new Error('DRIPX regression: admin loader cache version is stale.');
 if (!shell.includes('dripx-enhancements.js?v=20261111-license-protection-01')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
 if (!adminLoader.includes('if(!isAdminRoute())return;') || adminLoader.includes('if(!isAdmin())return;')) throw new Error('DRIPX regression: admin loader must gate by route, not an undefined/global role helper.');
 if (!adminLoader.includes("window.addEventListener('dripx:admin-ready',ensureAdminModules)")) throw new Error('DRIPX regression: admin modules must also recover after auth readiness.');
@@ -169,7 +177,7 @@ const adminRouteContracts = [
  ['resumen',adminExtraPanel.includes("if(route==='resumen')await loadOverview()"),'dx-admin-extra'],
  ['pedidos',adminExtraPanel.includes("if(route==='pedidos')await loadOrders()"),'dx-admin-extra'],
  ['tickets',ticketAdminPanel.includes('dripx_admin_delete_ticket'),'dx-ticket-admin'],
- ['productos',catalogManager.includes('id="dxcm-product-form-host"'),'dx-catalog-admin'],
+ ['productos',catalogManager.includes('id="dxcm-product-form-host"')&&adminLoader.includes('dripx-product-creator.js')&&adminLoader.includes('dripx-product-creator.css'),'dx-catalog-admin'],
  ['planes',catalogManager.includes("return 'planes';"),'dx-catalog-admin'],
  ['categorias',adminExtraPanel.includes('function renderCategories()')&&adminExtraPanel.includes("db.from('dripx_categories')"),'dx-admin-extra'],
  ['usuarios',userAdminPanel.includes('dripx_admin_list_users')&&userAdminPanel.includes("window.addEventListener('dripx:admin-route'"),'dx-user-admin'],
