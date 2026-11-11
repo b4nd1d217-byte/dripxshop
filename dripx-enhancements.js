@@ -431,7 +431,7 @@
     const succeed=()=>{
       rows.forEach(row=>{row.dataset.state='done';row.querySelector('b').textContent='Completado';});
       overlay.querySelector('.dx-protection-progress-fill').style.width='100%';
-      message.textContent='ÉXITO: el ZIP protegido está verificado y seleccionado en el formulario.';
+      message.textContent='ZIP protegido generado y asociado. Supabase comprobará CRC, meta.xml, bytecode y guardián al guardar antes de publicarlo.';
       message.dataset.state='success';
       overlay.querySelector('.dx-protection-close').disabled=false;
       overlay.querySelector('.dx-protection-finish').hidden=false;
@@ -451,7 +451,14 @@
         button.disabled=false;
       });
     };
-    return {overlay,update,succeed,fail,onRetry,close};
+    const progress=(percent,detail)=>{
+      if(!overlay.isConnected)return;
+      const bounded=Math.max(0,Math.min(99,Number(percent)||0));
+      overlay.querySelector('.dx-protection-progress-fill').style.width=bounded.toFixed(1)+'%';
+      if(detail)message.textContent=String(detail)+' · '+Math.round(bounded)+'%';
+      overlay.querySelector('.dx-protection-close').disabled=true;
+    };
+    return {overlay,update,progress,succeed,fail,onRetry,close};
   }
 
   function renderProductZipSelection(input,file){
@@ -471,11 +478,11 @@
     node.classList.remove('hidden');
     node.innerHTML='<div class="dx-zip-inspector">'+
       '<div class="dx-zip-inspector-head"><span class="dx-zip-selection-icon" aria-hidden="true">ZIP</span><div><span class="dx-zip-inspector-kicker">DRIP X · INSPECTOR ZIP</span><strong class="dx-zip-selection-name">'+escapeHtml(file.name)+'</strong><small>'+formatBytes(file.size)+' · Archivo original</small></div><span class="dx-zip-inspector-state">LEYENDO</span></div>'+
-      '<div class="dx-zip-inspector-loading"><span class="dx-zip-inspector-spinner"></span><span>Abriendo el ZIP y leyendo todos sus archivos. No se está ejecutando el compilador.</span></div>'+
+      '<div class="dx-zip-inspector-loading"><span class="dx-zip-inspector-spinner"></span><span>Leyendo el índice del ZIP sin descomprimir todos los archivos. La extracción completa y la comprobación CRC se ejecutan una sola vez al pulsar Trabajar.</span></div>'+
     '</div>';
-    if(status){status.dataset.state='processing';status.textContent='Abriendo '+file.name+' y generando el inventario. La compilación no es necesaria para guardar el archivo.';}
-    // Selecting a readable ZIP never locks the Save Product action.
-    lockProductSubmit(form,false);
+    if(status){status.dataset.state='processing';status.textContent='Leyendo el índice de '+file.name+'. El ZIP original no se puede publicar; la protección completa es obligatoria.';}
+    // The source ZIP is never publishable; unlock only after a protected package is staged.
+    lockProductSubmit(form,true);
     let busy=false,needsResume=false;
     const showFailure=error=>{
       if(input.dataset.dripxZipRun!==selectionRun)return;
@@ -504,7 +511,7 @@
           button.disabled=true;
           const active=ensureLiveProductZipPreview(document.querySelector('#product-form input[name="file"]'),null);
           const activeStatus=active?.status||status||document.querySelector('#product-zip-upload-state');
-          if(activeStatus){activeStatus.dataset.state='success';activeStatus.textContent='Protección avanzada completada. Al guardar se subirá el ZIP protegido; si no usas esta opción, se subirá el ZIP original.';}
+          if(activeStatus){activeStatus.dataset.state='success';activeStatus.textContent='ZIP protegido generado. Al guardar, Supabase comprobará CRC, meta.xml, bytecode y guardián antes de publicar.';}
           lockProductSubmit(form,false);
           dialog.succeed();
           toast('Protección avanzada completada. Ya puedes guardar el producto.');
@@ -512,11 +519,11 @@
           needsResume=!!window.__DRIPX_PROTECTION_JOB?.started;
           busy=false;
           button.disabled=false;
-          button.textContent=needsResume?'Reintentar / reanudar protección':'Reintentar protección (opcional)';
-          lockProductSubmit(form,false);
+          button.textContent=needsResume?'Reintentar / reanudar protección':'Reintentar protección obligatoria';
+          lockProductSubmit(form,true);
           dialog.fail(outcome?.error?.message||'No se pudo completar la protección.');
           dialog.onRetry(async()=>{dialog.close();button.click();});
-          if(status){status.dataset.state='warning';status.textContent='La protección opcional no se completó. Puedes guardar y publicar el ZIP original sin modificarlo.';}
+          if(status){status.dataset.state='warning';status.textContent='La protección es obligatoria: el ZIP original no se publica ni se entrega. Corrige el error y vuelve a intentar.';}
         }
       });
     };
@@ -538,7 +545,7 @@
         (warnings?'<div class="dx-zip-inspector-warnings">'+warnings+'</div>':'<div class="dx-zip-inspector-clean">Inventario legible. Pulsa Trabajar para compilar y proteger; el ZIP original nunca se publica ni se entrega.</div>')+
         '<div class="dx-zip-inspector-files-head"><strong>Contenido completo del ZIP</strong><span>'+scan.files.length+' elementos</span></div>'+
         '<div class="dx-zip-inspector-files">'+(rows||'<div class="dx-zip-inspector-empty">El ZIP está vacío. No hay archivos que mostrar.</div>')+'</div>'+
-        '<div class="dx-zip-inspector-actions"><button type="button" class="dx-zip-start" data-dripx-start-protection>Trabajar · Proteger y compilar Lua</button><p>Al pulsar Trabajar se inyecta la validación de licencia, se conserva el shared como shared y se compilan los Lua no-shared. La publicación solo continúa si el ZIP protegido supera las verificaciones.</p></div>'+
+        '<div class="dx-zip-inspector-actions"><button type="button" class="dx-zip-start" data-dripx-start-protection>Trabajar · Proteger y compilar Lua</button><p>Obligatorio para publicar: se integra el guardián server-side, se conservan shared y shaders sin modificarlos y se compilan los Lua no-shared. Supabase valida el ZIP final antes de publicarlo.</p></div>'+
       '</div>';
       node.querySelectorAll('.dx-zip-inspector-file-name').forEach(el=>{el.setAttribute('title',el.textContent||'');});
       bindProtectionButton(node.querySelector('[data-dripx-start-protection]'));
@@ -554,6 +561,24 @@
     let form=input?.closest('#product-form');
     const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
     const update=(step,label,detail)=>{dialog?.update(step,label,detail);setProductZipStatus(label,'processing');};
+    const phaseNames={validate:'Validando y extrayendo ZIP',protect:'Integrando guardián de licencia',compile:'Compilando Lua con MTA',package:'Empaquetando ZIP protegido'};
+    const phaseRanges={validate:[5,25],protect:[28,38],compile:[40,86],package:[88,99]};
+    const reportProgress=info=>{
+      const phase=String(info?.phase||'validate');
+      const range=phaseRanges[phase]||phaseRanges.validate;
+      let fraction=Number(info?.percent);
+      if(!Number.isFinite(fraction)){
+        const total=Math.max(1,Number(info?.total)||1);
+        fraction=(Number(info?.completed)||0)/total*100;
+      }
+      fraction=Math.max(0,Math.min(100,fraction))/100;
+      const percent=range[0]+(range[1]-range[0])*fraction;
+      const fileName=String(info?.file||'').trim();
+      const detail=(phaseNames[phase]||'Procesando resource')+(fileName?' · '+fileName:'');
+      dialog?.progress(percent,detail);
+      setProductZipStatus(Math.round(percent)+'% · '+detail,'processing');
+    };
+    window.__DRIPX_REPORT_PROTECTION_PROGRESS=reportProgress;
     try{
       if(!input||!form)throw new Error('El formulario de Productos ya no está disponible. Vuelve a abrirlo y selecciona el ZIP.');
       if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
@@ -636,6 +661,8 @@
       console.error('[DRIPX] Protection workflow:',error);
       lockProductSubmit(form,true);
       return {ok:false,error};
+    }finally{
+      if(window.__DRIPX_REPORT_PROTECTION_PROGRESS===reportProgress)delete window.__DRIPX_REPORT_PROTECTION_PROGRESS;
     }
   }
 
@@ -1900,11 +1927,24 @@
     });
     if(isPlan&&file){
       if(file.value)file.value='';
+      file.dataset.dripxZipReady='false';
+      window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=null;
       window.__DRIPX_PROCESSED_PRODUCT_FILE=null;
       window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
       window.__DRIPX_PENDING_PRODUCT_ID=null;
+      window.DRIPX_ZIP_INVENTORY=null;
       const status=form.querySelector('#product-zip-upload-state');
       if(status)status.textContent='Los planes no almacenan ZIP. Los recursos se administran como productos independientes.';
+      lockProductSubmit(form,false);
+    }else if(!isPlan){
+      const original=file?.files?.[0]||null;
+      const staged=window.__DRIPX_PROCESSED_PRODUCT_FILE;
+      const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
+      const ready=!!original&&original===window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE
+        &&staged instanceof File&&staged.size>0&&!!packaged
+        &&packaged.name===staged.name&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID
+        &&String(staged.name||'').toLowerCase().endsWith('-dripx-protegido.zip');
+      lockProductSubmit(form,!ready);
     }
     form.dataset.dripxProductTypeLayout='1';
   }

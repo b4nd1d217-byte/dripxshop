@@ -1,5 +1,16 @@
   const DRIPX_ZIP_CRC_TABLE=(()=>{const table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}return table;})();
   function dripxZipCRC32(data){let crc=0xffffffff;for(let i=0;i<data.length;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);return (crc^0xffffffff)>>>0;}
+  async function dripxZipCRC32Cooperative(data,onProgress){
+    let crc=0xffffffff;
+    const chunkSize=256*1024;
+    for(let offset=0;offset<data.length;offset+=chunkSize){
+      const end=Math.min(data.length,offset+chunkSize);
+      for(let i=offset;i<end;i++)crc=DRIPX_ZIP_CRC_TABLE[(crc^data[i])&0xff]^(crc>>>8);
+      if(typeof onProgress==='function')onProgress(data.length?end/data.length:1);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    return (crc^0xffffffff)>>>0;
+  }
   function dripxZipMtaBytecode(bytes){return !!bytes&&bytes.length>=4&&bytes[0]===0x1c&&bytes[1]===0x4d&&bytes[2]===0x76&&bytes[3]===0x62;}
   async function loadZipForProtection(file,hostResolver){
     const ensureZipUiNode=(id,tag)=>{
@@ -99,7 +110,8 @@
       }
     }
     const zip=new JSZip();
-    for(const item of normalizedRecords){
+    for(let recordIndex=0;recordIndex<normalizedRecords.length;recordIndex++){
+      const item=normalizedRecords[recordIndex];
       const data=await item.entry.async('uint8array');
       if(!(data instanceof Uint8Array)||data.byteLength!==item.size)throw new Error('No se pudo leer íntegramente el archivo '+item.path+'.');
       const expectedCrcRaw=Number(item.entry._data?.crc32);
@@ -107,13 +119,26 @@
       // with bit 31 set (for example 0x9b2bcb9b) is therefore exposed as negative.
       const validStoredCrc=Number.isFinite(expectedCrcRaw)&&Number.isInteger(expectedCrcRaw)&&expectedCrcRaw>=-0x80000000&&expectedCrcRaw<=0xffffffff;
       const expectedCrc=expectedCrcRaw>>>0;
-      if(!validStoredCrc||dripxZipCRC32(data)!==expectedCrc)throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
+      const actualCrc=await dripxZipCRC32Cooperative(data,fraction=>{
+        window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({
+          phase:'validate',
+          percent:((recordIndex+fraction)/Math.max(1,normalizedRecords.length))*100,
+          file:item.path
+        });
+      });
+      if(!validStoredCrc||actualCrc!==expectedCrc)throw new Error('El CRC del archivo '+item.path+' no coincide. El ZIP puede estar dañado.');
       zip.file(item.normalizedPath,data,{
         date:item.entry.date,
         createFolders:false,
         unixPermissions:item.entry.unixPermissions,
         dosPermissions:item.entry.dosPermissions
       });
+      window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({
+        phase:'validate',
+        percent:((recordIndex+1)/Math.max(1,normalizedRecords.length))*100,
+        file:item.path
+      });
+      await new Promise(resolve=>setTimeout(resolve,0));
     }
     let entries=Object.values(zip.files).filter(entry=>!entry.dir);
     let meta=zip.file('meta.xml');
@@ -298,7 +323,7 @@
     }
     if (file.size > LIMITS.compressed) throw new Error("El ZIP supera el límite de 50 MB de almacenamiento.");
     if (!window.JSZip) throw new Error("No se pudo cargar JSZip para leer el archivo.");
-    const archive = await JSZip.loadAsync(file, { checkCRC32: true, createFolders: false });
+    const archive = await JSZip.loadAsync(file, { checkCRC32: false, createFolders: false });
     const all = Object.values(archive.files || {});
     if (all.length > LIMITS.entries) throw new Error("El ZIP contiene demasiadas entradas.");
     const entries = all.filter(entry => !entry.dir);
@@ -355,12 +380,8 @@
       }
       files.push({ path, bytes, extension: ext, kind });
     }
-    // JSZip's CRC option verifies entries during load; force a content read as a
-    // second guard so corrupt archives fail, while valid non-MTA ZIPs remain valid.
-    for (const entry of entries) {
-      const bytes = await entry.async("uint8array");
-      if (!(bytes instanceof Uint8Array)) throw new Error("No se pudo leer el archivo " + entry.name + ".");
-    }
+    // Fast index-only preview. Full decompression and CRC validation run once
+    // in DRIPX_LOAD_ZIP after the administrator presses Trabajar.
     const metaCandidates = files.filter(item => item.kind === "meta");
     const rootMeta = metaCandidates.find(item => item.path.toLowerCase() === "meta.xml") || null;
     const warnings = [];
@@ -423,7 +444,7 @@
       meta: metaCandidates.length
     };
     const manifest = {
-      inspector: "dripx-king-style-inventory-v1",
+      inspector: "dripx-king-style-quick-index-v2",
       source_filename: file.name,
       source_bytes: file.size,
       expanded_bytes: expanded,

@@ -18,9 +18,9 @@ const json = (status: number, payload: Record<string, unknown>) =>
   });
 
 function observedClientIp(req: Request): string | null {
-  const direct = req.headers.get("cf-connecting-ip")?.trim();
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const candidate = direct || forwarded || "";
+  // Supabase-hosted Edge Functions receive requests through Cloudflare.
+  // Do not trust the caller-controlled first X-Forwarded-For value.
+  const candidate = req.headers.get("cf-connecting-ip")?.trim() || "";
   return candidate && !/[\s,]/.test(candidate) ? candidate : null;
 }
 async function sha256(value: string): Promise<string> {

@@ -181,12 +181,14 @@ export async function patchApp(source) {
       if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
       const prefix='';
       serverPayloads.push({name,source:prefix+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:ready",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) end,true,"high")'+nl});
+      window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({phase:'protect',completed:i+1,total:serverNames.length+clientNames.length,file:name});
     }
     for(const name of clientNames){
       const file=working.file(name);if(!file)throw new Error('Falta el script de cliente: '+name);
       const source=await file.async('string');
       if(source.includes('DRIPX_LICENSE_GATED_PAYLOAD'))throw new Error('Script ya protegido: '+name);
       clientPayloads.push({name,source:'if not DRIPX_CLIENT_LICENSE_EVENT_REGISTERED then addEvent("dripx:license:clientReady",true) DRIPX_CLIENT_LICENSE_EVENT_REGISTERED=true end'+nl+'local DRIPX_LICENSE_GATED_PAYLOAD=function(...)'+nl+source+nl+'end'+nl+'addEventHandler("dripx:license:clientReady",resourceRoot,function(...) DRIPX_LICENSE_GATED_PAYLOAD(...) if not DRIPX_CLIENT_START_REPLAYED then DRIPX_CLIENT_START_REPLAYED=true setTimer(function() triggerEvent("onClientResourceStart",resourceRoot,getThisResource()) end,50,1) end end)'+nl});
+      window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({phase:'protect',completed:serverNames.length+clientNames.indexOf(name)+1,total:serverNames.length+clientNames.length,file:name});
     }
     const metaFile=working.file(b.metaName);if(!metaFile)throw new Error('No se encuentra meta.xml.');
     let meta=await metaFile.async('string');
@@ -229,7 +231,10 @@ export async function patchApp(source) {
       '  if DRIPX_PRODUCT_ID ~= "'+productId+'" then return dripxStop("configuración de licencia inválida") end',
       '  if type(DRIPX_LICENSE_KEY) ~= "string" or not DRIPX_LICENSE_KEY:match("^DRIPX%-%x+$") then return dripxStop("clave de licencia ausente o inválida") end',
       '  local payload = {license_key=DRIPX_LICENSE_KEY,product_id=DRIPX_PRODUCT_ID,resource_name=getResourceName(getThisResource()),installation_id=DRIPX_INSTALLATION_ID,server_port=getServerPort(),server_name=getServerName()}',
-      '  local queued = fetchRemote(DRIPX_API.."/"..action,{method="POST",headers={["Content-Type"]="application/json"},postData=toJSON(payload),connectionAttempts=2,connectTimeout=10000},function(body,info)',
+      '  local encodedPayload = toJSON(payload)',
+      '  if type(encodedPayload) ~= "string" or #encodedPayload < 3 then dripxSchedule(60000) return end',
+      '  local postData = string.sub(encodedPayload,2,-2)',
+      '  local queued = fetchRemote(DRIPX_API.."/"..action,{method="POST",headers={["Content-Type"]="application/json"},postData=postData,connectionAttempts=2,connectTimeout=10000},function(body,info)',
       '    if DRIPX_STOPPING then return end',
       '    info = type(info)=="table" and info or {}',
       '    local code = tonumber(info.statusCode) or 0',
@@ -371,6 +376,7 @@ export async function patchApp(source) {
       b.zip=working;
       b.metaText=meta;
       b.compiledFiles=[...completed];
+      window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({phase:'compile',completed:completed.size,total:selected.length,file:name});
       if(status)status.textContent='Compilado '+completed.size+'/'+selected.length+' · '+name;
     }
     if(completed.size!==selected.length)throw new Error('La compilación quedó incompleta. Se conservó el avance realizado.');
@@ -383,7 +389,10 @@ export async function patchApp(source) {
   }
   async function downloadProtectedZip(){
     const b=state.zipBuild;if(!b?.protected||!b.compiled||!b.licenseInjected)throw new Error('Completa protección y compilación.');
-    const blob=await b.zip.generateAsync({type:'blob',mimeType:'application/zip',compression:'DEFLATE',compressionOptions:{level:6}});
+    const blob=await b.zip.generateAsync(
+      {type:'blob',mimeType:'application/zip',compression:'DEFLATE',compressionOptions:{level:6}},
+      metadata=>window.__DRIPX_REPORT_PROTECTION_PROGRESS?.({phase:'package',percent:Number(metadata?.percent)||0,file:String(metadata?.currentFile||'')})
+    );
     if(!blob?.size)throw new Error('ZIP final vacío.');
     if(blob.size>50000000)throw new Error('El ZIP protegido supera el máximo actual de 50 MB de tu almacenamiento Supabase. Reduce los archivos o amplía el plan de almacenamiento antes de publicarlo.');
     const sourceName=String(b.sourceFile?.name||'resource.zip');
