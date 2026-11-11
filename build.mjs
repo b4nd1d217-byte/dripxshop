@@ -204,6 +204,11 @@ const verifiedReviewMigration = await readFile('supabase/migrations/202611091830
 const perOrderReviewMigration = await readFile('supabase/migrations/20261109190000_allow_multiple_reviews_per_approved_order.sql', 'utf8');
 const accountPanelCss = await readFile('dripx-account-panel.css', 'utf8');
 const publicIndexHtml = await readFile('index.html', 'utf8');
+const runtimeLoaderSource = await readFile('dripx-admin-loader.js', 'utf8');
+if (!runtimeLoaderSource.includes('@zip.js/zip.js@2.24.0') || !runtimeLoaderSource.includes('jszip@3.10.2') || !runtimeLoaderSource.includes('tus-js-client@4.3.1')) {
+  throw new Error('DRIPX regression: ZIP reader, ZIP writer, or resumable upload dependency pin is stale.');
+}
+
 if (!publicIndexHtml.includes('@supabase/supabase-js@2.119.0')) throw new Error('DRIPX regression: Supabase JavaScript SDK pin is stale.');
 const uploadChecks = [
   [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
@@ -223,7 +228,7 @@ const uploadChecks = [
   [patchSource.includes('precompiledScripts') && patchSource.includes('if(precompiledScripts.length)') && patchSource.includes('Sube los Lua fuente (.lua)'), 'protect workflow rejects precompiled source resources that cannot be license-gated'],
   [uploadValidator.includes('dripx_server_license.luac') && uploadValidator.includes('server_license_guard_bytecode_invalid') && uploadValidator.includes('configScriptIndex>=guardScriptIndex'), 'upload validator requires compiled generic guard after editable config'],
   [patchSource.includes('local postData = string.sub(encodedPayload,2,-2)') && patchSource.includes('local encodedPayload = toJSON(payload)') && patchSource.includes('postData=postData') && !patchSource.includes('postData=toJSON(payload)'), 'MTA fetchRemote sends a JSON object instead of the toJSON array wrapper'],
-  [zipReader.includes('new window.zip.ZipReader') && zipReader.includes('new window.zip.BlobReader(file)') && zipReader.includes("strictness:'balanced'") && zipReader.includes('checkCrc32:true') && zipReader.includes('checkOverlappingEntry:true') && zipReader.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS'), 'Zip.js reads ZIP64 and checks entry CRC/overlap during actual decompression while reporting progress'],
+  [zipReader.includes('ZIP64-aware reader') && zipReader.includes('new window.zip.ZipReader') && zipReader.includes('new window.zip.BlobReader(file)') && zipReader.includes("strictness:'balanced'") && zipReader.includes('checkCrc32:true') && zipReader.includes('checkOverlappingEntry:true') && zipReader.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS'), 'Zip.js reads ZIP64 and checks entry CRC/overlap during actual decompression while reporting progress'],
   [zipReader.includes('window.DRIPX_INSPECT_ZIP') && zipReader.includes('dripxZipReadDirectory(file)') && zipReader.includes('dripx-zipjs-balanced-index-v3') && !zipReader.includes('JSZip.loadAsync'), 'quick ZIP inspector uses the new ZIP64-aware metadata reader without extracting all payload files'],
   [uploadUi.toLowerCase().includes('la protección es obligatoria') && !uploadUi.toLowerCase().includes('protección opcional') && !uploadUi.includes('si no usas esta opción'), 'product publishing cannot be presented as allowing the unprotected original ZIP'],
   [uploadUi.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS=reportProgress') && uploadUi.includes("phaseRanges={validate:[5,25],protect:[28,38],compile:[40,86],package:[88,99]}") && patchSource.includes("phase:'compile'") && patchSource.includes("phase:'package'"), 'product form progress uses validation, per-file compile and package progress'],
