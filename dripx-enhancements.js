@@ -3,6 +3,7 @@
   const C = window.DRIPX_CONFIG || {};
   const supabaseLib = window.supabase;
   const projectRef = String(C.supabaseUrl || '').match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/i)?.[1];
+  const isNamedZipBlob=value=>!!value&&typeof value==='object'&&typeof value.name==='string'&&value.name.length>0&&Number.isFinite(Number(value.size))&&Number(value.size)>0&&typeof value.slice==='function'&&typeof value.arrayBuffer==='function';
   let client = null;
   try {
     if (supabaseLib?.createClient && C.supabaseUrl && C.supabaseKey) {
@@ -560,6 +561,7 @@
     let input=document.querySelector('#product-form input[name="file"]');
     let form=input?.closest('#product-form');
     const runId=String(Date.now())+'-'+Math.random().toString(36).slice(2);
+    let packageResult=null;
     const update=(step,label,detail)=>{dialog?.update(step,label,detail);setProductZipStatus(label,'processing');};
     const phaseNames={validate:'Validando y extrayendo ZIP',protect:'Integrando guardián de licencia',compile:'Compilando Lua con MTA',package:'Empaquetando ZIP protegido'};
     const phaseRanges={validate:[5,25],protect:[28,38],compile:[40,86],package:[88,99]};
@@ -582,6 +584,7 @@
     try{
       if(!input||!form)throw new Error('El formulario de Productos ya no está disponible. Vuelve a abrirlo y selecciona el ZIP.');
       if(window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE!==file)throw new Error('El archivo seleccionado cambió. Selecciona el ZIP actual e inicia el proceso otra vez.');
+      window.__DRIPX_ACTIVE_PRODUCT_ZIP_INPUT=input;
       input.dataset.dripxZipRun=runId;
       input.dataset.dripxZipReady='false';
       window.__DRIPX_PROCESSED_PRODUCT_ZIP=null;
@@ -619,7 +622,7 @@
       if(undeclaredLua.length)update(1,'Lua adicional detectado','Se compilará, pero MTA solo ejecutará los scripts declarados en meta.xml.');
       if(resume&&window.__DRIPX_PROTECTION_JOB?.started){
         update(1,'Reanudando trabajo de protección…','Continuando desde el último paso que el motor dejó completado.');
-        await actions.resume();
+        packageResult=await actions.resume();
       }else{
         window.__DRIPX_PROTECTION_JOB={id:crypto.randomUUID(),file,started:true,status:'processing',step:'protect'};
         update(1,'Protegiendo resource…','Integrando el guardián privado de servidor; los shared originales no se modifican.');
@@ -632,13 +635,33 @@
         if(Number(compiledResult?.compiledCount)!==expectedCompiled)throw new Error('La compilación no confirmó los '+scan+' Lua declarados y el guardián DRIPX ('+Number(compiledResult?.compiledCount||0)+'/'+expectedCompiled+').');
         window.__DRIPX_PROTECTION_JOB.step='package';
         update(3,'Guardando paquete genérico…','El guardián DRIPX ya quedó compilado una sola vez en este ZIP. La Key no se incrusta al descargar.');
-        await actions.download();
+        packageResult=await actions.download();
       }
       update(3,'Verificando ZIP final…','Comprobando el archivo generado y su asociación con el formulario.');
-      const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE;
+      const liveAfterPackage=ensureLiveProductZipPreview(input,runId);
+      if(!liveAfterPackage)throw new Error('El formulario cambió durante el empaquetado. No se asociará el ZIP a otro producto.');
+      input=liveAfterPackage.input;form=liveAfterPackage.form;
+      const protectedFile=packageResult?.file||window.__DRIPX_PROCESSED_PRODUCT_FILE;
       const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
-      if(!(protectedFile instanceof File)||!packaged||protectedFile.size===0||protectedFile.name!==packaged.name||!/-DRIPX-protegido\\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no quedó vinculado al formulario. No se habilitó la publicación.');
+      const productId=String(packageResult?.productId||packaged?.productId||window.__DRIPX_PENDING_PRODUCT_ID||'');
+      const expectedName=String(packageResult?.fileName||packageResult?.name||packaged?.name||protectedFile?.name||'');
+      const diagnostic={
+        returnedFile:isNamedZipBlob(packageResult?.file),
+        stagedFile:isNamedZipBlob(protectedFile),
+        returnedName:String(packageResult?.fileName||packageResult?.name||''),
+        stagedName:String(protectedFile?.name||''),
+        packagedName:String(packaged?.name||''),
+        productId:productId||null,
+        bytes:Number(protectedFile?.size||0)
+      };
+      if(!isNamedZipBlob(protectedFile)||!productId||!expectedName||protectedFile.name!==expectedName||!/-DRIPX-protegido\\.zip$/i.test(protectedFile.name)||(packaged?.name&&packaged.name!==protectedFile.name)||(packageResult?.bytes!=null&&Number(packageResult.bytes)!==Number(protectedFile.size))){
+        console.error('[DRIPX] El empaquetador no entregó un ZIP final enlazable:',diagnostic);
+        throw new Error('El ZIP final se generó, pero la entrega al formulario no pasó la comprobación. Archivo: '+(diagnostic.stagedName||'sin nombre')+' · tamaño: '+diagnostic.bytes+' bytes · referencia: '+(diagnostic.productId||'sin ID')+'. Vuelve a intentar; el original no se publicará.');
+      }
       if(input.dataset.dripxZipRun!==runId)throw new Error('La selección cambió durante el procesamiento. El resultado no se asociará a otro producto.');
+      window.__DRIPX_PROCESSED_PRODUCT_FILE=protectedFile;
+      window.__DRIPX_PROCESSED_PRODUCT_ZIP={name:protectedFile.name,bytes:protectedFile.size,productId,at:Date.now()};
+      window.__DRIPX_PENDING_PRODUCT_ID=productId;
       input.dataset.dripxZipReady='true';
       window.__DRIPX_PROTECTION_JOB.status='succeeded';
       window.__DRIPX_PROTECTION_JOB.step='completed';
@@ -663,6 +686,7 @@
       return {ok:false,error};
     }finally{
       if(window.__DRIPX_REPORT_PROTECTION_PROGRESS===reportProgress)delete window.__DRIPX_REPORT_PROTECTION_PROGRESS;
+      if(window.__DRIPX_ACTIVE_PRODUCT_ZIP_INPUT===input)delete window.__DRIPX_ACTIVE_PRODUCT_ZIP_INPUT;
     }
   }
 
@@ -1584,7 +1608,7 @@
       }
       const staged=window.__DRIPX_PROCESSED_PRODUCT_FILE;
       const processed=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
-      if(form.dataset.dripxZipProcessing==='true'||input.dataset.dripxZipReady!=='true'||!(staged instanceof File)||!staged.size||!processed||processed.name!==staged.name||processed.productId!==window.__DRIPX_PENDING_PRODUCT_ID||!String(staged.name||'').toLowerCase().endsWith('-dripx-protegido.zip')){
+      if(form.dataset.dripxZipProcessing==='true'||input.dataset.dripxZipReady!=='true'||!isNamedZipBlob(staged)||!processed||processed.name!==staged.name||processed.productId!==window.__DRIPX_PENDING_PRODUCT_ID||!String(staged.name||'').toLowerCase().endsWith('-dripx-protegido.zip')){
         event.preventDefault();event.stopImmediatePropagation();
         const message='No se publicó el producto: vuelve a seleccionar el ZIP y deja que DRIP X SHOP termine la protección automática.';
         if(typeof toast==='function')toast(message);else console.warn('[DRIPX]',message);
@@ -1941,7 +1965,7 @@
       const staged=window.__DRIPX_PROCESSED_PRODUCT_FILE;
       const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
       const ready=!!original&&original===window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE
-        &&staged instanceof File&&staged.size>0&&!!packaged
+        &&isNamedZipBlob(staged)&&!!packaged
         &&packaged.name===staged.name&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID
         &&String(staged.name||'').toLowerCase().endsWith('-dripx-protegido.zip');
       lockProductSubmit(form,!ready);
