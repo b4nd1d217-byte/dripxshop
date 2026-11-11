@@ -319,6 +319,8 @@ const adminPanelChecks = [
   [ticketAdminPanel.includes('dripx_admin_delete_ticket') && ticketAdminPanel.includes('dripx_admin_set_ticket_status') && ticketAdminPanel.includes('El pedido') && uploadUi.includes('window.__DRIPX_CATALOG_MANAGER_ACTIVE||!isAdminProductsRoute()'), 'admin ticket delete preserves orders and legacy plan manager does not duplicate the catalog view']
 ];
 adminPanelChecks.push([catalogUi.includes('function takeOverLegacySurface()') && catalogUi.includes('function restoreLegacySurface()') && catalogUi.includes('data-dxcm-legacy-hidden') && catalogUi.includes('id="dxcm-product-form-host"') && catalogUi.includes('data-dxcm-back'), 'dedicated catalog route parks the old admin renderer and preserves the real product form']);
+adminPanelChecks.push([uploadUi.includes('cssObserver.observe(app,{childList:true})') && !uploadUi.includes('cssObserver.observe(document.body') && !uploadUi.includes('characterData:true}), 'application observer is scoped to #app direct children instead of watching the full document']);
+adminPanelChecks.push([uploadUi.includes("if(!isAdminRoute()||window.__DRIPX_ADMIN_SHELL_ENABLED===true||window.__DRIPX_CATALOG_MANAGER_ACTIVE===true)return;") && uploadUi.includes('window.__DRIPX_PLAN_CLOCK_TIMER=setInterval(updateUserPlanClocks,1000)'), 'legacy plan observers and the per-second clock are gated away from storefront and current admin shell']);
 const failedAdminPanelChecks = adminPanelChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminPanelChecks.length) throw new Error('DRIPX admin panel checks failed: ' + failedAdminPanelChecks.join(', '));
 const failedUploadChecks = uploadChecks.filter(([passed]) => !passed).map(([,name]) => name);
