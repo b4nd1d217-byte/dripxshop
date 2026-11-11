@@ -167,8 +167,8 @@ const adminShellChecks = [
 const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).map(([,name]) => name);
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
 if (!shell.includes("window.__DRIPX_ADMIN_SHELL_ENABLED=/^#admin(?:$|[/?])/i.test(location.hash||''")) throw new Error('DRIPX regression: admin shell must only activate on admin URLs.');
-if (!shell.includes('dripx-admin-loader.js?v=20261111-new-product-creator-01')) throw new Error('DRIPX regression: admin loader cache version is stale.');
-if (!shell.includes('dripx-enhancements.js?v=20261111-license-protection-01')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
+if (!shell.includes('dripx-admin-loader.js?v=20261111-meta-path-02')) throw new Error('DRIPX regression: admin loader cache version is stale.');
+if (!shell.includes('dripx-enhancements.js?v=20261111-meta-path-02')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
 if (!adminLoader.includes('if(!isAdminRoute())return;') || adminLoader.includes('if(!isAdmin())return;')) throw new Error('DRIPX regression: admin loader must gate by route, not an undefined/global role helper.');
 if (!adminLoader.includes("window.addEventListener('dripx:admin-ready',ensureAdminModules)")) throw new Error('DRIPX regression: admin modules must also recover after auth readiness.');
 if (!adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=false') || !adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=true')) throw new Error('DRIPX regression: admin shell must restore storefront mode outside admin routes.');
@@ -218,14 +218,38 @@ if (!runtimeLoaderSource.includes('@zip.js/zip.js@2.24.0') || !runtimeLoaderSour
 }
 
 if (!publicIndexHtml.includes('@supabase/supabase-js@2.119.0')) throw new Error('DRIPX regression: Supabase JavaScript SDK pin is stale.');
+const resolverStart=zipReader.indexOf('  function dripxResolveMetaArchivePath(');
+const resolverEnd=zipReader.indexOf('\\n  async function loadZipForProtection',resolverStart);
+if(resolverStart<0||resolverEnd<0)throw new Error('DRIPX regression: nested meta.xml path resolver is missing.');
+const resolverCode=zipReader.slice(resolverStart,resolverEnd);
+const resolverContext={};
+runInNewContext(resolverCode+'\\n globalThis.__resolveMetaPath=dripxResolveMetaArchivePath;',resolverContext,{timeout:1000});
+const resolveMetaPath=resolverContext.__resolveMetaPath;
+const originalToOutput=new Map([
+ ['Bundle/Resource/server/main.lua','server/main.lua'],
+ ['Bundle/assets/effect.fx','assets/effect.fx'],
+ ['Bundle/Resource/shared/settings.lua','shared/settings.lua']
+]);
+const foldedToOutput=new Map([...originalToOutput].map(([key,value])=>[key.toLowerCase(),value]));
+const metaPathCases=[
+ [resolveMetaPath('server/main.lua','Bundle/Resource/meta.xml',originalToOutput,foldedToOutput),'server/main.lua'],
+ [resolveMetaPath('../assets/effect.fx','Bundle/Resource/meta.xml',originalToOutput,foldedToOutput),'assets/effect.fx'],
+ [resolveMetaPath('./shared/settings.lua','Bundle/Resource/meta.xml',originalToOutput,foldedToOutput),'shared/settings.lua'],
+ [resolveMetaPath('SERVER/main.lua','Bundle/Resource/meta.xml',originalToOutput,foldedToOutput),'server/main.lua']
+];
+if(metaPathCases.some(([actual,expected])=>actual!==expected))throw new Error('DRIPX regression: nested meta.xml references were not rebased to the normalized resource root.');
+let escapedMetaPathRejected=false;
+try{resolveMetaPath('../../../outside.lua','Bundle/Resource/meta.xml',originalToOutput,foldedToOutput);}catch{escapedMetaPathRejected=true;}
+if(!escapedMetaPathRejected)throw new Error('DRIPX regression: meta.xml path traversal was not rejected.');
 const uploadChecks = [
   [appText.includes('dripx_server_license.lua') && appText.includes('DRIPX-CFG.LUA') && appText.includes('DRIPX_CFG_LICENSE_KEY') && appText.includes('DRIPX_LICENSE_KEY_PLACEHOLDER'), 'buyer-time DRIPX-CFG.LUA server configuration template is generated'],
   [appText.includes("const configScriptTag='<script src=\"'+configName+'\" type=\"server\" />';") && appText.includes("const orderedScripts=[configScriptTag,guardScriptTag,...sharedScriptTags,...otherScriptTags]"), 'private license config is loaded before the server license guard'],
   [appText.includes('__DRIPX_PROCESSED_PRODUCT_FILE=file') && appText.includes('new File([blob],name,{type:\'application/zip\''), 'direct processed ZIP File handoff without URL capture'],
-  [uploadUi.includes('await actions.download()') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()') && !uploadUi.includes('download.click()'), 'product UI stages the exact protected File directly without synthetic clicks or input mutation'],
+  [uploadUi.includes('packageResult=await actions.download()') && uploadUi.includes('packageResult?.file') && !uploadUi.includes('armCompiledZipCapture') && !uploadUi.includes('new DataTransfer()') && !uploadUi.includes('download.click()'), 'product UI receives the exact protected ZIP artifact directly without synthetic clicks or input mutation'],
   [uploadValidator.includes('server_license_guard_missing') && uploadValidator.includes('server_license_config_missing') && uploadValidator.includes('DRIPX_CFG_PRODUCT_ID') && !uploadValidator.includes('shared_license_bridge_missing'), 'server upload validator enforces private cfg and compiled guard while leaving shared source untouched'],
   [uploadValidator.includes('dripx_server_license.luac') && uploadValidator.includes('server_license_guard_bytecode_invalid') && uploadValidator.includes('configScriptIndex>=guardScriptIndex'), 'upload validator requires editable config before MTA-bytecode guard'],
-  [zipReader.includes('window.DRIPX_INSPECT_ZIP') && zipReader.includes('META_XML_MISSING') && zipReader.includes('SHADER_FILES_MISSING') && zipReader.includes('does not invent or inject meta.xml'), 'independent inspector inventories valid ZIPs without requiring or injecting MTA metadata'],
+  [zipReader.includes('window.DRIPX_INSPECT_ZIP') && zipReader.includes('META_XML_MISSING') && zipReader.includes('SHADER_FILES_MISSING') && zipReader.includes('does not invent or inject meta.xml'), 'independent inspector inventories ZIPs without fabricating MTA metadata'],
+  [zipReader.includes('function dripxResolveMetaArchivePath') && zipReader.includes("querySelectorAll('script[src],file[src]')") && zipReader.includes('const selectedMeta = metaCandidates.length===1') && zipReader.includes('meta.xml en ninguna carpeta del ZIP') && !zipReader.includes('const scriptFiles=entries.filter'), 'real meta.xml is located at any ZIP depth, its script/file references are rebased, and a fake manifest is never fabricated'],
   [zipReader.includes('hasMtaMeta') && zipReader.includes('hasMtaApi') && zipReader.includes("runtimeTarget:'MTA:SA'") && !zipReader.includes('fivem|fxserver/i.test(infoText)'), 'MTA manifests and native APIs override FiveM-style labels and filenames'],
   [downloadFunction.includes('serverLicenseGuards') && downloadFunction.includes('dripx_server_license.luac') && downloadFunction.includes('createSignedUrl(filePath, 60') && downloadFunction.includes('download_url') && downloadFunction.includes('product-files') && !downloadFunction.includes('new Response(sourceZip'), 'protected buyers receive the same validated generic ZIP through a private 60-second signed Storage URL'],
   [!downloadFunction.includes('compileMtaLicenseGuard') && !downloadFunction.includes('personalizedConfig') && !downloadFunction.includes('licenseKey'), 'download path never reads or injects a buyer-specific key and never calls the compiler'],
@@ -237,6 +261,7 @@ const uploadChecks = [
   [uploadValidator.includes('dripx_server_license.luac') && uploadValidator.includes('server_license_guard_bytecode_invalid') && uploadValidator.includes('configScriptIndex>=guardScriptIndex'), 'upload validator requires compiled generic guard after editable config'],
   [patchSource.includes('local postData = string.sub(encodedPayload,2,-2)') && patchSource.includes('local encodedPayload = toJSON(payload)') && patchSource.includes('postData=postData') && !patchSource.includes('postData=toJSON(payload)'), 'MTA fetchRemote sends a JSON object instead of the toJSON array wrapper'],
   [zipReader.includes('ZIP64-aware reader') && zipReader.includes('new window.zip.ZipReader') && zipReader.includes('new window.zip.BlobReader(file)') && zipReader.includes("strictness:'balanced'") && zipReader.includes('checkCrc32:true') && zipReader.includes('checkOverlappingEntry:true') && zipReader.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS'), 'Zip.js reads ZIP64 and checks entry CRC/overlap during actual decompression while reporting progress'],
+  [uploadUi.includes('isNamedZipBlob(packageResult?.file)') && productCreatorPanel.includes('isNamedZipBlob(staged)') && !uploadUi.includes('protectedFile instanceof File') && !productCreatorPanel.includes('staged instanceof File'), 'the protected ZIP handoff works with File or a named Blob across mobile browsers'],
   [zipReader.includes('window.DRIPX_INSPECT_ZIP') && zipReader.includes('dripxZipReadDirectory(file)') && zipReader.includes('dripx-zipjs-balanced-index-v3') && !zipReader.includes('JSZip.loadAsync'), 'quick ZIP inspector uses the new ZIP64-aware metadata reader without extracting all payload files'],
   [uploadUi.toLowerCase().includes('la protección es obligatoria') && !uploadUi.toLowerCase().includes('protección opcional') && !uploadUi.includes('si no usas esta opción'), 'product publishing cannot be presented as allowing the unprotected original ZIP'],
   [uploadUi.includes('window.__DRIPX_REPORT_PROTECTION_PROGRESS=reportProgress') && uploadUi.includes("phaseRanges={validate:[5,25],protect:[28,38],compile:[40,86],package:[88,99]}") && patchSource.includes("phase:'compile'") && patchSource.includes("phase:'package'"), 'product form progress uses validation, per-file compile and package progress'],
@@ -279,7 +304,7 @@ const uploadChecks = [
   [profileMigration.includes('grant update (leaderboard_public, updated_at)'), 'profile privilege allowlist migration'],
   [privacyMigration.includes('leaderboard_public is true'), 'public leaderboard respects privacy opt-in'],
   [uploadUi.includes('Reintentar / reanudar') && uploadUi.includes('actions.resume()'), 'visible retry and resumable protection action'],
-  [uploadUi.includes('function renderProductZipSelection(input,file)') && uploadUi.includes('data-dripx-start-protection') && uploadUi.includes('Trabajar · Proteger y compilar Lua') && uploadUi.includes('DRIPX_INSPECT_ZIP(file)') && uploadUi.includes('async function previewProductZip(file,dialog,resume=false)') && uploadUi.includes('await actions.protect()') && uploadUi.includes('await actions.compile()') && uploadUi.includes('await actions.download()'), 'ZIP selection inventories first and keeps real protection/compilation as a separate optional action'],
+  [uploadUi.includes('function renderProductZipSelection(input,file)') && uploadUi.includes('data-dripx-start-protection') && uploadUi.includes('Trabajar · Proteger y compilar Lua') && uploadUi.includes('DRIPX_INSPECT_ZIP(file)') && uploadUi.includes('async function previewProductZip(file,dialog,resume=false)') && uploadUi.includes('await actions.protect()') && uploadUi.includes('await actions.compile()') && uploadUi.includes('packageResult=await actions.download()'), 'ZIP selection inventories first and runs the required protection and compilation workflow'],
   [uploadUi.includes('window.__DRIPX_SELECTED_PRODUCT_ZIP_FILE=file') && uploadUi.includes('DRIP X · INSPECTOR ZIP') && uploadUi.includes('Contenido completo del ZIP') && uploadUi.includes('dialog.succeed()') && uploadUi.includes("status='succeeded'"), 'selected ZIP displays the complete independent inventory and protection only reports success after final verification'],
   [uploadUi.includes("document.addEventListener('change',handleProductZipSelection,true)") && uploadUi.includes("document.addEventListener('input',handleProductZipSelection,true)"), 'ZIP file selection uses capture-phase change and mobile input fallbacks'],
   [uploadUi.includes("const anchor=form.querySelector('#resource-file-field')") && uploadUi.includes("node.classList.remove('hidden')") && uploadUi.includes('Panel recuperado'), 'ZIP preview is reattached outside the collapsible input wrapper with a visible recovery fallback'],
