@@ -2,6 +2,7 @@
 const styles=[
  ['/dripx-user-admin.css?v=20261110-users-02','dripx-admin-users-css'],
  ['/dripx-catalog-manager.css?v=20261110-catalog-02','dripx-admin-catalog-css'],
+ ['/dripx-product-creator.css?v=20261111-create-product-01','dripx-product-creator-css'],
  ['/dripx-ticket-admin.css?v=20261110-tickets-02','dripx-admin-tickets-css'],
  ['/dripx-admin-logs.css?v=20261110-logs-02','dripx-admin-logs-css'],
  ['/dripx-admin-extra.css?v=20261110-extra-02','dripx-admin-extra-css'],
@@ -11,6 +12,7 @@ const scripts=[
  ['/dripx-user-admin.js?v=20261110-users-02','dripx-admin-users-js'],
  ['/dripx-user-admin-actions.js?v=20261110-user-actions-02','dripx-admin-user-actions-js'],
  ['/dripx-catalog-manager.js?v=20261110-catalog-02','dripx-admin-catalog-js'],
+ ['/dripx-product-creator.js?v=20261111-create-product-01','dripx-product-creator-js'],
  ['/dripx-ticket-admin.js?v=20261110-tickets-02','dripx-admin-tickets-js'],
  ['/dripx-admin-logs.js?v=20261110-logs-02','dripx-admin-logs-js'],
  ['/dripx-admin-extra.js?v=20261110-extra-02','dripx-admin-extra-js'],
