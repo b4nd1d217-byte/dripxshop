@@ -75,6 +75,23 @@
     }
   }
   function dripxZipMtaBytecode(bytes){return !!bytes&&bytes.length>=4&&bytes[0]===0x1c&&bytes[1]===0x4d&&bytes[2]===0x76&&bytes[3]===0x62;}
+  function dripxResolveMetaArchivePath(value,metaPath,pathByOriginal,pathByFold){
+    const raw=String(value??'').trim().split(String.fromCharCode(92)).join('/');
+    if(!raw||raw.startsWith('/')||raw.startsWith('//')||/^[a-z]:/i.test(raw)||/[\u0000-\u001f\u007f]/.test(raw))throw new Error('meta.xml contiene una referencia de archivo vacía, absoluta o inválida: '+String(value));
+    const resolved=String(metaPath||'').split('/').slice(0,-1).filter(Boolean);
+    for(const segment of raw.split('/')){
+      if(!segment)throw new Error('meta.xml contiene una ruta con segmentos vacíos: '+raw);
+      if(segment==='.')continue;
+      if(segment==='..'){if(!resolved.length)throw new Error('meta.xml intenta salir de la carpeta raíz del ZIP: '+raw);resolved.pop();continue;}
+      if(segment.length>255)throw new Error('meta.xml contiene un segmento de ruta demasiado largo: '+raw);
+      resolved.push(segment);
+      if(resolved.length>64)throw new Error('meta.xml contiene una ruta demasiado profunda: '+raw);
+    }
+    const archivePath=resolved.join('/').normalize('NFC');
+    const outputPath=pathByOriginal.get(archivePath)||pathByFold.get(archivePath.toLowerCase());
+    if(!outputPath)throw new Error('meta.xml referencia un archivo que no existe en el ZIP: '+raw+' (ruta resuelta: '+archivePath+').');
+    return outputPath;
+  }
   async function loadZipForProtection(file,hostResolver){
     const ensureZipUiNode=(id,tag)=>{
       let host=typeof hostResolver==='function'?hostResolver():null;
@@ -147,13 +164,17 @@
     }
     const metaCandidates=records.filter(item=>item.path.toLowerCase()==='meta.xml'||item.path.toLowerCase().endsWith('/meta.xml'));
     const rootMetas=metaCandidates.filter(item=>item.path.toLowerCase()==='meta.xml');
-    if(metaCandidates.length>1)throw new Error('El ZIP contiene más de un meta.xml. Debe conservarse un único manifiesto MTA para evitar referencias ambiguas.');
+    if(metaCandidates.length>1){
+      throw new Error('El ZIP contiene varios meta.xml ('+metaCandidates.map(item=>item.path).slice(0,8).join(', ')+'). Cada producto debe contener un solo resource MTA:SA con un único manifiesto.');
+    }
     const metaRecord=rootMetas[0]||metaCandidates[0]||null;
-    const hadOriginalMeta=!!metaRecord;
-    if(metaRecord&&metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
-    let rootPrefix='';
-    if(metaRecord){const slash=metaRecord.path.lastIndexOf('/');rootPrefix=slash>=0?metaRecord.path.slice(0,slash+1):'';}
-    else if(records.length){const first=records[0].path.split('/')[0];if(first&&records.every(item=>item.path.startsWith(first+'/')))rootPrefix=first+'/';}
+    if(!metaRecord)throw new Error('No se encontró meta.xml en ninguna carpeta del ZIP. Para proteger un resource MTA:SA debe incluirse su manifiesto original.');
+    const hadOriginalMeta=true;
+    if(metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
+    const firstSegment=records[0]?.path.split('/')[0]||'';
+    const wrapperPrefix=firstSegment&&records.every(item=>item.path.startsWith(firstSegment+'/'))?firstSegment+'/':'';
+    const metaDirectory=metaRecord.path.includes('/')?metaRecord.path.slice(0,metaRecord.path.lastIndexOf('/')+1):'';
+    const rootPrefix=wrapperPrefix||metaDirectory;
     const normalizedRecords=records.map(item=>{
       const relative=rootPrefix&&item.path.startsWith(rootPrefix)?item.path.slice(rootPrefix.length):item.path;
       const path=item===metaRecord?'meta.xml':relative;
@@ -161,10 +182,14 @@
       return {...item,normalizedPath:path};
     });
     const normalizedNames=new Set();
+    const pathByOriginal=new Map();
+    const pathByFold=new Map();
     for(const item of normalizedRecords){
       const key=item.normalizedPath.toLowerCase();
       if(normalizedNames.has(key))throw new Error('La normalización de carpetas produce archivos duplicados.');
       normalizedNames.add(key);
+      pathByOriginal.set(item.path,item.normalizedPath);
+      pathByFold.set(item.path.toLowerCase(),item.normalizedPath);
     }
     for(const item of normalizedRecords){
       const parts=item.normalizedPath.split('/');
@@ -206,16 +231,21 @@
       return parts.slice(0,-1).some(part=>/^(config|configs|settings)$/.test(part))
         || /^(config|settings|options)(?:[._-].*)?\.lua$/i.test(base);
     };
-    if(!meta){
-      const scriptFiles=entries.filter(entry=>(/\.lua$/i.test(entry.name)&&!isLikelyConfigLua(entry))||(/\.luac$/i.test(entry.name)&&/(^|\/)(shared|shared_[^/]+)(\/|$)|\.shared\.luac$/i.test(entry.name)));
-      const inferred=scriptFiles.map(entry=>{const path=entry.name,parts=path.toLowerCase().split('/'),base=parts[parts.length-1];const type=parts.some(part=>/^shared(?:_|$)/.test(part))||/^shared[._-]/i.test(base)||/\.shared\.(lua|luac)$/i.test(base)?'shared':(parts.some(part=>/^client(?:_|$)/.test(part))||/^client[._-]/i.test(base)||/\.client\.(lua|luac)$/i.test(base)?'client':'server');return '<script src="'+xmlEscape(path)+'" type="'+type+'" />';}).join('\n');
-      metaText='<meta>\n  <info name="'+xmlEscape(safeResourceName)+'" author="DRIP X SHOP" version="1.0.0" type="script" />\n  '+inferred+'\n</meta>';
-      zip.file('meta.xml',metaText);meta=zip.file('meta.xml');entries=Object.values(zip.files).filter(entry=>!entry.dir);
-    }
+    if(!meta)throw new Error('No se pudo colocar el meta.xml original en la raíz del resource.');
     if(metaText.length>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
     if(/<!DOCTYPE|<!ENTITY/i.test(metaText))throw new Error('meta.xml contiene declaraciones XML externas no permitidas.');
     let parsed=new DOMParser().parseFromString(metaText,'application/xml');
     if(parsed.querySelector('parsererror')||parsed.documentElement?.tagName?.toLowerCase()!=='meta')throw new Error('meta.xml no es un XML válido de MTA:SA. Revisa sus etiquetas y vuelve a comprimirlo.');
+    const manifestSourceNodes=Array.from(parsed.querySelectorAll('script[src],file[src]'));
+    for(const node of manifestSourceNodes){
+      const raw=node.getAttribute('src');
+      const resolved=dripxResolveMetaArchivePath(raw,metaRecord.path,pathByOriginal,pathByFold);
+      node.setAttribute('src',resolved);
+    }
+    if(manifestSourceNodes.length){
+      metaText=new XMLSerializer().serializeToString(parsed);
+      zip.file('meta.xml',metaText);
+    }
     let infoNode=parsed.querySelector('info');
     if(!infoNode){
       metaText=metaText.replace(/<\/meta\s*>/i,'  <info name="'+safeResourceName+'" author="DRIP X SHOP" version="1.0.0" type="script" />\n</meta>');
@@ -440,34 +470,35 @@
     // in DRIPX_LOAD_ZIP after the administrator presses Trabajar.
     const metaCandidates = files.filter(item => item.kind === "meta");
     const rootMeta = metaCandidates.find(item => item.path.toLowerCase() === "meta.xml") || null;
+    const selectedMeta = metaCandidates.length===1?(rootMeta||metaCandidates[0]):null;
     const warnings = [];
     let metaState = "found";
     if (!metaCandidates.length) {
       metaState = "missing";
       warnings.push({
         code: "META_XML_MISSING",
-        message: "No se encontró meta.xml. El ZIP se abre y puede publicarse/descargarse; MTA:SA no podrá arrancar el resource hasta que se añada."
-      });
-    } else if (!rootMeta) {
-      metaState = "nested";
-      warnings.push({
-        code: "META_XML_NOT_ROOT",
-        message: "Se encontró meta.xml dentro de una carpeta, no en la raíz. Se muestran todos los archivos y no se bloquea la carga."
+        message: "No se encontró meta.xml. La protección necesita el manifiesto original de MTA:SA; añádelo al resource antes de continuar."
       });
     } else if (metaCandidates.length > 1) {
       metaState = "multiple";
       warnings.push({
         code: "META_XML_MULTIPLE",
-        message: "Se encontraron varios archivos meta.xml. El inventario se muestra completo; revisa cuál debe ser el manifiesto del resource."
+        message: "Se encontraron varios meta.xml. Debe quedar un único manifiesto de resource; el sistema no elegirá uno al azar."
+      });
+    } else if (!rootMeta) {
+      metaState = "nested";
+      warnings.push({
+        code: "META_XML_NOT_ROOT",
+        message: "Se encontró meta.xml en "+selectedMeta.path+". El motor leerá ese manifiesto y lo normalizará en la raíz del ZIP protegido."
       });
     }
-    if (rootMeta) {
-      if (rootMeta.bytes > LIMITS.meta) {
+    if (selectedMeta) {
+      if (selectedMeta.bytes > LIMITS.meta) {
         metaState = "too_large";
         warnings.push({ code: "META_XML_TOO_LARGE", message: "meta.xml supera 2 MB; se conserva como archivo, pero no se analiza su contenido." });
       } else {
         try {
-          const text = await rootMeta.entry.async("string");
+          const text = await selectedMeta.entry.async("string");
           if (/<!DOCTYPE|<!ENTITY/i.test(text)) {
             metaState = "unsafe";
             warnings.push({ code: "META_XML_UNSAFE", message: "meta.xml contiene declaraciones XML externas. Se muestra el ZIP sin interpretar ese manifiesto." });
@@ -506,10 +537,10 @@
       expanded_bytes: expanded,
       files: files.map(item => ({ path: item.path, bytes: item.bytes, kind: item.kind, extension: item.extension })),
       counts,
-      meta: { state: metaState, path: rootMeta?.path || metaCandidates[0]?.path || null },
+      meta: { state: metaState, path: selectedMeta?.path || (metaCandidates.length?metaCandidates[0].path:null) },
       warnings
     };
-    const result = { file, archive, entries, files, expanded, counts, metaState, metaPath: rootMeta?.path || null, warnings, manifest };
+    const result = { file, archive, entries, files, expanded, counts, metaState, metaPath: selectedMeta?.path || null, warnings, manifest };
     window.DRIPX_ZIP_INVENTORY = result;
     return result;
   };
