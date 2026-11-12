@@ -168,7 +168,7 @@ const failedAdminShellChecks = adminShellChecks.filter(([passed]) => !passed).ma
 if (failedAdminShellChecks.length) throw new Error('DRIPX admin shell smoke checks failed: ' + failedAdminShellChecks.join(', '));
 if (!shell.includes("window.__DRIPX_ADMIN_SHELL_ENABLED=/^#admin(?:$|[/?])/i.test(location.hash||''")) throw new Error('DRIPX regression: admin shell must only activate on admin URLs.');
 if (!shell.includes('dripx-admin-loader.js?v=20261111-new-product-creator-01')) throw new Error('DRIPX regression: admin loader cache version is stale.');
-if (!shell.includes('dripx-enhancements.js?v=20261111-license-protection-01')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
+if (!shell.includes('dripx-enhancements.js?v=20261112-zip-binding-01')) throw new Error('DRIPX regression: product protection UI cache version is stale.');
 if (!adminLoader.includes('if(!isAdminRoute())return;') || adminLoader.includes('if(!isAdmin())return;')) throw new Error('DRIPX regression: admin loader must gate by route, not an undefined/global role helper.');
 if (!adminLoader.includes("window.addEventListener('dripx:admin-ready',ensureAdminModules)")) throw new Error('DRIPX regression: admin modules must also recover after auth readiness.');
 if (!adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=false') || !adminShellPanel.includes('window.__DRIPX_ADMIN_SHELL_ENABLED=true')) throw new Error('DRIPX regression: admin shell must restore storefront mode outside admin routes.');
