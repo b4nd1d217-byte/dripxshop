@@ -146,9 +146,12 @@
       }
     }
     const metaCandidates=records.filter(item=>item.path.toLowerCase()==='meta.xml'||item.path.toLowerCase().endsWith('/meta.xml'));
-    const rootMetas=metaCandidates.filter(item=>item.path.toLowerCase()==='meta.xml');
-    if(metaCandidates.length>1)throw new Error('El ZIP contiene más de un meta.xml. Debe conservarse un único manifiesto MTA para evitar referencias ambiguas.');
-    const metaRecord=rootMetas[0]||metaCandidates[0]||null;
+    const metaRecord=[...metaCandidates].sort((a,b)=>{
+      const depth=item=>item.path.split('/').length;
+      const aRoot=depth(a)===1?0:1,bRoot=depth(b)===1?0:1;
+      return aRoot-bRoot||depth(a)-depth(b)||a.path.length-b.path.length||a.path.localeCompare(b.path);
+    })[0]||null;
+    if(metaCandidates.length>1)console.warn('[DRIPX ZIP] Se detectaron varios meta.xml; se seleccionó el manifiesto más cercano a la raíz del resource:',metaRecord?.path);
     const hadOriginalMeta=!!metaRecord;
     if(metaRecord&&metaRecord.size>LIMITS.meta)throw new Error('meta.xml supera el límite de 2 MB.');
     let rootPrefix='';
@@ -314,7 +317,7 @@
     const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
-      zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
+      zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,productForm:(document.querySelector('#dx-catalog-admin #product-form')||document.querySelector('#product-form')),
       compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:window.__DRIPX_REPLACE_PRODUCT_ID||crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
       compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded,runtimeTarget:'MTA:SA',runtimeEvidence,mtaApiCount,fiveMApiCount
     };
@@ -439,7 +442,11 @@
     // Fast index-only preview. Full decompression and CRC validation run once
     // in DRIPX_LOAD_ZIP after the administrator presses Trabajar.
     const metaCandidates = files.filter(item => item.kind === "meta");
-    const rootMeta = metaCandidates.find(item => item.path.toLowerCase() === "meta.xml") || null;
+    const rootMeta = [...metaCandidates].sort((a,b)=>{
+      const depth=item=>item.path.split("/").length;
+      const aRoot=depth(a)===1?0:1,bRoot=depth(b)===1?0:1;
+      return aRoot-bRoot||depth(a)-depth(b)||a.path.length-b.path.length||a.path.localeCompare(b.path);
+    })[0] || null;
     const warnings = [];
     let metaState = "found";
     if (!metaCandidates.length) {
