@@ -317,7 +317,7 @@
     const clientEntries=[...scriptSrcByFile.keys()].filter(path=>scriptMap.get(path)==='client'&&/\.lua$/i.test(path)).map(path=>entries.find(entry=>entry.name===path)).filter(Boolean);
     const normalizedExpanded=files.reduce((sum,item)=>sum+item.bytes,0);
     state.zipBuild={
-      zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,
+      zip,metaName:'meta.xml',metaText,entries,lua,server:serverEntries,client:clientEntries,productForm:(document.querySelector('#dx-catalog-admin #product-form')||document.querySelector('#product-form')),
       compileTargets,scriptSrcByFile,shared:entries.filter(entry=>scriptMap.get(entry.name)==='shared'),productId:window.__DRIPX_REPLACE_PRODUCT_ID||crypto.randomUUID(),selected:new Set(compileTargets.map(entry=>entry.name)),
       compiled:false,compiledFiles:[],protected:false,rootPrefix,sourceFile:file,expandedBytes:normalizedExpanded,runtimeTarget:'MTA:SA',runtimeEvidence,mtaApiCount,fiveMApiCount
     };
