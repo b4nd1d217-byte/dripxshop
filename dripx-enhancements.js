@@ -635,9 +635,10 @@
         await actions.download();
       }
       update(3,'Verificando ZIP final…','Comprobando el archivo generado y su asociación con el formulario.');
-      const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE;
       const packaged=window.__DRIPX_PROCESSED_PRODUCT_ZIP;
-      if(!(protectedFile instanceof File)||!packaged||protectedFile.size===0||protectedFile.name!==packaged.name||!/-DRIPX-protegido\\.zip$/i.test(protectedFile.name))throw new Error('El ZIP protegido no quedó vinculado al formulario. No se habilitó la publicación.');
+      const protectedFile=window.__DRIPX_PROCESSED_PRODUCT_FILE||packaged?.file||null;
+      const bindingMatches=!!(packaged&&packaged.file===protectedFile&&packaged.input===input&&packaged.form===form&&packaged.bindingId&&input.dataset.dripxZipBinding===packaged.bindingId&&packaged.productId===window.__DRIPX_PENDING_PRODUCT_ID);
+      if(!(protectedFile instanceof File)||!packaged||protectedFile.size===0||packaged.name!==protectedFile.name||!/-DRIPX-protegido\\.zip$/i.test(protectedFile.name)||!bindingMatches)throw new Error('El ZIP se generó, pero la referencia al formulario cambió durante el proceso. Mantén abierto Crear producto y vuelve a intentar la verificación.');
       if(input.dataset.dripxZipRun!==runId)throw new Error('La selección cambió durante el procesamiento. El resultado no se asociará a otro producto.');
       input.dataset.dripxZipReady='true';
       window.__DRIPX_PROTECTION_JOB.status='succeeded';
